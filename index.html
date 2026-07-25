@@ -328,6 +328,11 @@
       font-weight: 500;
     }
 
+    .panel-head .hint {
+      display: block;
+      margin-top: 0.2rem;
+    }
+
     .cal-nav {
       display: flex;
       align-items: center;
@@ -935,8 +940,7 @@
 
       <div class="tabs" role="tablist">
         <button type="button" class="tab active" data-tab="calendar" role="tab" aria-selected="true">Calendar</button>
-        <button type="button" class="tab" data-tab="amort" role="tab" aria-selected="false">Amortization</button>
-        <button type="button" class="tab" data-tab="track" role="tab" aria-selected="false">Track payments</button>
+        <button type="button" class="tab" data-tab="payments" role="tab" aria-selected="false">Payments</button>
       </div>
 
       <div class="panel active" id="panel-calendar" role="tabpanel">
@@ -960,36 +964,13 @@
         </div>
       </div>
 
-      <div class="panel" id="panel-amort" role="tabpanel">
+      <div class="panel" id="panel-payments" role="tabpanel">
         <div class="panel-surface">
           <div class="panel-head">
-            <h2>Amortization schedule</h2>
-            <span class="hint" id="paymentHint"></span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Due date</th>
-                  <th>Payment</th>
-                  <th>Principal</th>
-                  <th>Interest</th>
-                  <th>Balance</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="amortBody"></tbody>
-            </table>
-          </div>
-          <div class="summary-bar" id="amortSummary"></div>
-        </div>
-      </div>
-
-      <div class="panel" id="panel-track" role="tabpanel">
-        <div class="panel-surface">
-          <div class="panel-head">
-            <h2>Track payments</h2>
+            <div>
+              <h2>Payments</h2>
+              <span class="hint" id="paymentHint"></span>
+            </div>
             <div class="track-filters">
               <label style="flex-direction: row; align-items: center; gap: 0.5rem; text-transform: none; letter-spacing: 0;">
                 <span style="font-size: 0.85rem;">Filter</span>
@@ -1023,15 +1004,17 @@
                 <tr>
                   <th>#</th>
                   <th>Due date</th>
-                  <th>Total</th>
+                  <th>Payment</th>
                   <th>Principal</th>
                   <th>Interest</th>
-                  <th>Mark</th>
+                  <th>Balance</th>
+                  <th>Status</th>
                 </tr>
               </thead>
-              <tbody id="trackBody"></tbody>
+              <tbody id="paymentsBody"></tbody>
             </table>
           </div>
+          <div class="summary-bar" id="amortSummary"></div>
         </div>
       </div>
     </section>
@@ -1066,7 +1049,7 @@
         </div>
         <div class="extras-editor hidden" id="extrasEditor">
           <h3>Additional payments</h3>
-          <p class="extras-empty" id="extrasEmpty">None yet — add them from the Track payments tab.</p>
+          <p class="extras-empty" id="extrasEmpty">None yet — add them from the Payments tab.</p>
           <ul class="extras-list" id="extrasList"></ul>
         </div>
         <div class="actions">
@@ -1100,10 +1083,9 @@
       yearStrip: document.getElementById("yearStrip"),
       calendarGrid: document.getElementById("calendarGrid"),
       yearLabel: document.getElementById("yearLabel"),
-      amortBody: document.getElementById("amortBody"),
+      paymentsBody: document.getElementById("paymentsBody"),
       amortSummary: document.getElementById("amortSummary"),
       paymentHint: document.getElementById("paymentHint"),
-      trackBody: document.getElementById("trackBody"),
       trackFilter: document.getElementById("trackFilter"),
       markThroughBtn: document.getElementById("markThroughBtn"),
       prevYear: document.getElementById("prevYear"),
@@ -1729,27 +1711,45 @@
       els.calendarGrid.innerHTML = html;
     }
 
-    function renderAmort() {
+    function renderPayments() {
+      const filter = els.trackFilter.value;
       const y = today().getFullYear();
-      els.amortBody.innerHTML = schedule
-        .map((row) => {
-          const status = paymentStatus(row);
-          const paid = status === "paid";
-          const num =
-            row.kind === "extra"
-              ? `<span class="type-pill">Extra</span>`
-              : row.label;
-          return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${row.due.getFullYear() === y ? " current-year" : ""}">
-            <td>${num}</td>
-            <td>${fmtDate(row.due)}</td>
-            <td>${money(row.payment)}</td>
-            <td>${money(row.principal)}</td>
-            <td>${money(row.interest)}</td>
-            <td>${money(row.balance)}</td>
-            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
-          </tr>`;
-        })
-        .join("");
+      const rows = schedule.filter((row) => {
+        const paid = paidSet.has(row.payKey);
+        if (filter === "paid") return paid;
+        if (filter === "unpaid") return !paid;
+        if (filter === "year") return row.due.getFullYear() === y;
+        if (filter === "extra") return row.kind === "extra";
+        return true;
+      });
+
+      if (!rows.length) {
+        els.paymentsBody.innerHTML = `<tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>`;
+      } else {
+        els.paymentsBody.innerHTML = rows
+          .map((row) => {
+            const status = paymentStatus(row);
+            const paid = status === "paid";
+            const num =
+              row.kind === "extra"
+                ? `<span class="type-pill">Extra</span>`
+                : row.label;
+            const remove =
+              row.kind === "extra"
+                ? ` <button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
+                : "";
+            return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${row.due.getFullYear() === y ? " current-year" : ""}">
+              <td>${num}</td>
+              <td>${fmtDate(row.due)}${remove}</td>
+              <td>${money(row.payment)}</td>
+              <td>${money(row.principal)}</td>
+              <td>${money(row.interest)}</td>
+              <td>${money(row.balance)}</td>
+              <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
+            </tr>`;
+          })
+          .join("");
+      }
 
       const totalPaid = schedule
         .filter((r) => paidSet.has(r.payKey))
@@ -1771,51 +1771,10 @@
       els.paymentHint.textContent = `${scheduledCount} scheduled${extraCount ? ` + ${extraCount} extra` : ""} · ${money(totalPaid)} marked paid`;
     }
 
-    function renderTrack() {
-      const filter = els.trackFilter.value;
-      const y = today().getFullYear();
-      const rows = schedule.filter((row) => {
-        const paid = paidSet.has(row.payKey);
-        if (filter === "paid") return paid;
-        if (filter === "unpaid") return !paid;
-        if (filter === "year") return row.due.getFullYear() === y;
-        if (filter === "extra") return row.kind === "extra";
-        return true;
-      });
-
-      if (!rows.length) {
-        els.trackBody.innerHTML = `<tr><td colspan="6" class="empty-state">No payments match this filter.</td></tr>`;
-        return;
-      }
-
-      els.trackBody.innerHTML = rows
-        .map((row) => {
-          const paid = paidSet.has(row.payKey);
-          const num =
-            row.kind === "extra"
-              ? `<span class="type-pill">Extra</span>`
-              : row.label;
-          const remove =
-            row.kind === "extra"
-              ? ` <button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
-              : "";
-          return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}">
-            <td>${num}</td>
-            <td>${fmtDate(row.due)}${remove}</td>
-            <td>${money(row.payment)}</td>
-            <td>${money(row.principal)}</td>
-            <td>${money(row.interest)}</td>
-            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
-          </tr>`;
-        })
-        .join("");
-    }
-
     function renderAll() {
       renderYearStrip();
       renderCalendar();
-      renderAmort();
-      renderTrack();
+      renderPayments();
     }
 
     function togglePaid(payKey) {
@@ -1919,12 +1878,7 @@
       if (chip) togglePaid(chip.dataset.pay);
     });
 
-    els.amortBody.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-pay]");
-      if (btn) togglePaid(btn.dataset.pay);
-    });
-
-    els.trackBody.addEventListener("click", (e) => {
+    els.paymentsBody.addEventListener("click", (e) => {
       const removeBtn = e.target.closest("[data-remove-extra]");
       if (removeBtn) {
         removeExtraPayment(removeBtn.dataset.removeExtra);
@@ -1934,7 +1888,7 @@
       if (btn) togglePaid(btn.dataset.pay);
     });
 
-    els.trackFilter.addEventListener("change", renderTrack);
+    els.trackFilter.addEventListener("change", renderPayments);
 
     els.markThroughBtn.addEventListener("click", () => {
       const t = today();
