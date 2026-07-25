@@ -1,0 +1,63 @@
+{% match year_stats %}
+{% when Some with (stats) %}
+<div class="year-strip" id="yearStrip" hx-swap-oob="true">
+  {% for s in stats %}
+  <div class="{{ s.class }}">
+    <div class="label">{{ s.label }}</div>
+    <div class="value">{{ s.value }}</div>
+    <div class="sub">{{ s.sub }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{% endmatch %}
+<div class="panel-surface">
+  <div class="panel-head">
+    <h2>Payment calendar</h2>
+    <div class="cal-nav">
+      <button type="button" aria-label="Previous year"
+        hx-get="/partials/calendar?year={{ view_year - 1 }}&tab=calendar&filter={{ payment_filter }}&grain={{ grain }}"
+        hx-target="#panel-calendar"
+        hx-swap="innerHTML show:none">‹</button>
+      <div class="month-label">{{ view_year }}</div>
+      <button type="button" aria-label="Next year"
+        hx-get="/partials/calendar?year={{ view_year + 1 }}&tab=calendar&filter={{ payment_filter }}&grain={{ grain }}"
+        hx-target="#panel-calendar"
+        hx-swap="innerHTML show:none">›</button>
+    </div>
+  </div>
+  <p class="cal-hint">Tap a payment to mark it paid or unpaid.</p>
+  <div class="calendar-grid" id="calendarGrid">
+    {% for month in months %}
+    <div class="month-cell{% if month.is_empty %} empty{% endif %}{% if month.is_current %} current{% endif %}">
+      <div class="month-name">{{ month.name }}</div>
+      {% if month.is_empty %}
+      <div class="month-empty-note">No payment</div>
+      {% else %}
+      <div class="month-chips">
+        {% for chip in month.chips %}
+        <button type="button"
+          class="pay-chip {{ chip.status }}{% if chip.is_extra %} extra{% endif %}"
+          data-pay="{{ chip.pay_key }}"
+          aria-pressed="{% if chip.status == "paid" %}true{% else %}false{% endif %}"
+          aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
+          hx-post="/profiles/{{ profile_id }}/toggle-paid"
+          hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
+          hx-swap="none">
+          <strong>{{ chip.amount }}</strong>
+          <span class="chip-status">{{ chip.status_text }}</span>
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="legend">
+    <span class="l-paid">Paid</span>
+    <span class="l-due">Due this month</span>
+    <span class="l-missed">Past due</span>
+    <span class="l-future">Upcoming</span>
+    <span class="l-extra">Extra payment</span>
+  </div>
+</div>

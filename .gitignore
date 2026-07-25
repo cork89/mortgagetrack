@@ -1,0 +1,6 @@
+/target/
+/homestead.db
+/homestead.db-*
+.env.local
+*.db
+.env

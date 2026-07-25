@@ -1,0 +1,760 @@
+use std::collections::{HashMap, HashSet};
+
+use chrono::{Datelike, Month, NaiveDate};
+
+use super::amort::{build_schedule, payment_status, RowKind, ScheduleRow};
+use super::db::{ExtraPayment, Loan, Profile};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabId {
+    Calendar,
+    Payments,
+    Chart,
+}
+
+impl TabId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TabId::Calendar => "calendar",
+            TabId::Payments => "payments",
+            TabId::Chart => "chart",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "payments" => TabId::Payments,
+            "chart" => TabId::Chart,
+            _ => TabId::Calendar,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentFilter {
+    All,
+    Unpaid,
+    Paid,
+    Year,
+    Extra,
+}
+
+impl PaymentFilter {
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "unpaid" => PaymentFilter::Unpaid,
+            "paid" => PaymentFilter::Paid,
+            "year" => PaymentFilter::Year,
+            "extra" => PaymentFilter::Extra,
+            _ => PaymentFilter::All,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PaymentFilter::All => "all",
+            PaymentFilter::Unpaid => "unpaid",
+            PaymentFilter::Paid => "paid",
+            PaymentFilter::Year => "year",
+            PaymentFilter::Extra => "extra",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProfileOption {
+    pub id: String,
+    pub name: String,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct EmptyState {
+    pub title: String,
+    pub copy: String,
+    pub button_label: String,
+    pub action: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct YearStat {
+    pub label: String,
+    pub value: String,
+    pub sub: String,
+    pub class: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaymentChip {
+    pub pay_key: String,
+    pub amount: String,
+    pub status: String,
+    pub status_text: String,
+    pub is_extra: bool,
+    pub aria: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MonthCell {
+    pub name: String,
+    pub is_current: bool,
+    pub is_empty: bool,
+    pub chips: Vec<PaymentChip>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaymentRowView {
+    pub is_year_header: bool,
+    pub year_label: String,
+    pub year_sub: String,
+    pub is_current_year: bool,
+    pub label_html: String,
+    pub due: String,
+    pub payment: String,
+    pub principal: String,
+    pub interest: String,
+    pub balance: String,
+    pub pay_key: String,
+    pub paid: bool,
+    pub is_extra: bool,
+    pub extra_id: String,
+    pub zeroed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct YearSummary {
+    pub monthly_payment: String,
+    pub total_interest: String,
+    pub balance_after: String,
+    pub hint: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChartBucket {
+    pub label: String,
+    pub principal: f64,
+    pub interest: f64,
+    pub payment: f64,
+    pub year: i32,
+    pub count: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChartView {
+    pub svg: String,
+    pub hint: String,
+    pub grain: String,
+    pub buckets_json: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DashboardView {
+    pub profile_id: String,
+    pub profile_meta: String,
+    pub year_stats: Vec<YearStat>,
+    pub view_year: i32,
+    pub months: Vec<MonthCell>,
+    pub payment_rows: Vec<PaymentRowView>,
+    pub payment_filter: String,
+    pub summary: YearSummary,
+    pub chart: ChartView,
+    pub active_tab: String,
+    pub extras: Vec<ExtraPayment>,
+    pub loan_principal: String,
+    pub loan_rate: String,
+    pub loan_term: String,
+    pub loan_start: String,
+    pub profile_name: String,
+    pub extra_date_default: String,
+}
+
+pub fn money(n: f64) -> String {
+    let neg = n < 0.0;
+    let n = n.abs();
+    let whole = n.floor() as i64;
+    let cents = ((n - whole as f64) * 100.0).round() as i64;
+    let mut s = format!("{whole}");
+    let bytes = s.as_bytes().to_vec();
+    let mut out = String::new();
+    for (i, ch) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(*ch as char);
+    }
+    let formatted = format!("${out}.{:02}", cents.clamp(0, 99));
+    if neg {
+        format!("-{formatted}")
+    } else {
+        formatted
+    }
+}
+
+fn fmt_date(d: NaiveDate) -> String {
+    let month = Month::try_from(d.month() as u8)
+        .map(|m| m.name())
+        .unwrap_or("?");
+    let short = &month[..3.min(month.len())];
+    format!("{short} {}, {}", d.day(), d.year())
+}
+
+fn status_label(status: &str) -> &'static str {
+    match status {
+        "paid" => "Paid",
+        "due" => "Due this month",
+        "missed" => "Past due",
+        _ => "Upcoming",
+    }
+}
+
+fn chip_for(row: &ScheduleRow, paid: &HashSet<String>, today: NaiveDate) -> PaymentChip {
+    let is_paid = paid.contains(&row.pay_key);
+    let status = payment_status(row.due, is_paid, today).to_string();
+    let status_text = if row.kind == RowKind::Extra {
+        if status == "paid" {
+            "Extra · Paid".to_string()
+        } else {
+            format!("Extra · {}", status_label(&status))
+        }
+    } else {
+        status_label(&status).to_string()
+    };
+    let aria = if status == "paid" {
+        "Mark unpaid"
+    } else {
+        "Mark paid"
+    };
+    PaymentChip {
+        pay_key: row.pay_key.clone(),
+        amount: money(row.payment),
+        status,
+        status_text,
+        is_extra: row.kind == RowKind::Extra,
+        aria: aria.to_string(),
+    }
+}
+
+pub fn build_dashboard(
+    profile: &Profile,
+    paid_keys: &[String],
+    extras: &[ExtraPayment],
+    view_year: i32,
+    filter: PaymentFilter,
+    chart_grain: &str,
+    active_tab: TabId,
+    today: NaiveDate,
+) -> Option<DashboardView> {
+    let loan = profile.loan()?;
+    let paid: HashSet<String> = paid_keys.iter().cloned().collect();
+    let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
+        .iter()
+        .filter_map(|ex| {
+            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
+            Some((ex.id.clone(), date, ex.amount))
+        })
+        .collect();
+
+    let built = build_schedule(
+        loan.principal,
+        loan.rate,
+        loan.term_years,
+        loan.start_date,
+        &extra_tuples,
+    );
+    let schedule = &built.rows;
+
+    let year_stats = year_strip(schedule, &paid, extras.len(), today);
+    let months = calendar_months(schedule, &paid, view_year, today);
+    let (payment_rows, summary) = payments_table(schedule, &paid, &loan, filter, today);
+    let chart = build_chart(schedule, chart_grain);
+
+    let paid_count = paid.len();
+    let profile_meta = format!(
+        "{} · {}% · {}yr · {} payment{} tracked",
+        money(loan.principal),
+        loan.rate,
+        loan.term_years,
+        paid_count,
+        if paid_count == 1 { "" } else { "s" }
+    );
+
+    Some(DashboardView {
+        profile_id: profile.id.clone(),
+        profile_meta,
+        year_stats,
+        view_year,
+        months,
+        payment_rows,
+        payment_filter: filter.as_str().to_string(),
+        summary,
+        chart,
+        active_tab: active_tab.as_str().to_string(),
+        extras: extras.to_vec(),
+        loan_principal: format!("{}", loan.principal as i64),
+        loan_rate: format!("{}", loan.rate),
+        loan_term: loan.term_years.to_string(),
+        loan_start: loan.start_date.format("%Y-%m-%d").to_string(),
+        profile_name: profile.name.clone(),
+        extra_date_default: today.format("%Y-%m-%d").to_string(),
+    })
+}
+
+pub fn empty_state(profile: Option<&Profile>) -> EmptyState {
+    if profile.is_some() {
+        EmptyState {
+            title: "Add loan details".into(),
+            copy: "Edit this profile with your loan amount, rate, and first payment date.".into(),
+            button_label: "Edit profile".into(),
+            action: "edit".into(),
+        }
+    } else {
+        EmptyState {
+            title: "No mortgage yet".into(),
+            copy: "Create a profile with your loan details to see the schedule and calendar."
+                .into(),
+            button_label: "New profile".into(),
+            action: "create".into(),
+        }
+    }
+}
+
+fn year_strip(
+    schedule: &[ScheduleRow],
+    paid: &HashSet<String>,
+    extra_count: usize,
+    today: NaiveDate,
+) -> Vec<YearStat> {
+    let y = today.year();
+    let year_rows: Vec<_> = schedule
+        .iter()
+        .filter(|r| r.due.year() == y)
+        .collect();
+    let paid_rows: Vec<_> = year_rows
+        .iter()
+        .filter(|r| paid.contains(&r.pay_key))
+        .collect();
+    let scheduled_only: Vec<_> = year_rows
+        .iter()
+        .filter(|r| r.kind == RowKind::Scheduled)
+        .collect();
+    let scheduled_principal: f64 = scheduled_only.iter().map(|r| r.principal).sum();
+    let scheduled_interest: f64 = year_rows.iter().map(|r| r.interest).sum();
+    let paid_principal: f64 = paid_rows.iter().map(|r| r.principal).sum();
+    let paid_interest: f64 = paid_rows.iter().map(|r| r.interest).sum();
+    let remaining = year_rows.len() - paid_rows.len();
+
+    let next = schedule
+        .iter()
+        .find(|r| !paid.contains(&r.pay_key) && r.payment > 0.0);
+
+    let mut extra_note = String::new();
+    if extra_count > 0 {
+        extra_note = format!(" · {extra_count} extra");
+    }
+
+    vec![
+        YearStat {
+            label: "Next unpaid".into(),
+            value: next.map(|r| money(r.payment)).unwrap_or_else(|| "All caught up".into()),
+            sub: next
+                .map(|r| fmt_date(r.due))
+                .unwrap_or_else(|| "Nothing left to mark".into()),
+            class: "stat highlight next-hero".into(),
+        },
+        YearStat {
+            label: format!("{y} progress"),
+            value: format!("{} / {}", paid_rows.len(), year_rows.len()),
+            sub: format!("{remaining} remaining{extra_note}"),
+            class: "stat next-up".into(),
+        },
+        YearStat {
+            label: format!("{y} principal"),
+            value: money(paid_principal),
+            sub: format!("of {} scheduled", money(scheduled_principal)),
+            class: "stat quiet".into(),
+        },
+        YearStat {
+            label: format!("{y} interest"),
+            value: money(paid_interest),
+            sub: format!("of {} scheduled", money(scheduled_interest)),
+            class: "stat quiet".into(),
+        },
+    ]
+}
+
+fn calendar_months(
+    schedule: &[ScheduleRow],
+    paid: &HashSet<String>,
+    view_year: i32,
+    today: NaiveDate,
+) -> Vec<MonthCell> {
+    let mut by_month: HashMap<u32, Vec<&ScheduleRow>> = HashMap::new();
+    for row in schedule {
+        if row.due.year() != view_year {
+            continue;
+        }
+        by_month.entry(row.due.month()).or_default().push(row);
+    }
+
+    (1..=12)
+        .map(|month| {
+            let name = Month::try_from(month as u8)
+                .map(|m| m.name().to_string())
+                .unwrap_or_else(|_| month.to_string());
+            let rows = by_month.get(&month).cloned().unwrap_or_default();
+            let is_current = today.year() == view_year && today.month() == month;
+            let chips = rows
+                .iter()
+                .filter(|r| r.payment >= 0.005 || r.kind == RowKind::Extra)
+                .map(|r| chip_for(r, paid, today))
+                .collect::<Vec<_>>();
+            MonthCell {
+                name,
+                is_current,
+                is_empty: chips.is_empty(),
+                chips,
+            }
+        })
+        .collect()
+}
+
+fn payments_table(
+    schedule: &[ScheduleRow],
+    paid: &HashSet<String>,
+    loan: &Loan,
+    filter: PaymentFilter,
+    today: NaiveDate,
+) -> (Vec<PaymentRowView>, YearSummary) {
+    let y = today.year();
+    let rows: Vec<&ScheduleRow> = schedule
+        .iter()
+        .filter(|row| {
+            let is_paid = paid.contains(&row.pay_key);
+            match filter {
+                PaymentFilter::Paid => is_paid,
+                PaymentFilter::Unpaid => !is_paid,
+                PaymentFilter::Year => row.due.year() == y,
+                PaymentFilter::Extra => row.kind == RowKind::Extra,
+                PaymentFilter::All => true,
+            }
+        })
+        .collect();
+
+    let mut out = Vec::new();
+    if rows.is_empty() {
+        out.push(PaymentRowView {
+            is_year_header: false,
+            year_label: String::new(),
+            year_sub: String::new(),
+            is_current_year: false,
+            label_html: String::new(),
+            due: String::new(),
+            payment: String::new(),
+            principal: String::new(),
+            interest: String::new(),
+            balance: String::new(),
+            pay_key: String::new(),
+            paid: false,
+            is_extra: false,
+            extra_id: String::new(),
+            zeroed: false,
+        });
+        // empty marker handled in template via empty check on payment_rows length + special flag
+    } else {
+        let mut groups: Vec<(i32, Vec<&ScheduleRow>)> = Vec::new();
+        for row in rows {
+            if groups.last().map(|(yr, _)| *yr) != Some(row.due.year()) {
+                groups.push((row.due.year(), Vec::new()));
+            }
+            groups.last_mut().unwrap().1.push(row);
+        }
+
+        for (year, group) in groups {
+            let payment_total: f64 = group.iter().map(|r| r.payment).sum();
+            let principal_total: f64 = group.iter().map(|r| r.principal).sum();
+            let interest_total: f64 = group.iter().map(|r| r.interest).sum();
+            let count = group.len();
+            out.push(PaymentRowView {
+                is_year_header: true,
+                year_label: year.to_string(),
+                year_sub: format!(
+                    "{count} payment{} · {} total",
+                    if count == 1 { "" } else { "s" },
+                    money(payment_total)
+                ),
+                is_current_year: year == y,
+                label_html: String::new(),
+                due: String::new(),
+                payment: money(payment_total),
+                principal: money(principal_total),
+                interest: money(interest_total),
+                balance: String::new(),
+                pay_key: String::new(),
+                paid: false,
+                is_extra: false,
+                extra_id: String::new(),
+                zeroed: false,
+            });
+
+            for row in group {
+                let is_paid = paid.contains(&row.pay_key);
+                let label_html = if row.kind == RowKind::Extra {
+                    r#"<span class="type-pill">Extra</span>"#.to_string()
+                } else {
+                    row.label.clone()
+                };
+                out.push(PaymentRowView {
+                    is_year_header: false,
+                    year_label: String::new(),
+                    year_sub: String::new(),
+                    is_current_year: row.due.year() == y,
+                    label_html,
+                    due: fmt_date(row.due),
+                    payment: money(row.payment),
+                    principal: money(row.principal),
+                    interest: money(row.interest),
+                    balance: money(row.balance),
+                    pay_key: row.pay_key.clone(),
+                    paid: is_paid,
+                    is_extra: row.kind == RowKind::Extra,
+                    extra_id: row.id.clone().unwrap_or_default(),
+                    zeroed: row.payment < 0.005,
+                });
+            }
+        }
+    }
+
+    let total_paid: f64 = schedule
+        .iter()
+        .filter(|r| paid.contains(&r.pay_key))
+        .map(|r| r.payment)
+        .sum();
+    let mut bal = loan.principal;
+    for r in schedule {
+        if paid.contains(&r.pay_key) {
+            bal = r.balance;
+        } else {
+            break;
+        }
+    }
+    let scheduled_count = schedule.iter().filter(|r| r.kind == RowKind::Scheduled).count();
+    let extra_count = schedule.iter().filter(|r| r.kind == RowKind::Extra).count();
+    let extra_bit = if extra_count > 0 {
+        format!(" + {extra_count} extra")
+    } else {
+        String::new()
+    };
+
+    let summary = YearSummary {
+        monthly_payment: money(loan.payment),
+        total_interest: money(loan.total_interest),
+        balance_after: money(bal),
+        hint: format!(
+            "{scheduled_count} scheduled{extra_bit} · {} marked paid",
+            money(total_paid)
+        ),
+    };
+
+    // Fix empty marker: use empty payment_rows when no matches
+    if schedule.is_empty()
+        || (filter != PaymentFilter::All
+            && out.len() == 1
+            && !out[0].is_year_header
+            && out[0].pay_key.is_empty())
+    {
+        // replace with empty vec so template shows empty state
+        if out.len() == 1 && out[0].pay_key.is_empty() && !out[0].is_year_header {
+            out.clear();
+        }
+    }
+
+    (out, summary)
+}
+
+fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
+    let months: Vec<&ScheduleRow> = schedule
+        .iter()
+        .filter(|r| r.kind == RowKind::Scheduled)
+        .collect();
+
+    let buckets: Vec<ChartBucket> = if grain == "yearly" {
+        let mut by_year: HashMap<i32, ChartBucket> = HashMap::new();
+        for row in &months {
+            let year = row.due.year();
+            let entry = by_year.entry(year).or_insert(ChartBucket {
+                label: year.to_string(),
+                principal: 0.0,
+                interest: 0.0,
+                payment: 0.0,
+                year,
+                count: Some(0),
+            });
+            entry.principal += row.principal;
+            entry.interest += row.interest;
+            entry.payment += row.payment;
+            entry.count = Some(entry.count.unwrap_or(0) + 1);
+        }
+        let mut v: Vec<_> = by_year.into_values().collect();
+        v.sort_by_key(|b| b.year);
+        v
+    } else {
+        months
+            .iter()
+            .map(|row| ChartBucket {
+                label: fmt_date(row.due),
+                principal: row.principal,
+                interest: row.interest,
+                payment: row.payment,
+                year: row.due.year(),
+                count: None,
+            })
+            .collect()
+    };
+
+    let svg = render_chart_svg(&buckets, grain);
+    let total_principal: f64 = buckets.iter().map(|b| b.principal).sum();
+    let total_interest: f64 = buckets.iter().map(|b| b.interest).sum();
+    let hint = if grain == "yearly" {
+        format!(
+            "Yearly totals over {} years · {} principal · {} interest",
+            buckets.len(),
+            money(total_principal),
+            money(total_interest)
+        )
+    } else {
+        format!(
+            "Monthly split over {} payments · {} principal · {} interest",
+            buckets.len(),
+            money(total_principal),
+            money(total_interest)
+        )
+    };
+
+    let buckets_json = serde_json::to_string(
+        &buckets
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "label": b.label,
+                    "principal": b.principal,
+                    "interest": b.interest,
+                    "payment": b.payment,
+                    "count": b.count,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_else(|_| "[]".into());
+
+    ChartView {
+        svg,
+        hint,
+        grain: grain.to_string(),
+        buckets_json,
+    }
+}
+
+fn render_chart_svg(buckets: &[ChartBucket], grain: &str) -> String {
+    if buckets.is_empty() {
+        return String::new();
+    }
+    let width = 800.0;
+    let height = 300.0;
+    let pad_top = 16.0;
+    let pad_right = 12.0;
+    let pad_bottom = 36.0;
+    let pad_left = 56.0;
+    let plot_w = width - pad_left - pad_right;
+    let plot_h = height - pad_top - pad_bottom;
+    let max_pay = buckets.iter().map(|b| b.payment).fold(1.0_f64, f64::max);
+    let bar_gap = if grain == "yearly" {
+        if buckets.len() > 20 {
+            0.12
+        } else {
+            0.22
+        }
+    } else if buckets.len() > 180 {
+        0.0
+    } else if buckets.len() > 90 {
+        0.15
+    } else {
+        0.25
+    };
+    let slot = plot_w / buckets.len() as f64;
+    let bar_w = (slot * (1.0 - bar_gap)).max(0.5);
+
+    let mut out = String::new();
+    let y_ticks = 4;
+    for i in 0..=y_ticks {
+        let value = (max_pay * i as f64) / y_ticks as f64;
+        let y = pad_top + plot_h - (plot_h * i as f64) / y_ticks as f64;
+        out.push_str(&format!(
+            r#"<line class="grid-line" x1="{pad_left}" y1="{y}" x2="{}" y2="{y}" />"#,
+            width - pad_right
+        ));
+        out.push_str(&format!(
+            r#"<text class="axis-label" x="{}" y="{}" text-anchor="end">{}</text>"#,
+            pad_left - 8.0,
+            y + 4.0,
+            money(value)
+        ));
+    }
+
+    if grain == "yearly" {
+        let label_every = if buckets.len() > 24 { 2 } else { 1 };
+        for (i, bucket) in buckets.iter().enumerate() {
+            if i % label_every != 0 && i != buckets.len() - 1 {
+                continue;
+            }
+            let x = pad_left + i as f64 * slot + slot / 2.0;
+            out.push_str(&format!(
+                r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{}</text>"#,
+                height - 10.0,
+                bucket.year
+            ));
+        }
+    } else {
+        let mut last_year = None;
+        for (i, bucket) in buckets.iter().enumerate() {
+            if Some(bucket.year) != last_year {
+                let x = pad_left + i as f64 * slot + slot / 2.0;
+                out.push_str(&format!(
+                    r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{}</text>"#,
+                    height - 10.0,
+                    bucket.year
+                ));
+                last_year = Some(bucket.year);
+            }
+        }
+    }
+
+    for (i, bucket) in buckets.iter().enumerate() {
+        let x = pad_left + i as f64 * slot + (slot - bar_w) / 2.0;
+        let principal_h = (bucket.principal / max_pay) * plot_h;
+        let interest_h = (bucket.interest / max_pay) * plot_h;
+        let principal_y = pad_top + plot_h - principal_h;
+        let interest_y = principal_y - interest_h;
+        out.push_str(&format!(
+            concat!(
+                r##"<g class="bar-group" data-idx="{i}">"##,
+                r##"<rect class="bar-interest" x="{x}" y="{interest_y}" width="{bar_w}" height="{ih}" fill="#c4a574" />"##,
+                r##"<rect class="bar-principal" x="{x}" y="{principal_y}" width="{bar_w}" height="{ph}" fill="#2f6f6a" />"##,
+                r##"<rect class="bar-hit" x="{hx}" y="{pad_top}" width="{slot}" height="{plot_h}" data-idx="{i}" />"##,
+                r##"</g>"##,
+            ),
+            i = i,
+            x = x,
+            interest_y = interest_y,
+            bar_w = bar_w,
+            ih = interest_h.max(0.0),
+            principal_y = principal_y,
+            ph = principal_h.max(0.0),
+            hx = pad_left + i as f64 * slot,
+            pad_top = pad_top,
+            slot = slot,
+            plot_h = plot_h,
+        ));
+    }
+
+    out
+}

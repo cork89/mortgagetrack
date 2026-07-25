@@ -1,0 +1,32 @@
+<section class="profile-bar{% if !has_profiles %} hidden{% endif %}" id="profileBar" aria-label="Profiles">
+  <div class="profile-select-wrap">
+    <span>Profile</span>
+    <select id="profileSelect" name="profile_id" aria-label="Active profile"
+      {% if !has_profiles %}disabled{% endif %}
+      hx-post="/profiles/switch"
+      hx-target="#main-panel"
+      hx-swap="innerHTML"
+      hx-include="this"
+      hx-trigger="change">
+      {% if !has_profiles %}
+      <option value="">No profiles yet</option>
+      {% else %}
+        {% for p in profiles %}
+        <option value="{{ p.id }}"{% if p.selected %} selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
+  </div>
+  <div class="profile-actions">
+    <button type="button" class="btn-primary" id="editProfileBtn"{% if !has_profiles %} disabled{% endif %}>Edit</button>
+    <div class="menu" id="profileMenu">
+      <button type="button" class="menu-toggle" id="profileMenuBtn" aria-label="More profile actions" aria-haspopup="menu" aria-expanded="false"{% if !has_profiles %} disabled{% endif %}>···</button>
+      <div class="menu-panel" role="menu" id="profileMenuPanel">
+        <button type="button" role="menuitem" id="newProfileBtn">New profile</button>
+        <button type="button" role="menuitem" id="renameProfileBtn"{% if !has_profiles %} disabled{% endif %}>Rename…</button>
+        <button type="button" role="menuitem" class="menu-danger" id="deleteProfileBtn"{% if !has_profiles %} disabled{% endif %}>Delete profile</button>
+      </div>
+    </div>
+  </div>
+  <p class="profile-meta" id="profileMeta">{% match dashboard %}{% when Some with (d) %}{{ d.profile_meta }}{% else %}{% endmatch %}</p>
+</section>

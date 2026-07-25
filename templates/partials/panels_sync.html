@@ -1,0 +1,187 @@
+{# Sync year strip + both panels after paid/extra mutations (HTMX OOB only). #}
+<div class="year-strip" id="yearStrip" hx-swap-oob="true">
+  {% for s in dashboard.year_stats %}
+  <div class="{{ s.class }}">
+    <div class="label">{{ s.label }}</div>
+    <div class="value">{{ s.value }}</div>
+    <div class="sub">{{ s.sub }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div id="panel-calendar" hx-swap-oob="innerHTML">
+  <div class="panel-surface">
+    <div class="panel-head">
+      <h2>Payment calendar</h2>
+      <div class="cal-nav">
+        <button type="button" aria-label="Previous year"
+          hx-get="/partials/calendar?year={{ dashboard.view_year - 1 }}&tab=calendar&filter={{ dashboard.payment_filter }}&grain={{ dashboard.chart.grain }}"
+          hx-target="#panel-calendar"
+          hx-swap="innerHTML show:none">‹</button>
+        <div class="month-label">{{ dashboard.view_year }}</div>
+        <button type="button" aria-label="Next year"
+          hx-get="/partials/calendar?year={{ dashboard.view_year + 1 }}&tab=calendar&filter={{ dashboard.payment_filter }}&grain={{ dashboard.chart.grain }}"
+          hx-target="#panel-calendar"
+          hx-swap="innerHTML show:none">›</button>
+      </div>
+    </div>
+    <p class="cal-hint">Tap a payment to mark it paid or unpaid.</p>
+    <div class="calendar-grid" id="calendarGrid">
+      {% for month in dashboard.months %}
+      <div class="month-cell{% if month.is_empty %} empty{% endif %}{% if month.is_current %} current{% endif %}">
+        <div class="month-name">{{ month.name }}</div>
+        {% if month.is_empty %}
+        <div class="month-empty-note">No payment</div>
+        {% else %}
+        <div class="month-chips">
+          {% for chip in month.chips %}
+          <button type="button"
+            class="pay-chip {{ chip.status }}{% if chip.is_extra %} extra{% endif %}"
+            data-pay="{{ chip.pay_key }}"
+            aria-pressed="{% if chip.status == "paid" %}true{% else %}false{% endif %}"
+            aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
+            hx-post="/profiles/{{ dashboard.profile_id }}/toggle-paid"
+            hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ dashboard.view_year }}","filter":"{{ dashboard.payment_filter }}","grain":"{{ dashboard.chart.grain }}"}'
+            hx-swap="none">
+            <strong>{{ chip.amount }}</strong>
+            <span class="chip-status">{{ chip.status_text }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="legend">
+      <span class="l-paid">Paid</span>
+      <span class="l-due">Due this month</span>
+      <span class="l-missed">Past due</span>
+      <span class="l-future">Upcoming</span>
+      <span class="l-extra">Extra payment</span>
+    </div>
+  </div>
+</div>
+
+<div id="panel-payments" hx-swap-oob="innerHTML">
+  <div class="panel-surface">
+    <div class="panel-head">
+      <div>
+        <h2>Payments</h2>
+        <span class="hint">{{ dashboard.summary.hint }}</span>
+      </div>
+      <div class="track-filters">
+        <label class="filter-label">
+          <span>Filter</span>
+          <select name="filter"
+            hx-get="/partials/payments"
+            hx-target="#panel-payments"
+            hx-swap="innerHTML show:none"
+            hx-trigger="change"
+            hx-vals='{"tab":"payments","year":"{{ dashboard.view_year }}","grain":"{{ dashboard.chart.grain }}"}'>
+            <option value="all"{% if dashboard.payment_filter == "all" %} selected{% endif %}>All</option>
+            <option value="unpaid"{% if dashboard.payment_filter == "unpaid" %} selected{% endif %}>Unpaid</option>
+            <option value="paid"{% if dashboard.payment_filter == "paid" %} selected{% endif %}>Paid</option>
+            <option value="year"{% if dashboard.payment_filter == "year" %} selected{% endif %}>Current year</option>
+            <option value="extra"{% if dashboard.payment_filter == "extra" %} selected{% endif %}>Extra only</option>
+          </select>
+        </label>
+        <button type="button" class="btn-ghost btn-compact"
+          hx-post="/profiles/{{ dashboard.profile_id }}/mark-due?tab=payments&filter={{ dashboard.payment_filter }}&year={{ dashboard.view_year }}&grain={{ dashboard.chart.grain }}"
+          hx-swap="none">
+          Mark all due as paid
+        </button>
+      </div>
+    </div>
+    <form class="extra-form"
+      hx-post="/profiles/{{ dashboard.profile_id }}/extras"
+      hx-swap="none">
+      <input type="hidden" name="filter" value="{{ dashboard.payment_filter }}" />
+      <label>
+        Extra payment date
+        <input name="date" type="date" value="{{ dashboard.extra_date_default }}" required />
+      </label>
+      <label class="amount">
+        Amount
+        <input name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+      </label>
+      <button type="submit" class="btn-primary">Add extra payment</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <colgroup>
+          <col class="col-num" />
+          <col class="col-date" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-status" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="cell-text">#</th>
+            <th class="cell-text">Due date</th>
+            <th>Payment</th>
+            <th>Principal</th>
+            <th>Interest</th>
+            <th>Balance</th>
+            <th class="cell-status">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if dashboard.payment_rows.is_empty() %}
+          <tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>
+          {% else %}
+            {% for row in dashboard.payment_rows %}
+              {% if row.is_year_header %}
+              <tr class="year-summary{% if row.is_current_year %} current-year{% endif %}">
+                <td class="cell-text" colspan="2">
+                  <span class="year-label">{{ row.year_label }}</span>
+                  <span class="year-sub">{{ row.year_sub }}</span>
+                </td>
+                <td>{{ row.payment }}</td>
+                <td>{{ row.principal }}</td>
+                <td>{{ row.interest }}</td>
+                <td></td>
+                <td class="cell-status"></td>
+              </tr>
+              {% else %}
+              <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
+                <td class="cell-text">{{ row.label_html|safe }}</td>
+                <td class="cell-text">{{ row.due }}</td>
+                <td>{{ row.payment }}</td>
+                <td>{{ row.principal }}</td>
+                <td>{{ row.interest }}</td>
+                <td>{{ row.balance }}</td>
+                <td class="cell-status">
+                  <div class="status-actions">
+                    {% if !row.zeroed %}
+                    <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"
+                      hx-post="/profiles/{{ dashboard.profile_id }}/toggle-paid"
+                      hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ dashboard.view_year }}","filter":"{{ dashboard.payment_filter }}","grain":"{{ dashboard.chart.grain }}"}'
+                      hx-swap="none">
+                      {% if row.paid %}Paid{% else %}Mark paid{% endif %}
+                    </button>
+                    {% endif %}
+                    {% if row.is_extra %}
+                    <button type="button" class="btn-text danger status-btn-remove"
+                      hx-post="/profiles/{{ dashboard.profile_id }}/extras/{{ row.extra_id }}"
+                      hx-swap="none"
+                      hx-confirm="Remove this extra payment?">Remove</button>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="summary-bar">
+      <div><div class="k">Monthly payment</div><div class="v">{{ dashboard.summary.monthly_payment }}</div></div>
+      <div><div class="k">Total interest (full term)</div><div class="v">{{ dashboard.summary.total_interest }}</div></div>
+      <div><div class="k">Balance after tracked pays</div><div class="v">{{ dashboard.summary.balance_after }}</div></div>
+    </div>
+  </div>
+</div>

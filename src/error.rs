@@ -1,0 +1,49 @@
+use askama::Error as AskamaError;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
+use sqlx::Error as SqlxError;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error(transparent)]
+    Database(#[from] SqlxError),
+
+    #[error(transparent)]
+    Template(#[from] AskamaError),
+
+    #[error("{0}")]
+    BadRequest(String),
+
+    #[error("{0}")]
+    NotFound(String),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, message) = match &self {
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            AppError::Database(err) => {
+                tracing::error!(error = %err, "database error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                )
+            }
+            AppError::Template(err) => {
+                tracing::error!(error = %err, "template error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Template error".to_string(),
+                )
+            }
+        };
+
+        (status, message).into_response()
+    }
+}
+
+pub type AppResult<T> = Result<T, AppError>;

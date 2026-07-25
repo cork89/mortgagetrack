@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block body %}
+<header class="brand-block">
+  <h1 class="brand">Homestead</h1>
+  <span class="brand-rule" aria-hidden="true"></span>
+  <p class="tagline">Your mortgage ledger — payments, progress, and payoff in one place.</p>
+</header>
+
+{% include "partials/profile_bar.html" %}
+
+<div id="main-panel">
+  {% include "partials/dashboard.html" %}
+</div>
+
+{% include "partials/loan_popover.html" %}
+{% endblock %}

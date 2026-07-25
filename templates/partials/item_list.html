@@ -1,0 +1,75 @@
+{# Payment schedule table rows for the active loan #}
+<div class="table-wrap" id="paymentsTableWrap">
+  <table>
+    <colgroup>
+      <col class="col-num" />
+      <col class="col-date" />
+      <col class="col-money" />
+      <col class="col-money" />
+      <col class="col-money" />
+      <col class="col-money" />
+      <col class="col-status" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="cell-text">#</th>
+        <th class="cell-text">Due date</th>
+        <th>Payment</th>
+        <th>Principal</th>
+        <th>Interest</th>
+        <th>Balance</th>
+        <th class="cell-status">Status</th>
+      </tr>
+    </thead>
+    <tbody id="paymentsBody">
+      {% if dashboard.payment_rows.is_empty() %}
+      <tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>
+      {% else %}
+        {% for row in dashboard.payment_rows %}
+          {% if row.is_year_header %}
+          <tr class="year-summary{% if row.is_current_year %} current-year{% endif %}">
+            <td class="cell-text" colspan="2">
+              <span class="year-label">{{ row.year_label }}</span>
+              <span class="year-sub">{{ row.year_sub }}</span>
+            </td>
+            <td>{{ row.payment }}</td>
+            <td>{{ row.principal }}</td>
+            <td>{{ row.interest }}</td>
+            <td></td>
+            <td class="cell-status"></td>
+          </tr>
+          {% else %}
+          <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
+            <td class="cell-text">{{ row.label_html|safe }}</td>
+            <td class="cell-text">{{ row.due }}</td>
+            <td>{{ row.payment }}</td>
+            <td>{{ row.principal }}</td>
+            <td>{{ row.interest }}</td>
+            <td>{{ row.balance }}</td>
+            <td class="cell-status">
+              <div class="status-actions">
+                {% if !row.zeroed %}
+                <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"
+                  data-pay="{{ row.pay_key }}"
+                  aria-pressed="{% if row.paid %}true{% else %}false{% endif %}"
+                  hx-post="/profiles/{{ dashboard.profile_id }}/toggle-paid"
+                  hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ dashboard.view_year }}","filter":"{{ dashboard.payment_filter }}","grain":"{{ dashboard.chart.grain }}"}'
+                  hx-swap="none">
+                  {% if row.paid %}Paid{% else %}Mark paid{% endif %}
+                </button>
+                {% endif %}
+                {% if row.is_extra %}
+                <button type="button" class="btn-text danger status-btn-remove"
+                  hx-post="/profiles/{{ dashboard.profile_id }}/extras/{{ row.extra_id }}"
+                  hx-swap="none"
+                  hx-confirm="Remove this extra payment?">Remove</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+</div>

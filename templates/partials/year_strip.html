@@ -1,0 +1,9 @@
+<div class="year-strip" id="yearStrip">
+  {% for s in year_stats %}
+  <div class="{{ s.class }}">
+    <div class="label">{{ s.label }}</div>
+    <div class="value">{{ s.value }}</div>
+    <div class="sub">{{ s.sub }}</div>
+  </div>
+  {% endfor %}
+</div>

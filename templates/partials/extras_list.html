@@ -1,0 +1,18 @@
+{% if extras.is_empty() %}
+<p class="extras-empty" id="extrasEmpty">None yet — add them from the Payments tab.</p>
+<ul class="extras-list" id="extrasList"></ul>
+{% else %}
+<p class="extras-empty" id="extrasEmpty" style="display:none">None yet — add them from the Payments tab.</p>
+<ul class="extras-list" id="extrasList">
+  {% for ex in extras %}
+  <li>
+    <span><strong>${{ ex.amount }}</strong> <span class="muted">on {{ ex.date }}</span></span>
+    <button type="button" class="btn-text danger"
+      hx-post="/profiles/{{ profile_id }}/extras/{{ ex.id }}"
+      hx-target="#main-panel"
+      hx-swap="innerHTML"
+      hx-confirm="Remove this extra payment?">Remove</button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
