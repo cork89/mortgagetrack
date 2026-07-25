@@ -100,13 +100,17 @@ pub struct YearStripTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "partials/summary.html")]
+pub struct SummaryTemplate {
+    pub year_stats: Vec<YearStat>,
+}
+
+#[derive(Template)]
 #[template(path = "partials/calendar.html")]
 pub struct CalendarTemplate {
     pub profile_id: String,
     pub view_year: i32,
     pub months: Vec<MonthCell>,
-    /// When set, emitted as an HTMX out-of-band swap for `#yearStrip`.
-    pub year_stats: Option<Vec<YearStat>>,
     pub payment_filter: String,
     pub grain: String,
 }
@@ -121,8 +125,6 @@ pub struct PaymentsTemplate {
     pub extra_date_default: String,
     pub view_year: i32,
     pub grain: String,
-    /// When set, emitted as an HTMX out-of-band swap for `#yearStrip`.
-    pub year_stats: Option<Vec<YearStat>>,
 }
 
 #[derive(Template)]

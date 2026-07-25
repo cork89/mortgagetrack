@@ -18,13 +18,14 @@ use crate::models::{
 };
 use crate::templates::{
     panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial, HtmlTemplate,
-    IndexTemplate, ItemListTemplate, PaymentsTemplate,
+    IndexTemplate, ItemListTemplate, PaymentsTemplate, SummaryTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(index))
         .route("/partials/dashboard", get(dashboard_partial))
+        .route("/partials/summary", get(summary_partial))
         .route("/partials/calendar", get(calendar_partial))
         .route("/partials/payments", get(payments_partial))
         .route("/partials/chart", get(chart_partial))
@@ -120,6 +121,20 @@ async fn item_list_partial(
     Ok(HtmlTemplate(ItemListTemplate { dashboard }))
 }
 
+async fn summary_partial(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Query(q): Query<IndexQuery>,
+) -> AppResult<impl IntoResponse> {
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(HtmlTemplate(SummaryTemplate {
+        year_stats: d.year_stats,
+    }))
+}
+
 async fn calendar_partial(
     user: AuthUser,
     State(state): State<AppState>,
@@ -129,7 +144,7 @@ async fn calendar_partial(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(calendar_from_dashboard(d, false)))
+    Ok(HtmlTemplate(calendar_from_dashboard(d)))
 }
 
 async fn payments_partial(
@@ -141,7 +156,7 @@ async fn payments_partial(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(payments_from_dashboard(d, false)))
+    Ok(HtmlTemplate(payments_from_dashboard(d)))
 }
 
 async fn chart_partial(
@@ -347,7 +362,7 @@ async fn mark_due_handler(
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
     Ok(panel_update(
-        payments_from_dashboard(d, true),
+        payments_from_dashboard(d),
         "payments",
         false,
     ))
@@ -374,13 +389,13 @@ async fn toggle_paid_handler(
 
     if tab == "payments" {
         Ok(panel_update(
-            payments_from_dashboard(d, true),
+            payments_from_dashboard(d),
             "payments",
             false,
         ))
     } else {
         Ok(panel_update(
-            calendar_from_dashboard(d, true),
+            calendar_from_dashboard(d),
             "calendar",
             false,
         ))
@@ -406,7 +421,7 @@ async fn add_extra_handler(
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
     Ok(panel_update(
-        payments_from_dashboard(d, true),
+        payments_from_dashboard(d),
         "payments",
         true,
     ))
@@ -433,7 +448,7 @@ async fn delete_extra_handler(
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
     Ok(panel_update(
-        payments_from_dashboard(d, true),
+        payments_from_dashboard(d),
         "payments",
         true,
     ))
@@ -523,24 +538,17 @@ fn validate_loan(principal: f64, rate: f64, term: i32) -> AppResult<()> {
     Ok(())
 }
 
-fn calendar_from_dashboard(
-    d: crate::models::DashboardView,
-    include_year_strip: bool,
-) -> CalendarTemplate {
+fn calendar_from_dashboard(d: crate::models::DashboardView) -> CalendarTemplate {
     CalendarTemplate {
         profile_id: d.profile_id,
         view_year: d.view_year,
         months: d.months,
-        year_stats: include_year_strip.then_some(d.year_stats),
         payment_filter: d.payment_filter,
         grain: d.chart.grain,
     }
 }
 
-fn payments_from_dashboard(
-    d: crate::models::DashboardView,
-    include_year_strip: bool,
-) -> PaymentsTemplate {
+fn payments_from_dashboard(d: crate::models::DashboardView) -> PaymentsTemplate {
     PaymentsTemplate {
         profile_id: d.profile_id,
         payment_rows: d.payment_rows,
@@ -549,6 +557,5 @@ fn payments_from_dashboard(
         extra_date_default: d.extra_date_default,
         view_year: d.view_year,
         grain: d.chart.grain,
-        year_stats: include_year_strip.then_some(d.year_stats),
     }
 }

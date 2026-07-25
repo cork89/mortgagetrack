@@ -12,17 +12,11 @@
   data-term="{{ d.loan_term }}"
   data-start="{{ d.loan_start }}">
 
-  <div class="year-strip" id="yearStrip">
-    {% for s in d.year_stats %}
-    <div class="{{ s.class }}">
-      <div class="label">{{ s.label }}</div>
-      <div class="value">{{ s.value }}</div>
-      <div class="sub">{{ s.sub }}</div>
-    </div>
-    {% endfor %}
-  </div>
-
   <div class="tabs" role="tablist" aria-label="Views">
+    <button type="button" class="tab{% if d.active_tab == "summary" %} active{% endif %}" data-tab="summary" role="tab"
+      id="tab-summary" aria-controls="panel-summary"
+      aria-selected="{% if d.active_tab == "summary" %}true{% else %}false{% endif %}"
+      tabindex="{% if d.active_tab == "summary" %}0{% else %}-1{% endif %}">Summary</button>
     <button type="button" class="tab{% if d.active_tab == "calendar" %} active{% endif %}" data-tab="calendar" role="tab"
       id="tab-calendar" aria-controls="panel-calendar"
       aria-selected="{% if d.active_tab == "calendar" %}true{% else %}false{% endif %}"
@@ -35,6 +29,23 @@
       id="tab-chart" aria-controls="panel-chart"
       aria-selected="{% if d.active_tab == "chart" %}true{% else %}false{% endif %}"
       tabindex="{% if d.active_tab == "chart" %}0{% else %}-1{% endif %}">Breakdown</button>
+  </div>
+
+  <div class="panel{% if d.active_tab == "summary" %} active{% endif %}" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary">
+    <div class="panel-surface">
+      <div class="panel-head">
+        <h2>Summary</h2>
+      </div>
+      <div class="year-strip" id="yearStrip">
+        {% for s in d.year_stats %}
+        <div class="{{ s.class }}">
+          <div class="label">{{ s.label }}</div>
+          <div class="value">{{ s.value }}</div>
+          <div class="sub">{{ s.sub }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 
   <div class="panel{% if d.active_tab == "calendar" %} active{% endif %}" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar">
@@ -122,21 +133,24 @@
           </button>
         </div>
       </div>
-      <form class="extra-form" id="extraForm"
-        hx-post="/profiles/{{ d.profile_id }}/extras"
-        hx-target="#panel-payments"
-        hx-swap="innerHTML show:none">
-        <input type="hidden" name="filter" value="{{ d.payment_filter }}" />
-        <label>
-          Extra payment date
-          <input id="extraDate" name="date" type="date" value="{{ d.extra_date_default }}" required />
-        </label>
-        <label class="amount">
-          Amount
-          <input id="extraAmount" name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
-        </label>
-        <button type="submit" class="btn-primary">Add extra payment</button>
-      </form>
+      <details class="extra-disclosure">
+        <summary>Add extra payment</summary>
+        <form class="extra-form" id="extraForm"
+          hx-post="/profiles/{{ d.profile_id }}/extras"
+          hx-target="#panel-payments"
+          hx-swap="innerHTML show:none">
+          <input type="hidden" name="filter" value="{{ d.payment_filter }}" />
+          <label>
+            Extra payment date
+            <input id="extraDate" name="date" type="date" value="{{ d.extra_date_default }}" required />
+          </label>
+          <label class="amount">
+            Amount
+            <input id="extraAmount" name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+          </label>
+          <button type="submit" class="btn-primary">Add payment</button>
+        </form>
+      </details>
       <div class="table-wrap" id="paymentsTableWrap">
         <table>
           <colgroup>

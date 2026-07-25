@@ -1,6 +1,6 @@
 // Client helpers: popover, tabs, chart tooltip, profile menu, panel cache
 (() => {
-  const TAB_IDS = ["calendar", "payments", "chart"];
+  const TAB_IDS = ["summary", "calendar", "payments", "chart"];
 
   function money(n) {
     return Number(n).toLocaleString(undefined, {
@@ -45,6 +45,7 @@
     const filter = dash?.dataset.filter || "all";
     const grain = dash?.dataset.grain || "monthly";
     const urls = {
+      summary: `/partials/summary?tab=summary&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       calendar: `/partials/calendar?year=${encodeURIComponent(year)}&tab=calendar&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       payments: `/partials/payments?tab=payments&filter=${encodeURIComponent(filter)}&year=${encodeURIComponent(year)}&grain=${encodeURIComponent(grain)}`,
       chart: `/partials/chart?tab=chart&grain=${encodeURIComponent(grain)}&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}`,
@@ -97,8 +98,8 @@
     if (syncUrl) {
       const url = new URL(location.href);
       url.searchParams.set("tab", id);
-      url.hash = id;
-      const next = `${url.pathname}${url.search}${url.hash}`;
+      url.hash = "";
+      const next = `${url.pathname}${url.search}`;
       if (`${location.pathname}${location.search}${location.hash}` !== next) {
         history.replaceState(null, "", next);
       }
@@ -312,11 +313,12 @@
       }
     });
     wireChartTooltip();
-    const hashTab = location.hash.replace(/^#/, "");
     const queryTab = new URLSearchParams(location.search).get("tab");
+    // One-time migrate old #tab bookmarks to ?tab=.
+    const legacyHashTab = location.hash.replace(/^#/, "");
     const dash = dashboard();
-    // Prefer URL (hash, then ?tab=) over the server-rendered default so refresh keeps the active tab.
-    const initialTab = normalizeTab(hashTab || queryTab || dash?.dataset.tab || "calendar");
+    // Prefer ?tab= over the server-rendered default so refresh keeps the active tab.
+    const initialTab = normalizeTab(queryTab || legacyHashTab || dash?.dataset.tab || "calendar");
     TAB_IDS.forEach((id) => {
       const panel = panelEl(id);
       if (panel) panel.dataset.stale = "false";
@@ -336,6 +338,10 @@
       e.detail.target.dataset.stale = "false";
       wireChartTooltip();
       syncDashboardMetaFromDom();
+      return;
+    }
+    if (targetId === "panel-summary") {
+      e.detail.target.dataset.stale = "false";
       return;
     }
     if (targetId === "panel-payments") {

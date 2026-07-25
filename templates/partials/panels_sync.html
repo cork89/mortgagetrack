@@ -1,12 +1,19 @@
-{# Sync year strip + both panels after paid/extra mutations (HTMX OOB only). #}
-<div class="year-strip" id="yearStrip" hx-swap-oob="true">
-  {% for s in dashboard.year_stats %}
-  <div class="{{ s.class }}">
-    <div class="label">{{ s.label }}</div>
-    <div class="value">{{ s.value }}</div>
-    <div class="sub">{{ s.sub }}</div>
+{# Sync summary + both panels after paid/extra mutations (HTMX OOB only). #}
+<div id="panel-summary" hx-swap-oob="innerHTML">
+  <div class="panel-surface">
+    <div class="panel-head">
+      <h2>Summary</h2>
+    </div>
+    <div class="year-strip" id="yearStrip">
+      {% for s in dashboard.year_stats %}
+      <div class="{{ s.class }}">
+        <div class="label">{{ s.label }}</div>
+        <div class="value">{{ s.value }}</div>
+        <div class="sub">{{ s.sub }}</div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  {% endfor %}
 </div>
 
 <div id="panel-calendar" hx-swap-oob="innerHTML">
@@ -92,20 +99,23 @@
         </button>
       </div>
     </div>
-    <form class="extra-form"
-      hx-post="/profiles/{{ dashboard.profile_id }}/extras"
-      hx-swap="none">
-      <input type="hidden" name="filter" value="{{ dashboard.payment_filter }}" />
-      <label>
-        Extra payment date
-        <input name="date" type="date" value="{{ dashboard.extra_date_default }}" required />
-      </label>
-      <label class="amount">
-        Amount
-        <input name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
-      </label>
-      <button type="submit" class="btn-primary">Add extra payment</button>
-    </form>
+    <details class="extra-disclosure">
+      <summary>Add extra payment</summary>
+      <form class="extra-form"
+        hx-post="/profiles/{{ dashboard.profile_id }}/extras"
+        hx-swap="none">
+        <input type="hidden" name="filter" value="{{ dashboard.payment_filter }}" />
+        <label>
+          Extra payment date
+          <input name="date" type="date" value="{{ dashboard.extra_date_default }}" required />
+        </label>
+        <label class="amount">
+          Amount
+          <input name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+        </label>
+        <button type="submit" class="btn-primary">Add payment</button>
+      </form>
+    </details>
     <div class="table-wrap">
       <table>
         <colgroup>

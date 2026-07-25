@@ -7,6 +7,7 @@ use super::db::{ExtraPayment, Loan, Profile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
+    Summary,
     Calendar,
     Payments,
     Chart,
@@ -15,6 +16,7 @@ pub enum TabId {
 impl TabId {
     pub fn as_str(self) -> &'static str {
         match self {
+            TabId::Summary => "summary",
             TabId::Calendar => "calendar",
             TabId::Payments => "payments",
             TabId::Chart => "chart",
@@ -23,6 +25,7 @@ impl TabId {
 
     pub fn parse(s: &str) -> Self {
         match s {
+            "summary" => TabId::Summary,
             "payments" => TabId::Payments,
             "chart" => TabId::Chart,
             _ => TabId::Calendar,
