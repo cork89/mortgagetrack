@@ -1680,7 +1680,8 @@
       const y = today().getFullYear();
       const yearRows = schedule.filter((r) => r.due.getFullYear() === y);
       const paidRows = yearRows.filter((r) => paidSet.has(r.payKey));
-      const scheduledPrincipal = yearRows.reduce((s, r) => s + r.principal, 0);
+      const scheduledOnly = yearRows.filter((r) => r.kind === "scheduled");
+      const scheduledPrincipal = scheduledOnly.reduce((s, r) => s + r.principal, 0);
       const scheduledInterest = yearRows.reduce((s, r) => s + r.interest, 0);
       const paidPrincipal = paidRows.reduce((s, r) => s + r.principal, 0);
       const paidInterest = paidRows.reduce((s, r) => s + r.interest, 0);
