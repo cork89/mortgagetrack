@@ -76,14 +76,9 @@
       to { transform: scaleX(1); }
     }
 
-    @keyframes pulse-soft {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(47, 111, 106, 0.25); }
-      50% { box-shadow: 0 0 0 8px rgba(47, 111, 106, 0); }
-    }
-
     .brand-block {
       animation: rise 0.7s ease both;
-      margin-bottom: 2.25rem;
+      margin-bottom: 1.75rem;
     }
 
     .brand {
@@ -113,6 +108,27 @@
       font-size: 1.05rem;
       font-weight: 300;
       color: var(--ink-soft);
+    }
+
+    :focus { outline: none; }
+
+    :focus-visible {
+      outline: 2px solid var(--sea);
+      outline-offset: 2px;
+    }
+
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--sea);
+      outline-offset: 1px;
+      border-color: var(--sea);
+      background: #fff;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--sea);
+      outline-offset: 2px;
     }
 
     .inputs {
@@ -160,7 +176,6 @@
 
     input:focus,
     select:focus {
-      outline: none;
       border-color: var(--sea);
       background: #fff;
     }
@@ -216,8 +231,8 @@
 
     .year-strip {
       display: grid;
-      grid-template-columns: 1.4fr repeat(3, 1fr);
-      gap: 1rem;
+      grid-template-columns: 1.5fr 1.3fr repeat(2, 1fr);
+      gap: 0.85rem;
       margin-bottom: 1.75rem;
     }
 
@@ -230,18 +245,31 @@
     }
 
     .stat {
-      padding: 1.15rem 1.25rem;
+      padding: 1rem 1.1rem;
       border-radius: var(--radius);
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.55);
-      backdrop-filter: blur(10px);
+      border: none;
+      background: transparent;
+    }
+
+    .stat.quiet .value {
+      font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+      font-weight: 500;
+      color: var(--ink-soft);
     }
 
     .stat.highlight {
       background: linear-gradient(145deg, var(--sea-deep), var(--sea));
       color: #fff;
-      border-color: transparent;
-      animation: pulse-soft 3.5s ease-in-out infinite;
+      border: none;
+      box-shadow: var(--shadow);
+      padding: 1.25rem 1.35rem;
+    }
+
+    .stat.next-up {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 24px rgba(30, 74, 71, 0.06);
     }
 
     .stat .label {
@@ -304,11 +332,18 @@
 
     .panel-surface {
       border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.62);
+      background: rgba(255, 255, 255, 0.78);
       backdrop-filter: blur(12px);
       border-radius: var(--radius);
-      box-shadow: var(--shadow);
+      box-shadow: 0 10px 28px rgba(30, 74, 71, 0.06);
       overflow: hidden;
+    }
+
+    .cal-hint {
+      padding: 0 1.25rem 0.85rem;
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--ink-soft);
     }
 
     .panel-head {
@@ -375,12 +410,12 @@
     }
 
     .month-cell {
-      min-height: 7.5rem;
+      min-height: 5.75rem;
       background: #fff;
-      padding: 0.9rem 0.85rem;
+      padding: 0.85rem 0.8rem;
       display: flex;
       flex-direction: column;
-      gap: 0.45rem;
+      gap: 0.4rem;
     }
 
     .month-cell.empty {
@@ -403,16 +438,19 @@
 
     .pay-chip {
       margin-top: auto;
-      padding: 0.5rem 0.55rem;
+      padding: 0.45rem 0.55rem;
       border-radius: 8px;
-      font-size: 0.78rem;
-      line-height: 1.3;
+      font-size: 0.72rem;
+      line-height: 1.25;
       cursor: pointer;
       border: 1px solid transparent;
       text-align: left;
-      transition: transform 0.15s, background 0.2s;
+      transition: transform 0.15s, background 0.2s, box-shadow 0.15s;
       width: 100%;
       font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
     }
 
     .pay-chip:hover { transform: translateY(-1px); }
@@ -424,9 +462,9 @@
     }
 
     .pay-chip.due {
-      background: rgba(184, 134, 11, 0.14);
-      color: #8a6508;
-      border-color: rgba(184, 134, 11, 0.25);
+      background: rgba(184, 134, 11, 0.16);
+      color: #7a5806;
+      border-color: rgba(184, 134, 11, 0.3);
     }
 
     .pay-chip.missed {
@@ -436,8 +474,8 @@
     }
 
     .pay-chip.future {
-      background: rgba(138, 154, 158, 0.12);
-      color: var(--future);
+      background: rgba(138, 154, 158, 0.14);
+      color: #5f6e72;
     }
 
     .pay-chip.extra {
@@ -452,7 +490,23 @@
       border-color: rgba(47, 111, 106, 0.2);
     }
 
-    .pay-chip strong { display: block; font-weight: 600; font-size: 0.95rem; }
+    .pay-chip strong {
+      display: block;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: inherit;
+    }
+
+    .pay-chip .chip-status {
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      text-transform: capitalize;
+    }
+
+    .pay-chip .chip-hint {
+      opacity: 0.7;
+      font-size: 0.68rem;
+    }
 
     .month-chips {
       margin-top: auto;
@@ -812,7 +866,7 @@
 
     @media (max-width: 640px) {
       .summary-bar { grid-template-columns: 1fr; }
-      .month-cell { min-height: 6.5rem; }
+      .month-cell { min-height: 5.25rem; }
     }
 
     .summary-bar div {
@@ -842,30 +896,27 @@
 
     .profile-bar {
       animation: rise 0.7s 0.05s ease both;
-      display: grid;
-      gap: 0.45rem;
-      margin-bottom: 1.75rem;
-      padding-bottom: 1.25rem;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .profile-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0.65rem 0.85rem;
+      gap: 0.55rem 0.75rem;
+      margin-bottom: 1.5rem;
+      padding: 0;
+      border: none;
     }
+
+    .profile-bar.hidden { display: none; }
 
     .profile-select-wrap {
       display: flex;
       align-items: center;
-      gap: 0.55rem;
-      min-width: min(16rem, 100%);
-      flex: 1 1 12rem;
+      gap: 0.5rem;
+      min-width: min(14rem, 100%);
+      flex: 0 1 14rem;
     }
 
     .profile-select-wrap > span {
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 500;
       letter-spacing: 0.04em;
       text-transform: uppercase;
@@ -876,23 +927,115 @@
     .profile-select-wrap select {
       flex: 1;
       min-width: 0;
-      padding: 0.65rem 0.85rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.95rem;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%233d4f55' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
-      background-position: right 0.85rem center;
-      padding-right: 2.2rem;
+      background-position: right 0.75rem center;
+      padding-right: 2rem;
+      background-color: transparent;
+      border-color: transparent;
+    }
+
+    .profile-select-wrap select:hover,
+    .profile-select-wrap select:focus {
+      background-color: rgba(255, 255, 255, 0.65);
+      border-color: var(--line);
     }
 
     .profile-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 0.35rem 0.15rem;
+      gap: 0.35rem;
+      margin-left: auto;
     }
 
     .profile-actions .btn-primary {
-      padding: 0.65rem 1.05rem;
-      margin-right: 0.35rem;
+      padding: 0.5rem 0.95rem;
+      font-size: 0.9rem;
+    }
+
+    .profile-meta {
+      flex: 1 1 100%;
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--ink-soft);
+    }
+
+    .menu {
+      position: relative;
+    }
+
+    .menu-toggle {
+      width: 2.25rem;
+      height: 2.25rem;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      color: var(--ink-soft);
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+
+    .menu-toggle:hover {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.55);
+      border-color: var(--line);
+    }
+
+    .menu-panel {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 0.35rem);
+      min-width: 11rem;
+      padding: 0.35rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfdfc;
+      box-shadow: 0 14px 32px rgba(30, 74, 71, 0.12);
+      z-index: 5;
+    }
+
+    .menu.open .menu-panel { display: grid; gap: 0.1rem; }
+
+    .menu-panel button {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: var(--ink);
+      border: none;
+      border-radius: 7px;
+      padding: 0.55rem 0.7rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .menu-panel button:hover {
+      background: rgba(168, 212, 207, 0.22);
+      color: var(--sea-deep);
+    }
+
+    .menu-panel button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .menu-panel .menu-danger {
+      color: var(--coral);
+      margin-top: 0.2rem;
+      border-top: 1px solid var(--line);
+      border-radius: 0 0 7px 7px;
+      padding-top: 0.65rem;
+    }
+
+    .menu-panel .menu-danger:hover {
+      background: rgba(196, 92, 72, 0.08);
+      color: var(--coral);
     }
 
     .btn-text {
@@ -918,17 +1061,26 @@
       color: var(--coral);
     }
 
-    .profile-sep {
-      width: 1px;
-      height: 0.9rem;
-      background: var(--line);
-      margin: 0 0.15rem;
+    .filter-label {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
-    .profile-meta {
-      margin: 0;
-      font-size: 0.88rem;
-      color: var(--ink-soft);
+    .filter-label > span {
+      font-size: 0.85rem;
+    }
+
+    .btn-compact {
+      padding: 0.5rem 0.85rem;
+      font-size: 0.85rem;
+    }
+
+    .status-btn-remove {
+      padding: 0.2rem 0.4rem;
+      font-size: 0.8rem;
     }
 
     .empty-dash {
@@ -1027,7 +1179,8 @@
     }
 
     .popover-card .name-field.hidden,
-    .popover-card .reset-wrap.hidden {
+    .popover-card .reset-wrap.hidden,
+    .popover-card .inputs.hidden {
       display: none;
     }
 
@@ -1051,25 +1204,28 @@
 <body>
   <div class="wrap">
     <header class="brand-block">
-      <h1 class="brand">Mortgage Tracking</h1>
+      <h1 class="brand">Homestead</h1>
       <span class="brand-rule" aria-hidden="true"></span>
+      <p class="tagline">Your mortgage ledger — payments, progress, and payoff in one place.</p>
     </header>
 
-    <section class="profile-bar" aria-label="Profiles">
-      <div class="profile-row">
-        <div class="profile-select-wrap">
-          <span>Profile</span>
-          <select id="profileSelect" aria-label="Active profile"></select>
-        </div>
-        <div class="profile-actions">
-          <button type="button" class="btn-primary" id="editProfileBtn">Edit</button>
-          <button type="button" class="btn-text" id="newProfileBtn">New</button>
-          <span class="profile-sep" aria-hidden="true"></span>
-          <button type="button" class="btn-text" id="renameProfileBtn">Rename</button>
-          <button type="button" class="btn-text danger" id="deleteProfileBtn">Delete</button>
+    <section class="profile-bar hidden" id="profileBar" aria-label="Profiles">
+      <div class="profile-select-wrap">
+        <span>Profile</span>
+        <select id="profileSelect" aria-label="Active profile"></select>
+      </div>
+      <div class="profile-actions">
+        <button type="button" class="btn-primary" id="editProfileBtn">Edit</button>
+        <div class="menu" id="profileMenu">
+          <button type="button" class="menu-toggle" id="profileMenuBtn" aria-label="More profile actions" aria-haspopup="menu" aria-expanded="false">···</button>
+          <div class="menu-panel" role="menu" id="profileMenuPanel">
+            <button type="button" role="menuitem" id="newProfileBtn">New profile</button>
+            <button type="button" role="menuitem" id="renameProfileBtn">Rename…</button>
+            <button type="button" role="menuitem" class="menu-danger" id="deleteProfileBtn">Delete profile</button>
+          </div>
         </div>
       </div>
-      <p class="profile-meta" id="profileMeta">Create a profile to start tracking a mortgage.</p>
+      <p class="profile-meta" id="profileMeta"></p>
     </section>
 
     <div class="empty-dash" id="emptyDash">
@@ -1081,13 +1237,13 @@
     <section class="dashboard" id="dashboard" aria-live="polite">
       <div class="year-strip" id="yearStrip"></div>
 
-      <div class="tabs" role="tablist">
-        <button type="button" class="tab active" data-tab="calendar" role="tab" aria-selected="true">Calendar</button>
-        <button type="button" class="tab" data-tab="payments" role="tab" aria-selected="false">Payments</button>
-        <button type="button" class="tab" data-tab="chart" role="tab" aria-selected="false">Breakdown</button>
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button type="button" class="tab active" data-tab="calendar" role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="true" tabindex="0">Calendar</button>
+        <button type="button" class="tab" data-tab="payments" role="tab" id="tab-payments" aria-controls="panel-payments" aria-selected="false" tabindex="-1">Payments</button>
+        <button type="button" class="tab" data-tab="chart" role="tab" id="tab-chart" aria-controls="panel-chart" aria-selected="false" tabindex="-1">Breakdown</button>
       </div>
 
-      <div class="panel active" id="panel-calendar" role="tabpanel">
+      <div class="panel active" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar">
         <div class="panel-surface">
           <div class="panel-head">
             <h2>Payment calendar</h2>
@@ -1097,6 +1253,7 @@
               <button type="button" id="nextYear" aria-label="Next year">›</button>
             </div>
           </div>
+          <p class="cal-hint">Tap a payment to mark it paid or unpaid.</p>
           <div class="calendar-grid" id="calendarGrid"></div>
           <div class="legend">
             <span class="l-paid">Paid</span>
@@ -1108,7 +1265,7 @@
         </div>
       </div>
 
-      <div class="panel" id="panel-payments" role="tabpanel">
+      <div class="panel" id="panel-payments" role="tabpanel" aria-labelledby="tab-payments">
         <div class="panel-surface">
           <div class="panel-head">
             <div>
@@ -1116,8 +1273,8 @@
               <span class="hint" id="paymentHint"></span>
             </div>
             <div class="track-filters">
-              <label style="flex-direction: row; align-items: center; gap: 0.5rem; text-transform: none; letter-spacing: 0;">
-                <span style="font-size: 0.85rem;">Filter</span>
+              <label class="filter-label">
+                <span>Filter</span>
                 <select id="trackFilter">
                   <option value="all">All</option>
                   <option value="unpaid">Unpaid</option>
@@ -1126,7 +1283,7 @@
                   <option value="extra">Extra only</option>
                 </select>
               </label>
-              <button type="button" class="btn-ghost" id="markThroughBtn" style="padding: 0.5rem 0.85rem; font-size: 0.85rem;">
+              <button type="button" class="btn-ghost btn-compact" id="markThroughBtn">
                 Mark all due as paid
               </button>
             </div>
@@ -1171,7 +1328,7 @@
         </div>
       </div>
 
-      <div class="panel" id="panel-chart" role="tabpanel">
+      <div class="panel" id="panel-chart" role="tabpanel" aria-labelledby="tab-chart">
         <div class="panel-surface">
           <div class="panel-head">
             <div>
@@ -1201,7 +1358,7 @@
           Profile name
           <input id="profileName" type="text" maxlength="60" placeholder="e.g. Primary home" autocomplete="off" />
         </label>
-        <div class="inputs">
+        <div class="inputs" id="loanFields">
           <label>
             Loan amount
             <input id="principal" type="number" min="1" step="1000" value="400000" />
@@ -1262,10 +1419,14 @@
       markThroughBtn: document.getElementById("markThroughBtn"),
       prevYear: document.getElementById("prevYear"),
       nextYear: document.getElementById("nextYear"),
+      profileBar: document.getElementById("profileBar"),
       profileSelect: document.getElementById("profileSelect"),
       profileMeta: document.getElementById("profileMeta"),
       profileName: document.getElementById("profileName"),
       nameFieldWrap: document.getElementById("nameFieldWrap"),
+      loanFields: document.getElementById("loanFields"),
+      profileMenu: document.getElementById("profileMenu"),
+      profileMenuBtn: document.getElementById("profileMenuBtn"),
       loanPopover: document.getElementById("loanPopover"),
       popoverTitle: document.getElementById("popoverTitle"),
       closePopoverBtn: document.getElementById("closePopoverBtn"),
@@ -1291,7 +1452,14 @@
     let paidSet = new Set();
     let extras = [];
     let viewYear;
-    let popoverMode = "create"; // "create" | "edit"
+    let popoverMode = "create"; // "create" | "edit" | "rename"
+
+    const STATUS_LABEL = {
+      paid: "Paid",
+      due: "Due this month",
+      missed: "Past due",
+      future: "Upcoming",
+    };
 
     const money = (n) =>
       n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -1385,19 +1553,27 @@
       els.startDate.value = loan.startDate;
     }
 
+    function closeProfileMenu() {
+      els.profileMenu.classList.remove("open");
+      els.profileMenuBtn.setAttribute("aria-expanded", "false");
+    }
+
     function syncProfileSelect() {
       const profiles = [...store.profiles].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
       );
       const hasProfiles = profiles.length > 0;
       const profile = activeProfile();
+      els.profileBar.classList.toggle("hidden", !hasProfiles);
       els.renameProfileBtn.disabled = !hasProfiles;
       els.deleteProfileBtn.disabled = !hasProfiles;
       els.editProfileBtn.disabled = !hasProfiles;
+      els.profileMenuBtn.disabled = !hasProfiles;
 
       if (!hasProfiles) {
         els.profileSelect.innerHTML = `<option value="">No profiles yet</option>`;
         els.profileSelect.disabled = true;
+        closeProfileMenu();
         return;
       }
       els.profileSelect.disabled = false;
@@ -1411,9 +1587,25 @@
     }
 
     function updateEmptyState() {
-      const hasLoan = Boolean(activeProfile()?.loan && schedule.length);
+      const profile = activeProfile();
+      const hasLoan = Boolean(profile?.loan && schedule.length);
       els.dashboard.classList.toggle("visible", hasLoan);
       els.emptyDash.classList.toggle("visible", !hasLoan);
+      if (!hasLoan) {
+        const title = els.emptyDash.querySelector("h2");
+        const copy = els.emptyDash.querySelector("p");
+        if (profile) {
+          title.textContent = "Add loan details";
+          copy.textContent = "Edit this profile with your loan amount, rate, and first payment date.";
+          els.emptyNewBtn.textContent = "Edit profile";
+          els.emptyNewBtn.dataset.emptyAction = "edit";
+        } else {
+          title.textContent = "No mortgage yet";
+          copy.textContent = "Create a profile with your loan details to see the schedule and calendar.";
+          els.emptyNewBtn.textContent = "New profile";
+          els.emptyNewBtn.dataset.emptyAction = "create";
+        }
+      }
     }
 
     function escapeHtml(str) {
@@ -1431,21 +1623,10 @@
       );
     }
 
-    function promptProfileName(title, suggested) {
-      const name = window.prompt(title, suggested);
-      if (name === null) return null;
-      const trimmed = name.trim();
-      if (!trimmed) {
-        els.error.textContent = "Profile name cannot be empty.";
-        return null;
-      }
-      return trimmed;
-    }
-
     function updateProfileMeta() {
       const profile = activeProfile();
       if (!profile) {
-        els.profileMeta.textContent = "Create a profile to start tracking a mortgage.";
+        els.profileMeta.textContent = "";
         return;
       }
       const paidCount = (profile.paid || []).length;
@@ -1483,10 +1664,12 @@
     }
 
     function openCreatePopover() {
+      closeProfileMenu();
       popoverMode = "create";
       els.popoverTitle.textContent = "New profile";
       els.buildBtn.textContent = "Create profile";
       els.nameFieldWrap.classList.remove("hidden");
+      els.loanFields.classList.remove("hidden");
       els.resetWrap.classList.add("hidden");
       els.extrasEditor.classList.add("hidden");
       resetLoanFormDefaults();
@@ -1499,18 +1682,39 @@
     function openEditPopover() {
       const profile = activeProfile();
       if (!profile) return;
+      closeProfileMenu();
       popoverMode = "edit";
       els.popoverTitle.textContent = `Edit ${profile.name}`;
       els.buildBtn.textContent = "Save changes";
-      els.nameFieldWrap.classList.add("hidden");
+      els.nameFieldWrap.classList.remove("hidden");
+      els.loanFields.classList.remove("hidden");
       els.resetWrap.classList.remove("hidden");
       els.extrasEditor.classList.remove("hidden");
       els.error.textContent = "";
+      els.profileName.value = profile.name;
       if (profile.loan) fillFormFromLoan(profile.loan);
       else resetLoanFormDefaults();
       renderExtrasEditor();
       els.loanPopover.showPopover();
       els.principal.focus();
+    }
+
+    function openRenamePopover() {
+      const profile = activeProfile();
+      if (!profile) return;
+      closeProfileMenu();
+      popoverMode = "rename";
+      els.popoverTitle.textContent = "Rename profile";
+      els.buildBtn.textContent = "Save name";
+      els.nameFieldWrap.classList.remove("hidden");
+      els.loanFields.classList.add("hidden");
+      els.resetWrap.classList.add("hidden");
+      els.extrasEditor.classList.add("hidden");
+      els.error.textContent = "";
+      els.profileName.value = profile.name;
+      els.loanPopover.showPopover();
+      els.profileName.focus();
+      els.profileName.select();
     }
 
     function closeLoanPopover() {
@@ -1520,13 +1724,37 @@
     }
 
     function saveFromPopover() {
+      let profile = activeProfile();
+
+      if (popoverMode === "rename") {
+        if (!profile) {
+          els.error.textContent = "No profile selected.";
+          return false;
+        }
+        const trimmed = els.profileName.value.trim();
+        if (!trimmed) {
+          els.error.textContent = "Enter a profile name.";
+          return false;
+        }
+        if (nameTaken(trimmed, profile.id)) {
+          els.error.textContent = "A profile with that name already exists.";
+          return false;
+        }
+        profile.name = trimmed;
+        els.error.textContent = "";
+        persistStore();
+        syncProfileSelect();
+        updateProfileMeta();
+        closeLoanPopover();
+        return true;
+      }
+
       const formLoan = readLoanFromForm();
       if (!(formLoan.principal > 0) || !(formLoan.term > 0) || formLoan.rate < 0 || !formLoan.startDate) {
         els.error.textContent = "Enter a valid loan amount, rate (≥ 0), term, and first payment date.";
         return false;
       }
 
-      let profile = activeProfile();
       let paid = [...paidSet];
       let nextExtras = [...extras];
 
@@ -1550,6 +1778,17 @@
       } else if (!profile) {
         els.error.textContent = "No profile selected.";
         return false;
+      } else {
+        const trimmed = els.profileName.value.trim();
+        if (!trimmed) {
+          els.error.textContent = "Enter a profile name.";
+          return false;
+        }
+        if (nameTaken(trimmed, profile.id)) {
+          els.error.textContent = "A profile with that name already exists.";
+          return false;
+        }
+        profile.name = trimmed;
       }
 
       els.error.textContent = "";
@@ -1580,23 +1819,8 @@
       return true;
     }
 
-    function renameActiveProfile() {
-      const profile = activeProfile();
-      if (!profile) return;
-      const trimmed = promptProfileName("Rename profile:", profile.name);
-      if (!trimmed) return;
-      if (nameTaken(trimmed, profile.id)) {
-        els.error.textContent = "A profile with that name already exists.";
-        return;
-      }
-      profile.name = trimmed;
-      els.error.textContent = "";
-      persistStore();
-      syncProfileSelect();
-      updateProfileMeta();
-    }
-
     function deleteActiveProfile() {
+      closeProfileMenu();
       const profile = activeProfile();
       if (!profile) return;
       if (!window.confirm(`Delete profile “${profile.name}”? This cannot be undone.`)) return;
@@ -1819,13 +2043,16 @@
     function chipHtml(row) {
       const status = paymentStatus(row);
       const extraClass = row.kind === "extra" ? " extra" : "";
-      const detail =
-        row.kind === "extra"
-          ? `Extra · all principal`
-          : `Principal ${money(row.principal)}<br />Interest ${money(row.interest)}`;
-      return `<button type="button" class="pay-chip ${status}${extraClass}" data-pay="${row.payKey}" title="Click to toggle paid">
+      const statusText =
+        row.kind === "extra" && status !== "paid"
+          ? `Extra · ${STATUS_LABEL[status]}`
+          : row.kind === "extra" && status === "paid"
+            ? "Extra · Paid"
+            : STATUS_LABEL[status];
+      const aria = status === "paid" ? "Mark unpaid" : "Mark paid";
+      return `<button type="button" class="pay-chip ${status}${extraClass}" data-pay="${row.payKey}" aria-pressed="${status === "paid"}" aria-label="${money(row.payment)}, ${statusText}. ${aria}">
         <strong>${money(row.payment)}</strong>
-        ${detail}
+        <span class="chip-status">${statusText}</span>
       </button>`;
     }
 
@@ -1834,25 +2061,25 @@
       const next = schedule.find((r) => !paidSet.has(r.payKey) && r.payment > 0);
       const extraCount = extras.length;
       els.yearStrip.innerHTML = `
-        <div class="stat highlight">
-          <div class="label">${s.year} payments</div>
-          <div class="value">${s.paidCount} / ${s.count}</div>
-          <div class="sub">${s.remaining} remaining this year${extraCount ? ` · ${extraCount} extra` : ""}</div>
+        <div class="stat highlight next-hero">
+          <div class="label">Next unpaid</div>
+          <div class="value">${next ? money(next.payment) : "All caught up"}</div>
+          <div class="sub">${next ? fmtDate(next.due) : "Nothing left to mark"}</div>
         </div>
-        <div class="stat">
+        <div class="stat next-up">
+          <div class="label">${s.year} progress</div>
+          <div class="value">${s.paidCount} / ${s.count}</div>
+          <div class="sub">${s.remaining} remaining${extraCount ? ` · ${extraCount} extra` : ""}</div>
+        </div>
+        <div class="stat quiet">
           <div class="label">${s.year} principal</div>
           <div class="value">${money(s.paidPrincipal)}</div>
           <div class="sub">of ${money(s.scheduledPrincipal)} scheduled</div>
         </div>
-        <div class="stat">
+        <div class="stat quiet">
           <div class="label">${s.year} interest</div>
           <div class="value">${money(s.paidInterest)}</div>
           <div class="sub">of ${money(s.scheduledInterest)} scheduled</div>
-        </div>
-        <div class="stat">
-          <div class="label">Next unpaid</div>
-          <div class="value">${next ? money(next.payment) : "—"}</div>
-          <div class="sub">${next ? fmtDate(next.due) : "All caught up"}</div>
         </div>
       `;
     }
@@ -1909,15 +2136,15 @@
       if (!rows.length) {
         els.paymentsBody.innerHTML = `<tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>`;
       } else {
-        const yearSummaryRow = (year, group) => {
+        const yearHeaderRow = (year, group) => {
           const paymentTotal = group.reduce((s, r) => s + r.payment, 0);
           const principalTotal = group.reduce((s, r) => s + r.principal, 0);
           const interestTotal = group.reduce((s, r) => s + r.interest, 0);
           const count = group.length;
           return `<tr class="year-summary${year === y ? " current-year" : ""}">
             <td class="cell-text" colspan="2">
-              <span class="year-label">${year} total</span>
-              <span class="year-sub">${count} payment${count === 1 ? "" : "s"}</span>
+              <span class="year-label">${year}</span>
+              <span class="year-sub">${count} payment${count === 1 ? "" : "s"} · ${money(paymentTotal)} total</span>
             </td>
             <td>${money(paymentTotal)}</td>
             <td>${money(principalTotal)}</td>
@@ -1927,45 +2154,50 @@
           </tr>`;
         };
 
-        let html = "";
+        const groups = [];
         let yearGroup = [];
         let currentGroupYear = null;
-
         for (const row of rows) {
           const rowYear = row.due.getFullYear();
           if (currentGroupYear !== null && rowYear !== currentGroupYear) {
-            html += yearSummaryRow(currentGroupYear, yearGroup);
+            groups.push({ year: currentGroupYear, rows: yearGroup });
             yearGroup = [];
           }
           currentGroupYear = rowYear;
           yearGroup.push(row);
-
-          const status = paymentStatus(row);
-          const paid = status === "paid";
-          const num =
-            row.kind === "extra"
-              ? `<span class="type-pill">Extra</span>`
-              : row.label;
-          const remove =
-            row.kind === "extra"
-              ? `<button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
-              : "";
-          html += `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${rowYear === y ? " current-year" : ""}">
-            <td class="cell-text">${num}</td>
-            <td class="cell-text">${fmtDate(row.due)}</td>
-            <td>${money(row.payment)}</td>
-            <td>${money(row.principal)}</td>
-            <td>${money(row.interest)}</td>
-            <td>${money(row.balance)}</td>
-            <td class="cell-status"><div class="status-actions">
-              <button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button>
-              ${remove}
-            </div></td>
-          </tr>`;
+        }
+        if (currentGroupYear !== null) {
+          groups.push({ year: currentGroupYear, rows: yearGroup });
         }
 
-        if (currentGroupYear !== null) {
-          html += yearSummaryRow(currentGroupYear, yearGroup);
+        let html = "";
+        for (const group of groups) {
+          html += yearHeaderRow(group.year, group.rows);
+          for (const row of group.rows) {
+            const status = paymentStatus(row);
+            const paid = status === "paid";
+            const num =
+              row.kind === "extra"
+                ? `<span class="type-pill">Extra</span>`
+                : row.label;
+            const remove =
+              row.kind === "extra"
+                ? `<button type="button" class="btn-text danger status-btn-remove" data-remove-extra="${row.id}">Remove</button>`
+                : "";
+            const rowYear = row.due.getFullYear();
+            html += `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${rowYear === y ? " current-year" : ""}">
+              <td class="cell-text">${num}</td>
+              <td class="cell-text">${fmtDate(row.due)}</td>
+              <td>${money(row.payment)}</td>
+              <td>${money(row.principal)}</td>
+              <td>${money(row.interest)}</td>
+              <td>${money(row.balance)}</td>
+              <td class="cell-status"><div class="status-actions">
+                <button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}" aria-pressed="${paid}">${paid ? "Paid" : "Mark paid"}</button>
+                ${remove}
+              </div></td>
+            </tr>`;
+          }
         }
 
         els.paymentsBody.innerHTML = html;
@@ -2123,10 +2355,29 @@
     els.buildBtn.addEventListener("click", saveFromPopover);
     els.editProfileBtn.addEventListener("click", openEditPopover);
     els.newProfileBtn.addEventListener("click", openCreatePopover);
-    els.emptyNewBtn.addEventListener("click", openCreatePopover);
+    els.emptyNewBtn.addEventListener("click", () => {
+      if (els.emptyNewBtn.dataset.emptyAction === "edit") openEditPopover();
+      else openCreatePopover();
+    });
     els.closePopoverBtn.addEventListener("click", closeLoanPopover);
-    els.renameProfileBtn.addEventListener("click", renameActiveProfile);
+    els.renameProfileBtn.addEventListener("click", openRenamePopover);
     els.deleteProfileBtn.addEventListener("click", deleteActiveProfile);
+
+    els.profileMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = !els.profileMenu.classList.contains("open");
+      els.profileMenu.classList.toggle("open", open);
+      els.profileMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!els.profileMenu.contains(e.target)) closeProfileMenu();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeProfileMenu();
+    });
+
     els.profileSelect.addEventListener("change", () => {
       const nextId = els.profileSelect.value;
       if (nextId) loadProfile(nextId);
@@ -2169,16 +2420,38 @@
       renderCalendar();
     });
 
+    function activateTab(tab) {
+      const tabs = [...document.querySelectorAll(".tab")];
+      tabs.forEach((t) => {
+        const selected = t === tab;
+        t.classList.toggle("active", selected);
+        t.setAttribute("aria-selected", selected ? "true" : "false");
+        t.tabIndex = selected ? 0 : -1;
+      });
+      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+      document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+      tab.focus();
+    }
+
     document.querySelectorAll(".tab").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        document.querySelectorAll(".tab").forEach((t) => {
-          t.classList.remove("active");
-          t.setAttribute("aria-selected", "false");
-        });
-        document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-        tab.classList.add("active");
-        tab.setAttribute("aria-selected", "true");
-        document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
+      tab.addEventListener("click", () => activateTab(tab));
+      tab.addEventListener("keydown", (e) => {
+        const tabs = [...document.querySelectorAll(".tab")];
+        const idx = tabs.indexOf(tab);
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          const next =
+            e.key === "ArrowRight"
+              ? tabs[(idx + 1) % tabs.length]
+              : tabs[(idx - 1 + tabs.length) % tabs.length];
+          activateTab(next);
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          activateTab(tabs[0]);
+        } else if (e.key === "End") {
+          e.preventDefault();
+          activateTab(tabs[tabs.length - 1]);
+        }
       });
     });
 
