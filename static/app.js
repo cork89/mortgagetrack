@@ -39,6 +39,13 @@
     }
   }
 
+  function syncProfileBarFromDashboard() {
+    const meta = document.getElementById("profileMeta");
+    if (!meta) return;
+    const dash = dashboard();
+    meta.textContent = dash?.dataset.meta || "";
+  }
+
   function partialUrl(id) {
     const dash = dashboard();
     const year = dash?.dataset.year || String(new Date().getFullYear());
@@ -118,21 +125,93 @@
     return document.getElementById("loanPopover");
   }
 
+  function notePopover() {
+    return document.getElementById("notePopover");
+  }
+
+  function openNotePopover(btn) {
+    const dash = dashboard();
+    const profileId = dash?.dataset.profileId;
+    if (!profileId) return;
+
+    let note = "";
+    try {
+      note = JSON.parse(btn.getAttribute("data-note-json") || '""');
+    } catch {
+      note = "";
+    }
+
+    const form = document.getElementById("noteForm");
+    form.action = `/profiles/${profileId}/notes`;
+    form.setAttribute("hx-post", `/profiles/${profileId}/notes`);
+    form.setAttribute("hx-target", "#panel-payments");
+    form.setAttribute("hx-swap", "innerHTML show:none");
+
+    document.getElementById("notePayKey").value = btn.dataset.payKey || "";
+    document.getElementById("noteFilter").value = dash.dataset.filter || "all";
+    document.getElementById("noteYear").value = dash.dataset.year || String(new Date().getFullYear());
+    document.getElementById("noteGrain").value = dash.dataset.grain || "monthly";
+    document.getElementById("noteText").value = note;
+    document.getElementById("notePopoverDue").textContent = btn.dataset.due
+      ? `Due ${btn.dataset.due}`
+      : "";
+    document.getElementById("notePopoverTitle").textContent = note.trim()
+      ? "Edit note"
+      : "Add note";
+
+    if (typeof htmx !== "undefined") htmx.process(form);
+    notePopover()?.showPopover();
+    document.getElementById("noteText")?.focus();
+  }
+
+  function closeNotePopover() {
+    notePopover()?.hidePopover();
+  }
+
+  function loanFormAction(mode, profileId) {
+    if (mode === "edit" && profileId) return `/profiles/${profileId}`;
+    if (mode === "rename" && profileId) return `/profiles/${profileId}/rename`;
+    return "/profiles";
+  }
+
+  function setLoanFormMode(mode, profileId) {
+    const form = document.getElementById("loanForm");
+    const btn = document.getElementById("buildBtn");
+    if (!form) return;
+    const action = loanFormAction(mode, profileId);
+    form.dataset.mode = mode;
+    if (profileId) form.dataset.profileId = profileId;
+    else delete form.dataset.profileId;
+    form.method = "post";
+    form.setAttribute("action", action);
+    form.action = action;
+    if (btn) {
+      btn.setAttribute("formaction", action);
+      btn.setAttribute("formmethod", "post");
+    }
+  }
+
+  function nextProfileName() {
+    const select = document.getElementById("profileSelect");
+    const count = [...(select?.options || [])].filter((o) => o.value).length;
+    return `Profile ${count + 1}`;
+  }
+
   function openCreate() {
     closeProfileMenu();
-    const form = document.getElementById("loanForm");
-    form.action = "/profiles";
-    form.method = "post";
+    setLoanFormMode("create");
     document.getElementById("popoverTitle").textContent = "New profile";
     document.getElementById("buildBtn").textContent = "Create profile";
     document.getElementById("nameFieldWrap").classList.remove("hidden");
     document.getElementById("loanFields").classList.remove("hidden");
     document.getElementById("resetWrap").classList.add("hidden");
     document.getElementById("extrasEditor").classList.add("hidden");
-    document.getElementById("profileName").value = "Profile";
+    document.getElementById("profileName").value = nextProfileName();
     document.getElementById("principal").value = "400000";
     document.getElementById("rate").value = "6.5";
     document.getElementById("term").value = "30";
+    const start = document.getElementById("startDate");
+    if (start) start.value = start.dataset.default || start.value;
     document.getElementById("error").textContent = "";
     popover()?.showPopover();
     document.getElementById("profileName").focus();
@@ -146,9 +225,7 @@
       return;
     }
     const id = dash.dataset.profileId;
-    const form = document.getElementById("loanForm");
-    form.action = `/profiles/${id}`;
-    form.method = "post";
+    setLoanFormMode("edit", id);
     document.getElementById("popoverTitle").textContent = `Edit ${dash.dataset.name || "profile"}`;
     document.getElementById("buildBtn").textContent = "Save changes";
     document.getElementById("nameFieldWrap").classList.remove("hidden");
@@ -178,9 +255,7 @@
     const select = document.getElementById("profileSelect");
     const id = dash?.dataset.profileId || select?.value;
     if (!id) return;
-    const form = document.getElementById("loanForm");
-    form.action = `/profiles/${id}/rename`;
-    form.method = "post";
+    setLoanFormMode("rename", id);
     document.getElementById("popoverTitle").textContent = "Rename profile";
     document.getElementById("buildBtn").textContent = "Save name";
     document.getElementById("nameFieldWrap").classList.remove("hidden");
@@ -265,6 +340,19 @@
   }
 
   function bindUi() {
+    document.getElementById("loanForm")?.addEventListener("submit", (e) => {
+      const form = e.currentTarget;
+      const mode = form.dataset.mode || "create";
+      const profileId = form.dataset.profileId;
+      if ((mode === "edit" || mode === "rename") && !profileId) {
+        e.preventDefault();
+        document.getElementById("error").textContent = "No profile selected.";
+        return;
+      }
+      // Re-assert destination so a stale action from a prior edit/rename
+      // cannot turn "Create profile" into an update of the active profile.
+      setLoanFormMode(mode, profileId);
+    });
     document.getElementById("newProfileBtn")?.addEventListener("click", openCreate);
     document.getElementById("editProfileBtn")?.addEventListener("click", openEdit);
     document.getElementById("renameProfileBtn")?.addEventListener("click", openRename);
@@ -274,6 +362,15 @@
     });
     document.getElementById("closePopoverBtn")?.addEventListener("click", () => {
       popover()?.hidePopover();
+    });
+    document.getElementById("closeNotePopoverBtn")?.addEventListener("click", closeNotePopover);
+    document.getElementById("clearNoteBtn")?.addEventListener("click", () => {
+      const text = document.getElementById("noteText");
+      if (text) text.value = "";
+      text?.focus();
+    });
+    document.getElementById("noteForm")?.addEventListener("htmx:afterRequest", (e) => {
+      if (e.detail.successful) closeNotePopover();
     });
     document.getElementById("deleteProfileBtn")?.addEventListener("click", () => {
       closeProfileMenu();
@@ -300,6 +397,12 @@
       if (menu && !menu.contains(e.target)) closeProfileMenu();
     });
     document.body.addEventListener("click", (e) => {
+      const noteBtn = e.target.closest(".note-btn");
+      if (noteBtn) {
+        e.preventDefault();
+        openNotePopover(noteBtn);
+        return;
+      }
       const grainBtn = e.target.closest("#panel-chart .seg-toggle [data-grain]");
       if (grainBtn) {
         e.preventDefault();
@@ -356,14 +459,15 @@
     }
     if (targetId === "main-panel") {
       wireChartTooltip();
+      syncProfileBarFromDashboard();
       TAB_IDS.forEach((id) => {
         const panel = panelEl(id);
         if (panel) panel.dataset.stale = "false";
       });
       const dash = dashboard();
-      if (dash?.dataset.tab) {
-        activateTab(dash.dataset.tab, { focus: false, syncUrl: false });
-      }
+      const queryTab = new URLSearchParams(location.search).get("tab");
+      const nextTab = normalizeTab(queryTab || dash?.dataset.tab || "calendar");
+      activateTab(nextTab, { focus: false, syncUrl: true });
     }
   });
 })();

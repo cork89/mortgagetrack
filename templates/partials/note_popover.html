@@ -1,0 +1,25 @@
+<div id="notePopover" class="loan-popover note-popover" popover>
+  <div class="popover-card note-popover-card">
+    <div class="popover-head">
+      <div>
+        <h2 id="notePopoverTitle">Payment note</h2>
+        <p class="note-popover-sub" id="notePopoverDue"></p>
+      </div>
+      <button type="button" class="popover-close" id="closeNotePopoverBtn" aria-label="Close">×</button>
+    </div>
+    <form id="noteForm" method="post" action="/profiles/notes">
+      <input type="hidden" name="pay_key" id="notePayKey" value="" />
+      <input type="hidden" name="filter" id="noteFilter" value="all" />
+      <input type="hidden" name="year" id="noteYear" value="" />
+      <input type="hidden" name="grain" id="noteGrain" value="monthly" />
+      <label class="note-field">
+        Note
+        <textarea id="noteText" name="note" rows="5" maxlength="2000" placeholder="Add a note for this payment…"></textarea>
+      </label>
+      <div class="actions note-actions">
+        <button type="submit" class="btn-primary" id="saveNoteBtn">Save note</button>
+        <button type="button" class="btn-ghost" id="clearNoteBtn">Clear</button>
+      </div>
+    </form>
+  </div>
+</div>

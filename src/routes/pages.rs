@@ -12,9 +12,9 @@ use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, build_dashboard, clear_paid, create_profile, delete_extra, delete_profile,
-    empty_state, get_active_profile_id, list_extras, list_paid_keys, list_profiles, load_profile,
-    mark_due_paid, rename_profile, set_active_profile, toggle_paid, update_profile_loan,
-    PaymentFilter, ProfileOption, TabId,
+    empty_state, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
+    list_profiles, load_profile, mark_due_paid, rename_profile, set_active_profile, toggle_paid,
+    update_profile_loan, upsert_payment_note, PaymentFilter, ProfileOption, TabId,
 };
 use crate::templates::{
     panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial, HtmlTemplate,
@@ -38,6 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/{id}/clear-paid", post(clear_paid_handler))
         .route("/profiles/{id}/mark-due", post(mark_due_handler))
         .route("/profiles/{id}/toggle-paid", post(toggle_paid_handler))
+        .route("/profiles/{id}/notes", post(upsert_note_handler))
         .route("/profiles/{id}/extras", post(add_extra_handler))
         .route(
             "/profiles/{id}/extras/{extra_id}",
@@ -70,6 +71,10 @@ pub struct RenameForm {
 #[derive(Debug, Deserialize)]
 pub struct SwitchForm {
     pub profile_id: String,
+    pub tab: Option<String>,
+    pub year: Option<i32>,
+    pub filter: Option<String>,
+    pub grain: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +91,15 @@ pub struct ExtraForm {
     pub date: String,
     pub amount: f64,
     pub filter: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NoteForm {
+    pub pay_key: String,
+    pub note: String,
+    pub year: Option<i32>,
+    pub filter: Option<String>,
+    pub grain: Option<String>,
 }
 
 async fn index(
@@ -294,10 +308,10 @@ async fn switch_profile(
     let page = load_page(
         &state,
         &IndexQuery {
-            tab: None,
-            year: None,
-            filter: None,
-            grain: None,
+            tab: form.tab,
+            year: form.year,
+            filter: form.filter,
+            grain: form.grain,
         },
         &user,
     )
@@ -402,6 +416,30 @@ async fn toggle_paid_handler(
     }
 }
 
+async fn upsert_note_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Form(form): Form<NoteForm>,
+) -> AppResult<Response> {
+    upsert_payment_note(&state.pool, user.id, &id, &form.pay_key, &form.note).await?;
+    let q = IndexQuery {
+        tab: Some("payments".into()),
+        year: form.year,
+        filter: form.filter,
+        grain: form.grain,
+    };
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        payments_from_dashboard(d),
+        "payments",
+        false,
+    ))
+}
+
 async fn add_extra_handler(
     user: AuthUser,
     State(state): State<AppState>,
@@ -476,8 +514,13 @@ async fn load_page(
         if profile.has_loan() {
             let paid = list_paid_keys(&state.pool, &profile.id).await?;
             let extras = list_extras(&state.pool, &profile.id).await?;
+            let notes = list_payment_notes(&state.pool, &profile.id)
+                .await?
+                .into_iter()
+                .map(|n| (n.pay_key, n.note))
+                .collect();
             build_dashboard(
-                profile, &paid, &extras, view_year, filter, grain, tab, today,
+                profile, &paid, &extras, &notes, view_year, filter, grain, tab, today,
             )
         } else {
             None

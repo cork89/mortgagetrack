@@ -4,7 +4,7 @@
       <h2 id="popoverTitle">New profile</h2>
       <button type="button" class="popover-close" id="closePopoverBtn" aria-label="Close">×</button>
     </div>
-    <form id="loanForm" method="post" action="/profiles">
+    <form id="loanForm" method="post" action="/profiles" data-mode="create">
       <label class="name-field" id="nameFieldWrap">
         Profile name
         <input id="profileName" name="name" type="text" maxlength="60" placeholder="e.g. Primary home" autocomplete="off" />
@@ -24,7 +24,7 @@
         </label>
         <label>
           First payment
-          <input id="startDate" name="start_date" type="date" value="{{ default_start }}" />
+          <input id="startDate" name="start_date" type="date" value="{{ default_start }}" data-default="{{ default_start }}" />
         </label>
       </div>
       <div class="extras-editor hidden" id="extrasEditor">

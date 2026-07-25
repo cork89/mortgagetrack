@@ -86,6 +86,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         include_str!("../migrations/001_init.sql"),
         include_str!("../migrations/002_auth.sql"),
         include_str!("../migrations/003_profiles_user.sql"),
+        include_str!("../migrations/004_payment_notes.sql"),
     ] {
         for stmt in sql.split(';') {
             let stmt = stmt.trim();

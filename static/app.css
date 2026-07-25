@@ -703,7 +703,7 @@
     col.col-num { width: 5.5rem; }
     col.col-date { width: 9.5rem; }
     col.col-money { width: auto; }
-    col.col-status { width: 8.5rem; }
+    col.col-status { width: 12.5rem; }
 
     th, td {
       padding: 0.7rem 0.9rem;
@@ -805,6 +805,67 @@
       justify-content: flex-end;
       gap: 0.35rem;
       flex-wrap: wrap;
+    }
+
+    .status-actions .status-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem;
+    }
+
+    .status-actions .status-btn svg {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    .note-popover-card {
+      width: min(420px, 100%);
+    }
+
+    .note-popover-sub {
+      margin: 0.25rem 0 0;
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+      font-weight: 400;
+    }
+
+    .note-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+
+    .note-field textarea {
+      width: 100%;
+      min-height: 7.5rem;
+      resize: vertical;
+      padding: 0.7rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.85);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      font-weight: 400;
+      line-height: 1.45;
+    }
+
+    .note-field textarea:focus {
+      outline: 2px solid rgba(47, 111, 106, 0.35);
+      outline-offset: 1px;
+      border-color: rgba(47, 111, 106, 0.45);
+    }
+
+    .note-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem;
     }
 
     .chart-wrap {

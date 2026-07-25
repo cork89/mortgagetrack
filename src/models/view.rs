@@ -122,6 +122,8 @@ pub struct PaymentRowView {
     pub is_extra: bool,
     pub extra_id: String,
     pub zeroed: bool,
+    pub has_note: bool,
+    pub note_json: String,
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +249,7 @@ pub fn build_dashboard(
     profile: &Profile,
     paid_keys: &[String],
     extras: &[ExtraPayment],
+    notes: &HashMap<String, String>,
     view_year: i32,
     filter: PaymentFilter,
     chart_grain: &str,
@@ -274,7 +277,7 @@ pub fn build_dashboard(
 
     let year_stats = year_strip(schedule, &paid, extras.len(), today);
     let months = calendar_months(schedule, &paid, view_year, today);
-    let (payment_rows, summary) = payments_table(schedule, &paid, &loan, filter, today);
+    let (payment_rows, summary) = payments_table(schedule, &paid, notes, &loan, filter, today);
     let chart = ChartPair {
         grain: if chart_grain == "yearly" {
             "yearly".into()
@@ -434,9 +437,17 @@ fn calendar_months(
         .collect()
 }
 
+fn note_fields(notes: &HashMap<String, String>, pay_key: &str) -> (bool, String) {
+    let note = notes.get(pay_key).cloned().unwrap_or_default();
+    let has_note = !note.trim().is_empty();
+    let note_json = serde_json::to_string(&note).unwrap_or_else(|_| "\"\"".into());
+    (has_note, note_json)
+}
+
 fn payments_table(
     schedule: &[ScheduleRow],
     paid: &HashSet<String>,
+    notes: &HashMap<String, String>,
     loan: &Loan,
     filter: PaymentFilter,
     today: NaiveDate,
@@ -474,6 +485,8 @@ fn payments_table(
             is_extra: false,
             extra_id: String::new(),
             zeroed: false,
+            has_note: false,
+            note_json: "\"\"".into(),
         });
         // empty marker handled in template via empty check on payment_rows length + special flag
     } else {
@@ -510,6 +523,8 @@ fn payments_table(
                 is_extra: false,
                 extra_id: String::new(),
                 zeroed: false,
+                has_note: false,
+                note_json: "\"\"".into(),
             });
 
             for row in group {
@@ -519,6 +534,7 @@ fn payments_table(
                 } else {
                     row.label.clone()
                 };
+                let (has_note, note_json) = note_fields(notes, &row.pay_key);
                 out.push(PaymentRowView {
                     is_year_header: false,
                     year_label: String::new(),
@@ -535,6 +551,8 @@ fn payments_table(
                     is_extra: row.kind == RowKind::Extra,
                     extra_id: row.id.clone().unwrap_or_default(),
                     zeroed: row.payment < 0.005,
+                    has_note,
+                    note_json,
                 });
             }
         }
@@ -715,32 +733,51 @@ fn render_chart_svg(buckets: &[ChartBucket], grain: &str) -> String {
         ));
     }
 
-    if grain == "yearly" {
-        let label_every = if buckets.len() > 24 { 2 } else { 1 };
-        for (i, bucket) in buckets.iter().enumerate() {
-            if i % label_every != 0 && i != buckets.len() - 1 {
-                continue;
-            }
-            let x = pad_left + i as f64 * slot + slot / 2.0;
-            out.push_str(&format!(
-                r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{}</text>"#,
-                height - 10.0,
-                bucket.year
-            ));
-        }
+    // Year labels are ~28px wide at 11px; keep ~56px gaps so they don't collide.
+    let min_label_gap = 56.0;
+    let max_labels = ((plot_w / min_label_gap).floor() as usize).max(2);
+
+    let year_marks: Vec<(usize, i32)> = if grain == "yearly" {
+        buckets
+            .iter()
+            .enumerate()
+            .map(|(i, b)| (i, b.year))
+            .collect()
     } else {
+        let mut marks = Vec::new();
         let mut last_year = None;
         for (i, bucket) in buckets.iter().enumerate() {
             if Some(bucket.year) != last_year {
-                let x = pad_left + i as f64 * slot + slot / 2.0;
-                out.push_str(&format!(
-                    r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{}</text>"#,
-                    height - 10.0,
-                    bucket.year
-                ));
+                marks.push((i, bucket.year));
                 last_year = Some(bucket.year);
             }
         }
+        marks
+    };
+
+    let step = year_marks.len().div_ceil(max_labels).max(1);
+    let mut labeled: Vec<(usize, i32)> = year_marks
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| k % step == 0)
+        .map(|(_, mark)| *mark)
+        .collect();
+    if let Some(&last) = year_marks.last() {
+        let far_enough = labeled.last().is_none_or(|(i, _)| {
+            let prev_x = pad_left + *i as f64 * slot + slot / 2.0;
+            let last_x = pad_left + last.0 as f64 * slot + slot / 2.0;
+            last_x - prev_x >= min_label_gap
+        });
+        if far_enough && labeled.last().map(|m| m.1) != Some(last.1) {
+            labeled.push(last);
+        }
+    }
+    for (i, year) in labeled {
+        let x = pad_left + i as f64 * slot + slot / 2.0;
+        out.push_str(&format!(
+            r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{year}</text>"#,
+            height - 10.0,
+        ));
     }
 
     for (i, bucket) in buckets.iter().enumerate() {

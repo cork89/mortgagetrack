@@ -7,6 +7,7 @@
       hx-target="#main-panel"
       hx-swap="innerHTML"
       hx-include="this"
+      hx-vals='js:{tab: new URLSearchParams(location.search).get("tab") || document.getElementById("dashboard")?.dataset.tab || "calendar", year: document.getElementById("dashboard")?.dataset.year, filter: document.getElementById("dashboard")?.dataset.filter || "all", grain: document.getElementById("dashboard")?.dataset.grain || "monthly"}'
       hx-trigger="change">
       {% if !has_profiles %}
       <option value="">No profiles yet</option>

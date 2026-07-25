@@ -161,6 +161,56 @@ pub async fn list_paid_keys(pool: &SqlitePool, profile_id: &str) -> AppResult<Ve
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct PaymentNote {
+    pub pay_key: String,
+    pub note: String,
+}
+
+pub async fn list_payment_notes(
+    pool: &SqlitePool,
+    profile_id: &str,
+) -> AppResult<Vec<PaymentNote>> {
+    let rows = sqlx::query_as::<_, PaymentNote>(
+        "SELECT pay_key, note FROM payment_notes WHERE profile_id = ?",
+    )
+    .bind(profile_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn upsert_payment_note(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+    pay_key: &str,
+    note: &str,
+) -> AppResult<()> {
+    require_owned_profile(pool, user_id, profile_id).await?;
+    let trimmed = note.trim();
+    if trimmed.is_empty() {
+        sqlx::query("DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?")
+            .bind(profile_id)
+            .bind(pay_key)
+            .execute(pool)
+            .await?;
+        return Ok(());
+    }
+    sqlx::query(
+        r#"
+        INSERT INTO payment_notes (profile_id, pay_key, note) VALUES (?, ?, ?)
+        ON CONFLICT(profile_id, pay_key) DO UPDATE SET note = excluded.note
+        "#,
+    )
+    .bind(profile_id)
+    .bind(pay_key)
+    .bind(trimmed)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn list_extras(pool: &SqlitePool, profile_id: &str) -> AppResult<Vec<ExtraPayment>> {
     let rows = sqlx::query_as::<_, ExtraPayment>(
         r#"
@@ -293,6 +343,10 @@ pub async fn delete_profile(pool: &SqlitePool, user_id: Uuid, id: &str) -> AppRe
         .bind(id)
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM payment_notes WHERE profile_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     sqlx::query("DELETE FROM extras WHERE profile_id = ?")
         .bind(id)
         .execute(pool)
@@ -419,6 +473,11 @@ pub async fn delete_extra(
     require_owned_profile(pool, user_id, profile_id).await?;
     let pay_key = format!("extra:{extra_id}");
     sqlx::query("DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
+        .bind(profile_id)
+        .bind(&pay_key)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?")
         .bind(profile_id)
         .bind(&pay_key)
         .execute(pool)
