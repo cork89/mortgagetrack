@@ -598,20 +598,29 @@
     table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
       font-size: 0.9rem;
     }
+
+    col.col-num { width: 5.5rem; }
+    col.col-date { width: 9.5rem; }
+    col.col-money { width: auto; }
+    col.col-status { width: 8.5rem; }
 
     th, td {
       padding: 0.7rem 0.9rem;
       text-align: right;
       border-bottom: 1px solid var(--line);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    th:first-child,
-    td:first-child,
-    th:nth-child(2),
-    td:nth-child(2) { text-align: left; }
+    th.cell-text,
+    td.cell-text { text-align: left; }
+
+    th.cell-status,
+    td.cell-status { text-align: right; }
 
     thead th {
       position: sticky;
@@ -628,6 +637,45 @@
     tbody tr:hover { background: rgba(168, 212, 207, 0.18); }
     tbody tr.paid-row { background: rgba(47, 111, 106, 0.06); }
     tbody tr.current-year { box-shadow: inset 3px 0 0 var(--sea); }
+
+    tbody tr.year-summary {
+      background: rgba(30, 74, 71, 0.08);
+      font-weight: 600;
+    }
+
+    tbody tr.year-summary:hover {
+      background: rgba(30, 74, 71, 0.12);
+    }
+
+    tbody tr.year-summary td {
+      border-top: 1px solid rgba(30, 74, 71, 0.18);
+      padding-top: 0.85rem;
+      padding-bottom: 0.85rem;
+    }
+
+    tbody tr.year-summary .year-label {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--sea-deep);
+      letter-spacing: -0.01em;
+    }
+
+    tbody tr.year-summary .year-sub {
+      display: block;
+      font-family: var(--font-body);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--ink-soft);
+      margin-top: 0.15rem;
+    }
+
+    .status-actions {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
 
     .status-btn {
       padding: 0.35rem 0.65rem;
@@ -1000,15 +1048,24 @@
           </form>
           <div class="table-wrap">
             <table>
+              <colgroup>
+                <col class="col-num" />
+                <col class="col-date" />
+                <col class="col-money" />
+                <col class="col-money" />
+                <col class="col-money" />
+                <col class="col-money" />
+                <col class="col-status" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Due date</th>
+                  <th class="cell-text">#</th>
+                  <th class="cell-text">Due date</th>
                   <th>Payment</th>
                   <th>Principal</th>
                   <th>Interest</th>
                   <th>Balance</th>
-                  <th>Status</th>
+                  <th class="cell-status">Status</th>
                 </tr>
               </thead>
               <tbody id="paymentsBody"></tbody>
@@ -1497,6 +1554,12 @@
     }
 
     function removeExtraPayment(id) {
+      const extra = extras.find((ex) => ex.id === id);
+      if (!extra) return;
+      const when = fmtDate(new Date(extra.date + "T12:00:00"));
+      if (!window.confirm(`Remove extra payment of ${money(extra.amount)} on ${when}?`)) {
+        return;
+      }
       extras = extras.filter((ex) => ex.id !== id);
       paidSet.delete(`extra:${id}`);
       const profile = activeProfile();
@@ -1726,29 +1789,66 @@
       if (!rows.length) {
         els.paymentsBody.innerHTML = `<tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>`;
       } else {
-        els.paymentsBody.innerHTML = rows
-          .map((row) => {
-            const status = paymentStatus(row);
-            const paid = status === "paid";
-            const num =
-              row.kind === "extra"
-                ? `<span class="type-pill">Extra</span>`
-                : row.label;
-            const remove =
-              row.kind === "extra"
-                ? ` <button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
-                : "";
-            return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${row.due.getFullYear() === y ? " current-year" : ""}">
-              <td>${num}</td>
-              <td>${fmtDate(row.due)}${remove}</td>
-              <td>${money(row.payment)}</td>
-              <td>${money(row.principal)}</td>
-              <td>${money(row.interest)}</td>
-              <td>${money(row.balance)}</td>
-              <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
-            </tr>`;
-          })
-          .join("");
+        const yearSummaryRow = (year, group) => {
+          const paymentTotal = group.reduce((s, r) => s + r.payment, 0);
+          const principalTotal = group.reduce((s, r) => s + r.principal, 0);
+          const interestTotal = group.reduce((s, r) => s + r.interest, 0);
+          const count = group.length;
+          return `<tr class="year-summary${year === y ? " current-year" : ""}">
+            <td class="cell-text" colspan="2">
+              <span class="year-label">${year} total</span>
+              <span class="year-sub">${count} payment${count === 1 ? "" : "s"}</span>
+            </td>
+            <td>${money(paymentTotal)}</td>
+            <td>${money(principalTotal)}</td>
+            <td>${money(interestTotal)}</td>
+            <td></td>
+            <td class="cell-status"></td>
+          </tr>`;
+        };
+
+        let html = "";
+        let yearGroup = [];
+        let currentGroupYear = null;
+
+        for (const row of rows) {
+          const rowYear = row.due.getFullYear();
+          if (currentGroupYear !== null && rowYear !== currentGroupYear) {
+            html += yearSummaryRow(currentGroupYear, yearGroup);
+            yearGroup = [];
+          }
+          currentGroupYear = rowYear;
+          yearGroup.push(row);
+
+          const status = paymentStatus(row);
+          const paid = status === "paid";
+          const num =
+            row.kind === "extra"
+              ? `<span class="type-pill">Extra</span>`
+              : row.label;
+          const remove =
+            row.kind === "extra"
+              ? `<button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
+              : "";
+          html += `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${rowYear === y ? " current-year" : ""}">
+            <td class="cell-text">${num}</td>
+            <td class="cell-text">${fmtDate(row.due)}</td>
+            <td>${money(row.payment)}</td>
+            <td>${money(row.principal)}</td>
+            <td>${money(row.interest)}</td>
+            <td>${money(row.balance)}</td>
+            <td class="cell-status"><div class="status-actions">
+              <button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button>
+              ${remove}
+            </div></td>
+          </tr>`;
+        }
+
+        if (currentGroupYear !== null) {
+          html += yearSummaryRow(currentGroupYear, yearGroup);
+        }
+
+        els.paymentsBody.innerHTML = html;
       }
 
       const totalPaid = schedule
