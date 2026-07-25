@@ -143,8 +143,15 @@ pub struct ChartBucket {
 pub struct ChartView {
     pub svg: String,
     pub hint: String,
-    pub grain: String,
     pub buckets_json: String,
+}
+
+/// Both chart grains, so the breakdown toggle can switch without a network round-trip.
+#[derive(Debug, Clone)]
+pub struct ChartPair {
+    pub grain: String,
+    pub monthly: ChartView,
+    pub yearly: ChartView,
 }
 
 #[derive(Debug, Clone)]
@@ -157,9 +164,8 @@ pub struct DashboardView {
     pub payment_rows: Vec<PaymentRowView>,
     pub payment_filter: String,
     pub summary: YearSummary,
-    pub chart: ChartView,
+    pub chart: ChartPair,
     pub active_tab: String,
-    pub extras: Vec<ExtraPayment>,
     pub loan_principal: String,
     pub loan_rate: String,
     pub loan_term: String,
@@ -173,7 +179,7 @@ pub fn money(n: f64) -> String {
     let n = n.abs();
     let whole = n.floor() as i64;
     let cents = ((n - whole as f64) * 100.0).round() as i64;
-    let mut s = format!("{whole}");
+    let s = format!("{whole}");
     let bytes = s.as_bytes().to_vec();
     let mut out = String::new();
     for (i, ch) in bytes.iter().enumerate() {
@@ -266,7 +272,15 @@ pub fn build_dashboard(
     let year_stats = year_strip(schedule, &paid, extras.len(), today);
     let months = calendar_months(schedule, &paid, view_year, today);
     let (payment_rows, summary) = payments_table(schedule, &paid, &loan, filter, today);
-    let chart = build_chart(schedule, chart_grain);
+    let chart = ChartPair {
+        grain: if chart_grain == "yearly" {
+            "yearly".into()
+        } else {
+            "monthly".into()
+        },
+        monthly: build_chart(schedule, "monthly"),
+        yearly: build_chart(schedule, "yearly"),
+    };
 
     let paid_count = paid.len();
     let profile_meta = format!(
@@ -289,7 +303,6 @@ pub fn build_dashboard(
         summary,
         chart,
         active_tab: active_tab.as_str().to_string(),
-        extras: extras.to_vec(),
         loan_principal: format!("{}", loan.principal as i64),
         loan_rate: format!("{}", loan.rate),
         loan_term: loan.term_years.to_string(),
@@ -649,7 +662,6 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
     ChartView {
         svg,
         hint,
-        grain: grain.to_string(),
         buckets_json,
     }
 }

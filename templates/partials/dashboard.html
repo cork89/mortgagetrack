@@ -70,7 +70,8 @@
               aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
               hx-post="/profiles/{{ d.profile_id }}/toggle-paid"
               hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ d.view_year }}","filter":"{{ d.payment_filter }}","grain":"{{ d.chart.grain }}"}'
-              hx-swap="none">
+              hx-target="#panel-calendar"
+              hx-swap="innerHTML show:none">
               <strong>{{ chip.amount }}</strong>
               <span class="chip-status">{{ chip.status_text }}</span>
             </button>
@@ -115,14 +116,16 @@
           </label>
           <button type="button" class="btn-ghost btn-compact" id="markThroughBtn"
             hx-post="/profiles/{{ d.profile_id }}/mark-due?tab=payments&filter={{ d.payment_filter }}&year={{ d.view_year }}&grain={{ d.chart.grain }}"
-            hx-swap="none">
+            hx-target="#panel-payments"
+            hx-swap="innerHTML show:none">
             Mark all due as paid
           </button>
         </div>
       </div>
       <form class="extra-form" id="extraForm"
         hx-post="/profiles/{{ d.profile_id }}/extras"
-        hx-swap="none">
+        hx-target="#panel-payments"
+        hx-swap="innerHTML show:none">
         <input type="hidden" name="filter" value="{{ d.payment_filter }}" />
         <label>
           Extra payment date
@@ -189,14 +192,16 @@
                         aria-pressed="{% if row.paid %}true{% else %}false{% endif %}"
                         hx-post="/profiles/{{ d.profile_id }}/toggle-paid"
                         hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ d.view_year }}","filter":"{{ d.payment_filter }}","grain":"{{ d.chart.grain }}"}'
-                        hx-swap="none">
+                        hx-target="#panel-payments"
+                        hx-swap="innerHTML show:none">
                         {% if row.paid %}Paid{% else %}Mark paid{% endif %}
                       </button>
                       {% endif %}
                       {% if row.is_extra %}
                       <button type="button" class="btn-text danger status-btn-remove"
                         hx-post="/profiles/{{ d.profile_id }}/extras/{{ row.extra_id }}"
-                        hx-swap="none"
+                        hx-target="#panel-payments"
+                        hx-swap="innerHTML show:none"
                         hx-confirm="Remove this extra payment?">Remove</button>
                       {% endif %}
                     </div>
@@ -221,19 +226,14 @@
       <div class="panel-head">
         <div>
           <h2>Principal vs interest</h2>
-          <span class="hint" id="chartHint">{{ d.chart.hint }}</span>
+          <span class="hint chart-hint{% if d.chart.grain != "monthly" %} hidden{% endif %}" data-grain-hint="monthly">{{ d.chart.monthly.hint }}</span>
+          <span class="hint chart-hint{% if d.chart.grain != "yearly" %} hidden{% endif %}" data-grain-hint="yearly">{{ d.chart.yearly.hint }}</span>
         </div>
         <div class="seg-toggle" id="chartGrainToggle" role="group" aria-label="Chart period">
           <button type="button" data-grain="monthly"{% if d.chart.grain == "monthly" %} class="active"{% endif %}
-            aria-pressed="{% if d.chart.grain == "monthly" %}true{% else %}false{% endif %}"
-            hx-get="/partials/chart?grain=monthly&tab=chart&year={{ d.view_year }}&filter={{ d.payment_filter }}"
-            hx-target="#panel-chart"
-            hx-swap="innerHTML show:none">Monthly</button>
+            aria-pressed="{% if d.chart.grain == "monthly" %}true{% else %}false{% endif %}">Monthly</button>
           <button type="button" data-grain="yearly"{% if d.chart.grain == "yearly" %} class="active"{% endif %}
-            aria-pressed="{% if d.chart.grain == "yearly" %}true{% else %}false{% endif %}"
-            hx-get="/partials/chart?grain=yearly&tab=chart&year={{ d.view_year }}&filter={{ d.payment_filter }}"
-            hx-target="#panel-chart"
-            hx-swap="innerHTML show:none">Yearly</button>
+            aria-pressed="{% if d.chart.grain == "yearly" %}true{% else %}false{% endif %}">Yearly</button>
         </div>
       </div>
       <div class="chart-wrap" id="chartWrap">
@@ -242,10 +242,17 @@
           <span class="l-interest">Interest</span>
         </div>
         <div class="chart-tooltip" id="chartTooltip" role="tooltip"></div>
-        <svg class="chart-svg" id="chartSvg" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
-          aria-label="Principal versus interest"
-          data-buckets="{{ d.chart.buckets_json }}">
-          {{ d.chart.svg|safe }}
+        <svg class="chart-svg{% if d.chart.grain != "monthly" %} hidden{% endif %}" data-grain-svg="monthly"
+          viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
+          aria-label="Principal versus interest by month"
+          data-buckets="{{ d.chart.monthly.buckets_json }}">
+          {{ d.chart.monthly.svg|safe }}
+        </svg>
+        <svg class="chart-svg{% if d.chart.grain != "yearly" %} hidden{% endif %}" data-grain-svg="yearly"
+          viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
+          aria-label="Principal versus interest by year"
+          data-buckets="{{ d.chart.yearly.buckets_json }}">
+          {{ d.chart.yearly.svg|safe }}
         </svg>
       </div>
     </div>

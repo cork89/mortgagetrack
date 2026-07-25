@@ -1,4 +1,5 @@
 mod app_state;
+mod auth;
 mod error;
 mod models;
 mod routes;
@@ -10,7 +11,10 @@ use std::path::PathBuf;
 use axum::Router;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
+use time::Duration;
 use tower_http::services::ServeDir;
+use tower_sessions::{Expiry, SessionManagerLayer};
+use tower_sessions_sqlx_store::SqliteStore;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
@@ -31,6 +35,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:homestead.db".into());
     let pool = connect_db(&database_url).await?;
     run_migrations(&pool).await?;
+    models::ensure_profiles_belong_to_users(&pool).await?;
+    auth::ensure_test_user(&pool).await?;
+
+    let session_store = SqliteStore::new(pool.clone());
+    session_store.migrate().await?;
+
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_http_only(true)
+        .with_same_site(tower_sessions::cookie::SameSite::Lax)
+        .with_expiry(Expiry::OnInactivity(Duration::days(14)));
 
     let state = AppState { pool };
 
@@ -38,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .merge(routes::router())
         .nest_service("/static", ServeDir::new(static_dir))
+        .layer(session_layer)
         .with_state(state);
 
     let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
@@ -66,13 +82,18 @@ async fn connect_db(url: &str) -> Result<SqlitePool, sqlx::Error> {
 }
 
 async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let sql = include_str!("../migrations/001_init.sql");
-    for stmt in sql.split(';') {
-        let stmt = stmt.trim();
-        if stmt.is_empty() {
-            continue;
+    for sql in [
+        include_str!("../migrations/001_init.sql"),
+        include_str!("../migrations/002_auth.sql"),
+        include_str!("../migrations/003_profiles_user.sql"),
+    ] {
+        for stmt in sql.split(';') {
+            let stmt = stmt.trim();
+            if stmt.is_empty() {
+                continue;
+            }
+            sqlx::query(stmt).execute(pool).await?;
         }
-        sqlx::query(stmt).execute(pool).await?;
     }
     Ok(())
 }

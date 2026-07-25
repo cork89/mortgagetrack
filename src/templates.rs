@@ -1,11 +1,11 @@
 use askama::Template;
 use axum::{
-    http::StatusCode,
+    http::{header::HeaderName, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Response},
 };
 
 use crate::models::{
-    ChartView, DashboardView, EmptyState, ExtraPayment, MonthCell, PaymentChip, PaymentRowView,
+    ChartPair, DashboardView, EmptyState, ExtraPayment, MonthCell, PaymentChip, PaymentRowView,
     ProfileOption, YearStat, YearSummary,
 };
 
@@ -31,16 +31,38 @@ where
     }
 }
 
+/// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale.
+pub fn panel_update<T: Template>(
+    template: T,
+    keep_tab: &str,
+    invalidate_chart: bool,
+) -> Response {
+    let mut response = HtmlTemplate(template).into_response();
+    let trigger = serde_json::json!({
+        "markPanelsStale": {
+            "keep": keep_tab,
+            "invalidateChart": invalidate_chart
+        }
+    });
+    if let Ok(value) = HeaderValue::from_str(&trigger.to_string()) {
+        response.headers_mut().insert(
+            HeaderName::from_static("hx-trigger"),
+            value,
+        );
+    }
+    response
+}
+
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct IndexTemplate {
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
-    pub active_id: String,
     pub empty: EmptyState,
     pub dashboard: Option<DashboardView>,
     pub default_start: String,
     pub error: String,
+    pub user_email: String,
 }
 
 #[derive(Template)]
@@ -108,7 +130,7 @@ pub struct PaymentsTemplate {
 pub struct ChartTemplate {
     #[allow(dead_code)]
     pub profile_id: String,
-    pub chart: ChartView,
+    pub chart: ChartPair,
 }
 
 #[derive(Template)]
@@ -128,6 +150,7 @@ pub struct ExtrasListTemplate {
 
 #[derive(Template)]
 #[template(path = "partials/panels_sync.html")]
+#[allow(dead_code)]
 pub struct PanelsSyncTemplate {
     pub dashboard: DashboardView,
 }
@@ -135,5 +158,25 @@ pub struct PanelsSyncTemplate {
 #[derive(Template)]
 #[template(path = "partials/error.html")]
 pub struct ErrorPartial {
+    pub message: String,
+}
+
+#[derive(Template)]
+#[template(path = "login.html")]
+pub struct LoginTemplate {
+    pub error: String,
+    pub email: String,
+}
+
+#[derive(Template)]
+#[template(path = "register.html")]
+pub struct RegisterTemplate {
+    pub error: String,
+    pub email: String,
+}
+
+#[derive(Template)]
+#[template(path = "partials/auth_error.html")]
+pub struct AuthErrorPartial {
     pub message: String,
 }

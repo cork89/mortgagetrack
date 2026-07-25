@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in — Homestead{% endblock %}
+
+{% block body %}
+<section class="auth-panel" aria-labelledby="auth-heading">
+  <header class="brand-block auth-brand">
+    <h1 class="brand" id="auth-heading">Homestead</h1>
+    <span class="brand-rule" aria-hidden="true"></span>
+    <p class="tagline">Sign in to your mortgage ledger.</p>
+  </header>
+
+  <form class="auth-form"
+    method="post"
+    action="/login"
+    hx-post="/login"
+    hx-target="#auth-error"
+    hx-swap="innerHTML"
+  >
+    <div id="auth-error" aria-live="polite">
+      {% if !error.is_empty() %}
+      <p class="error" role="alert">{{ error }}</p>
+      {% endif %}
+    </div>
+
+    <label class="field">
+      <span>Email</span>
+      <input type="email" name="email" autocomplete="email" required value="{{ email }}" />
+    </label>
+
+    <label class="field">
+      <span>Password</span>
+      <input type="password" name="password" autocomplete="current-password" required />
+    </label>
+
+    <button type="submit" class="btn-primary auth-submit">Sign in</button>
+  </form>
+
+  <p class="auth-switch">
+    No account yet?
+    <a href="/register">Create one</a>
+  </p>
+</section>
+{% endblock %}

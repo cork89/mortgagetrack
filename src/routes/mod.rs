@@ -3,7 +3,10 @@ mod pages;
 use axum::Router;
 
 use crate::app_state::AppState;
+use crate::auth;
 
 pub fn router() -> Router<AppState> {
-    pages::routes()
+    Router::new()
+        .merge(auth::routes())
+        .merge(pages::routes())
 }

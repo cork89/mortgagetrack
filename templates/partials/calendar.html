@@ -43,7 +43,8 @@
           aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
           hx-post="/profiles/{{ profile_id }}/toggle-paid"
           hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-          hx-swap="none">
+          hx-target="#panel-calendar"
+          hx-swap="innerHTML show:none">
           <strong>{{ chip.amount }}</strong>
           <span class="chip-status">{{ chip.status_text }}</span>
         </button>

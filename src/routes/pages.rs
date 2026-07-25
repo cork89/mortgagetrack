@@ -8,6 +8,7 @@ use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 
 use crate::app_state::AppState;
+use crate::auth::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, build_dashboard, clear_paid, create_profile, delete_extra, delete_profile,
@@ -16,8 +17,8 @@ use crate::models::{
     PaymentFilter, ProfileOption, TabId,
 };
 use crate::templates::{
-    CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial, HtmlTemplate, IndexTemplate,
-    ItemListTemplate, PanelsSyncTemplate, PaymentsTemplate,
+    panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial, HtmlTemplate,
+    IndexTemplate, ItemListTemplate, PaymentsTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -87,18 +88,20 @@ pub struct ExtraForm {
 }
 
 async fn index(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     Ok(HtmlTemplate(page))
 }
 
 async fn dashboard_partial(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     Ok(HtmlTemplate(DashboardTemplate {
         empty: page.empty,
         dashboard: page.dashboard,
@@ -106,10 +109,11 @@ async fn dashboard_partial(
 }
 
 async fn item_list_partial(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let dashboard = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
@@ -117,10 +121,11 @@ async fn item_list_partial(
 }
 
 async fn calendar_partial(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
@@ -128,10 +133,11 @@ async fn calendar_partial(
 }
 
 async fn payments_partial(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
@@ -139,10 +145,11 @@ async fn payments_partial(
 }
 
 async fn chart_partial(
+    user: AuthUser,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
@@ -153,10 +160,11 @@ async fn chart_partial(
 }
 
 async fn create_profile_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<ProfileForm>,
 ) -> Response {
-    match create_profile_inner(&state, form).await {
+    match create_profile_inner(&state, user, form).await {
         Ok(_) => Redirect::to("/").into_response(),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
@@ -165,7 +173,11 @@ async fn create_profile_handler(
     }
 }
 
-async fn create_profile_inner(state: &AppState, form: ProfileForm) -> AppResult<()> {
+async fn create_profile_inner(
+    state: &AppState,
+    user: AuthUser,
+    form: ProfileForm,
+) -> AppResult<()> {
     let name = form.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("Enter a profile name.".into()));
@@ -174,6 +186,7 @@ async fn create_profile_inner(state: &AppState, form: ProfileForm) -> AppResult<
     validate_loan(form.principal, form.rate, form.term)?;
     create_profile(
         &state.pool,
+        user.id,
         name,
         form.principal,
         form.rate,
@@ -185,11 +198,12 @@ async fn create_profile_inner(state: &AppState, form: ProfileForm) -> AppResult<
 }
 
 async fn update_profile_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Form(form): Form<ProfileForm>,
 ) -> Response {
-    match update_profile_inner(&state, &id, form).await {
+    match update_profile_inner(&state, user, &id, form).await {
         Ok(_) => Redirect::to("/").into_response(),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
@@ -198,7 +212,12 @@ async fn update_profile_handler(
     }
 }
 
-async fn update_profile_inner(state: &AppState, id: &str, form: ProfileForm) -> AppResult<()> {
+async fn update_profile_inner(
+    state: &AppState,
+    user: AuthUser,
+    id: &str,
+    form: ProfileForm,
+) -> AppResult<()> {
     let name = form.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("Enter a profile name.".into()));
@@ -207,6 +226,7 @@ async fn update_profile_inner(state: &AppState, id: &str, form: ProfileForm) -> 
     validate_loan(form.principal, form.rate, form.term)?;
     update_profile_loan(
         &state.pool,
+        user.id,
         id,
         name,
         form.principal,
@@ -215,11 +235,12 @@ async fn update_profile_inner(state: &AppState, id: &str, form: ProfileForm) -> 
         start,
     )
     .await?;
-    set_active_profile(&state.pool, Some(id)).await?;
+    set_active_profile(&state.pool, user.id, Some(id)).await?;
     Ok(())
 }
 
 async fn rename_profile_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Form(form): Form<RenameForm>,
@@ -231,7 +252,7 @@ async fn rename_profile_handler(
         })
         .into_response();
     }
-    match rename_profile(&state.pool, &id, name).await {
+    match rename_profile(&state.pool, user.id, &id, name).await {
         Ok(_) => Redirect::to("/").into_response(),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
@@ -241,18 +262,20 @@ async fn rename_profile_handler(
 }
 
 async fn delete_profile_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Redirect> {
-    delete_profile(&state.pool, &id).await?;
+    delete_profile(&state.pool, user.id, &id).await?;
     Ok(Redirect::to("/"))
 }
 
 async fn switch_profile(
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<SwitchForm>,
 ) -> AppResult<impl IntoResponse> {
-    set_active_profile(&state.pool, Some(&form.profile_id)).await?;
+    set_active_profile(&state.pool, user.id, Some(&form.profile_id)).await?;
     let page = load_page(
         &state,
         &IndexQuery {
@@ -261,6 +284,7 @@ async fn switch_profile(
             filter: None,
             grain: None,
         },
+        &user,
     )
     .await?;
     Ok(HtmlTemplate(DashboardTemplate {
@@ -270,19 +294,21 @@ async fn switch_profile(
 }
 
 async fn clear_paid_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<Redirect> {
-    clear_paid(&state.pool, &id).await?;
+    clear_paid(&state.pool, user.id, &id).await?;
     Ok(Redirect::to("/"))
 }
 
 async fn mark_due_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(q): Query<IndexQuery>,
-) -> AppResult<impl IntoResponse> {
-    let profile = load_profile(&state.pool, &id)
+) -> AppResult<Response> {
+    let profile = load_profile(&state.pool, user.id, &id)
         .await?
         .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
     let extras = list_extras(&state.pool, &id).await?;
@@ -314,59 +340,84 @@ async fn mark_due_handler(
         })
         .map(|r| r.pay_key.clone())
         .collect();
-    mark_due_paid(&state.pool, &id, &keys).await?;
+    mark_due_paid(&state.pool, user.id, &id, &keys).await?;
 
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(PanelsSyncTemplate { dashboard: d }))
+    Ok(panel_update(
+        payments_from_dashboard(d, true),
+        "payments",
+        false,
+    ))
 }
 
 async fn toggle_paid_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Form(form): Form<ToggleForm>,
-) -> AppResult<impl IntoResponse> {
-    toggle_paid(&state.pool, &id, &form.pay_key).await?;
+) -> AppResult<Response> {
+    toggle_paid(&state.pool, user.id, &id, &form.pay_key).await?;
+    let tab = form.tab.clone().unwrap_or_else(|| "calendar".into());
     let q = IndexQuery {
-        tab: form.tab.clone(),
+        tab: form.tab,
         year: form.year,
         filter: form.filter,
         grain: form.grain,
     };
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(PanelsSyncTemplate { dashboard: d }))
+
+    if tab == "payments" {
+        Ok(panel_update(
+            payments_from_dashboard(d, true),
+            "payments",
+            false,
+        ))
+    } else {
+        Ok(panel_update(
+            calendar_from_dashboard(d, true),
+            "calendar",
+            false,
+        ))
+    }
 }
 
 async fn add_extra_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Form(form): Form<ExtraForm>,
-) -> AppResult<impl IntoResponse> {
+) -> AppResult<Response> {
     let date = parse_date(&form.date)?;
-    add_extra(&state.pool, &id, date, form.amount).await?;
+    add_extra(&state.pool, user.id, &id, date, form.amount).await?;
     let q = IndexQuery {
         tab: Some("payments".into()),
         year: None,
         filter: form.filter,
         grain: None,
     };
-    let page = load_page(&state, &q).await?;
+    let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(PanelsSyncTemplate { dashboard: d }))
+    Ok(panel_update(
+        payments_from_dashboard(d, true),
+        "payments",
+        true,
+    ))
 }
 
 async fn delete_extra_handler(
+    user: AuthUser,
     State(state): State<AppState>,
     Path((id, extra_id)): Path<(String, String)>,
-) -> AppResult<impl IntoResponse> {
-    delete_extra(&state.pool, &id, &extra_id).await?;
+) -> AppResult<Response> {
+    delete_extra(&state.pool, user.id, &id, &extra_id).await?;
     let page = load_page(
         &state,
         &IndexQuery {
@@ -375,19 +426,28 @@ async fn delete_extra_handler(
             filter: None,
             grain: None,
         },
+        &user,
     )
     .await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(PanelsSyncTemplate { dashboard: d }))
+    Ok(panel_update(
+        payments_from_dashboard(d, true),
+        "payments",
+        true,
+    ))
 }
 
-async fn load_page(state: &AppState, q: &IndexQuery) -> AppResult<IndexTemplate> {
-    let profiles = list_profiles(&state.pool).await?;
-    let active_id = get_active_profile_id(&state.pool).await?;
+async fn load_page(
+    state: &AppState,
+    q: &IndexQuery,
+    user: &AuthUser,
+) -> AppResult<IndexTemplate> {
+    let profiles = list_profiles(&state.pool, user.id).await?;
+    let active_id = get_active_profile_id(&state.pool, user.id).await?;
     let active = match &active_id {
-        Some(id) => load_profile(&state.pool, id).await?,
+        Some(id) => load_profile(&state.pool, user.id, id).await?,
         None => None,
     };
 
@@ -441,11 +501,11 @@ async fn load_page(state: &AppState, q: &IndexQuery) -> AppResult<IndexTemplate>
     Ok(IndexTemplate {
         has_profiles: !profiles.is_empty(),
         profiles: profile_opts,
-        active_id: active_id.unwrap_or_default(),
         empty: empty_state(active.as_ref()),
         dashboard,
         default_start,
         error: String::new(),
+        user_email: user.email.clone(),
     })
 }
 

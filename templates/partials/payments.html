@@ -35,14 +35,16 @@
       </label>
       <button type="button" class="btn-ghost btn-compact"
         hx-post="/profiles/{{ profile_id }}/mark-due?tab=payments&filter={{ payment_filter }}&year={{ view_year }}&grain={{ grain }}"
-        hx-swap="none">
+        hx-target="#panel-payments"
+        hx-swap="innerHTML show:none">
         Mark all due as paid
       </button>
     </div>
   </div>
   <form class="extra-form"
     hx-post="/profiles/{{ profile_id }}/extras"
-    hx-swap="none">
+    hx-target="#panel-payments"
+    hx-swap="innerHTML show:none">
     <input type="hidden" name="filter" value="{{ payment_filter }}" />
     <label>
       Extra payment date
@@ -107,14 +109,16 @@
                   <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"
                     hx-post="/profiles/{{ profile_id }}/toggle-paid"
                     hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-                    hx-swap="none">
+                    hx-target="#panel-payments"
+                    hx-swap="innerHTML show:none">
                     {% if row.paid %}Paid{% else %}Mark paid{% endif %}
                   </button>
                   {% endif %}
                   {% if row.is_extra %}
                   <button type="button" class="btn-text danger status-btn-remove"
                     hx-post="/profiles/{{ profile_id }}/extras/{{ row.extra_id }}"
-                    hx-swap="none"
+                    hx-target="#panel-payments"
+                    hx-swap="innerHTML show:none"
                     hx-confirm="Remove this extra payment?">Remove</button>
                   {% endif %}
                 </div>

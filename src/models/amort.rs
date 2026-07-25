@@ -3,7 +3,6 @@ use chrono::{Datelike, NaiveDate};
 #[derive(Debug, Clone)]
 pub struct ScheduleRow {
     pub kind: RowKind,
-    pub n: Option<i32>,
     pub label: String,
     pub id: Option<String>,
     pub due: NaiveDate,
@@ -12,7 +11,6 @@ pub struct ScheduleRow {
     pub principal: f64,
     pub interest: f64,
     pub balance: f64,
-    pub requested: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,7 +110,6 @@ pub fn build_schedule(
 
                 rows.push(ScheduleRow {
                     kind: RowKind::Scheduled,
-                    n: ev.n,
                     label: ev.n.map(|v| v.to_string()).unwrap_or_default(),
                     id: None,
                     due: ev.due,
@@ -121,7 +118,6 @@ pub fn build_schedule(
                     principal: principal_part,
                     interest,
                     balance,
-                    requested: None,
                 });
             }
             RowKind::Extra => {
@@ -137,7 +133,6 @@ pub fn build_schedule(
                 let id = ev.id.clone().unwrap_or_default();
                 rows.push(ScheduleRow {
                     kind: RowKind::Extra,
-                    n: None,
                     label: "Extra".to_string(),
                     id: Some(id.clone()),
                     due: ev.due,
@@ -146,7 +141,6 @@ pub fn build_schedule(
                     principal: principal_part,
                     interest: 0.0,
                     balance,
-                    requested: Some(requested),
                 });
             }
         }

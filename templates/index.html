@@ -2,7 +2,13 @@
 
 {% block body %}
 <header class="brand-block">
-  <h1 class="brand">Homestead</h1>
+  <div class="brand-row">
+    <h1 class="brand">Homestead</h1>
+    <form class="account-chip" method="post" action="/logout">
+      <span class="account-email" title="{{ user_email }}">{{ user_email }}</span>
+      <button type="submit" class="btn-text">Sign out</button>
+    </form>
+  </div>
   <span class="brand-rule" aria-hidden="true"></span>
   <p class="tagline">Your mortgage ledger — payments, progress, and payoff in one place.</p>
 </header>
