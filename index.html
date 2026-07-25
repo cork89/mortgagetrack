@@ -435,7 +435,28 @@
       color: var(--future);
     }
 
+    .pay-chip.extra {
+      background: rgba(212, 196, 168, 0.35);
+      color: #6a5530;
+      border-color: rgba(180, 150, 100, 0.35);
+    }
+
+    .pay-chip.extra.paid {
+      background: rgba(47, 111, 106, 0.12);
+      color: var(--paid);
+      border-color: rgba(47, 111, 106, 0.2);
+    }
+
     .pay-chip strong { display: block; font-weight: 600; font-size: 0.95rem; }
+
+    .month-chips {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .month-chips .pay-chip { margin-top: 0; }
 
     .month-empty-note {
       margin-top: auto;
@@ -467,6 +488,102 @@
     .legend .l-due::before { background: var(--due); }
     .legend .l-missed::before { background: var(--missed); }
     .legend .l-future::before { background: var(--future); }
+    .legend .l-extra::before { background: #c4a574; }
+
+    tbody tr.extra-row {
+      background: rgba(212, 196, 168, 0.18);
+    }
+
+    tbody tr.extra-row:hover {
+      background: rgba(212, 196, 168, 0.28);
+    }
+
+    .type-pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6a5530;
+      background: rgba(212, 196, 168, 0.45);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+    }
+
+    .extra-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: end;
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(247, 250, 249, 0.85);
+    }
+
+    .extra-form label {
+      flex: 1 1 8rem;
+      min-width: 7rem;
+    }
+
+    .extra-form label.amount {
+      flex: 0 1 8rem;
+    }
+
+    .extra-form input {
+      padding: 0.55rem 0.7rem;
+      font-size: 0.95rem;
+    }
+
+    .extra-form .btn-primary {
+      padding: 0.55rem 0.95rem;
+      white-space: nowrap;
+    }
+
+    .extras-editor {
+      margin: 0 0 1.1rem;
+      padding: 0.85rem 0.95rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .extras-editor.hidden { display: none; }
+
+    .extras-editor h3 {
+      margin: 0 0 0.65rem;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--sea-deep);
+    }
+
+    .extras-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .extras-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .extras-list li:last-child { border-bottom: none; }
+
+    .extras-list .muted { color: var(--ink-soft); }
+
+    .extras-empty {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+    }
 
     .table-wrap {
       overflow: auto;
@@ -838,6 +955,7 @@
             <span class="l-due">Due this month</span>
             <span class="l-missed">Past due</span>
             <span class="l-future">Upcoming</span>
+            <span class="l-extra">Extra payment</span>
           </div>
         </div>
       </div>
@@ -880,6 +998,7 @@
                   <option value="unpaid">Unpaid</option>
                   <option value="paid">Paid</option>
                   <option value="year">Current year</option>
+                  <option value="extra">Extra only</option>
                 </select>
               </label>
               <button type="button" class="btn-ghost" id="markThroughBtn" style="padding: 0.5rem 0.85rem; font-size: 0.85rem;">
@@ -887,6 +1006,17 @@
               </button>
             </div>
           </div>
+          <form class="extra-form" id="extraForm">
+            <label>
+              Extra payment date
+              <input id="extraDate" type="date" required />
+            </label>
+            <label class="amount">
+              Amount
+              <input id="extraAmount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+            </label>
+            <button type="submit" class="btn-primary">Add extra payment</button>
+          </form>
           <div class="table-wrap">
             <table>
               <thead>
@@ -933,6 +1063,11 @@
             First payment
             <input id="startDate" type="date" />
           </label>
+        </div>
+        <div class="extras-editor hidden" id="extrasEditor">
+          <h3>Additional payments</h3>
+          <p class="extras-empty" id="extrasEmpty">None yet — add them from the Track payments tab.</p>
+          <ul class="extras-list" id="extrasList"></ul>
         </div>
         <div class="actions">
           <button type="button" class="btn-primary" id="buildBtn">Create profile</button>
@@ -984,12 +1119,19 @@
       newProfileBtn: document.getElementById("newProfileBtn"),
       renameProfileBtn: document.getElementById("renameProfileBtn"),
       deleteProfileBtn: document.getElementById("deleteProfileBtn"),
+      extraForm: document.getElementById("extraForm"),
+      extraDate: document.getElementById("extraDate"),
+      extraAmount: document.getElementById("extraAmount"),
+      extrasEditor: document.getElementById("extrasEditor"),
+      extrasEmpty: document.getElementById("extrasEmpty"),
+      extrasList: document.getElementById("extrasList"),
     };
 
     let store = { activeId: null, profiles: [] };
     let schedule = [];
     let loanMeta = null;
     let paidSet = new Set();
+    let extras = [];
     let viewYear;
     let popoverMode = "create"; // "create" | "edit"
 
@@ -1164,12 +1306,31 @@
       els.error.textContent = "";
     }
 
+    function renderExtrasEditor() {
+      const list = [...extras].sort((a, b) => a.date.localeCompare(b.date));
+      if (!list.length) {
+        els.extrasEmpty.style.display = "block";
+        els.extrasList.innerHTML = "";
+        return;
+      }
+      els.extrasEmpty.style.display = "none";
+      els.extrasList.innerHTML = list
+        .map(
+          (ex) => `<li>
+            <span><strong>${money(ex.amount)}</strong> <span class="muted">on ${fmtDate(new Date(ex.date + "T12:00:00"))}</span></span>
+            <button type="button" class="btn-text danger" data-remove-extra="${ex.id}">Remove</button>
+          </li>`
+        )
+        .join("");
+    }
+
     function openCreatePopover() {
       popoverMode = "create";
       els.popoverTitle.textContent = "New profile";
       els.buildBtn.textContent = "Create profile";
       els.nameFieldWrap.classList.remove("hidden");
       els.resetWrap.classList.add("hidden");
+      els.extrasEditor.classList.add("hidden");
       resetLoanFormDefaults();
       els.profileName.value = `Profile ${store.profiles.length + 1}`;
       els.loanPopover.showPopover();
@@ -1185,9 +1346,11 @@
       els.buildBtn.textContent = "Save changes";
       els.nameFieldWrap.classList.add("hidden");
       els.resetWrap.classList.remove("hidden");
+      els.extrasEditor.classList.remove("hidden");
       els.error.textContent = "";
       if (profile.loan) fillFormFromLoan(profile.loan);
       else resetLoanFormDefaults();
+      renderExtrasEditor();
       els.loanPopover.showPopover();
       els.principal.focus();
     }
@@ -1207,6 +1370,7 @@
 
       let profile = activeProfile();
       let paid = [...paidSet];
+      let nextExtras = [...extras];
 
       if (popoverMode === "create") {
         const trimmed = els.profileName.value.trim();
@@ -1219,11 +1383,12 @@
           return false;
         }
         const id = uid();
-        profile = { id, name: trimmed, loan: null, paid: [] };
+        profile = { id, name: trimmed, loan: null, paid: [], extras: [] };
         store.profiles.push(profile);
         store.activeId = id;
         paid = [];
         paidSet = new Set();
+        nextExtras = [];
       } else if (!profile) {
         els.error.textContent = "No profile selected.";
         return false;
@@ -1235,7 +1400,8 @@
         formLoan.principal,
         formLoan.rate,
         formLoan.term,
-        formLoan.startDate
+        formLoan.startDate,
+        nextExtras
       );
       const loan = {
         ...formLoan,
@@ -1245,9 +1411,10 @@
 
       profile.loan = loan;
       profile.paid = paid;
+      profile.extras = nextExtras;
 
       persistStore();
-      applyLoan(loan, paid, { persist: false });
+      applyLoan(loan, paid, { persist: false, extras: nextExtras });
       syncProfileSelect();
       updateProfileMeta();
       updateEmptyState();
@@ -1287,6 +1454,7 @@
         schedule = [];
         loanMeta = null;
         paidSet = new Set();
+        extras = [];
         syncProfileSelect();
         updateProfileMeta();
         updateEmptyState();
@@ -1297,14 +1465,20 @@
       const profile = store.profiles.find((p) => p.id === id);
       if (!profile) return;
       store.activeId = id;
+      if (!Array.isArray(profile.extras)) profile.extras = [];
       persistStore();
+      viewYear = today().getFullYear();
 
       if (profile.loan) {
-        applyLoan(profile.loan, profile.paid || [], { persist: false });
+        applyLoan(profile.loan, profile.paid || [], {
+          persist: false,
+          extras: profile.extras || [],
+        });
       } else {
         schedule = [];
         loanMeta = null;
         paidSet = new Set();
+        extras = [...(profile.extras || [])];
       }
       syncProfileSelect();
       updateProfileMeta();
@@ -1316,12 +1490,43 @@
       if (!profile || !loanMeta) return;
       profile.loan = { ...loanMeta };
       profile.paid = [...paidSet];
+      profile.extras = [...extras];
       persistStore();
       syncProfileSelect();
       updateProfileMeta();
     }
 
-    function buildSchedule(principal, annualRate, years, startStr) {
+    function rebuildFromCurrent() {
+      if (!loanMeta) return;
+      applyLoan(loanMeta, [...paidSet], { persist: true, extras });
+    }
+
+    function addExtraPayment(date, amount) {
+      const profile = activeProfile();
+      if (!profile?.loan) return false;
+      const id = uid();
+      extras = [...extras, { id, date, amount: Number(amount) }];
+      paidSet.add(`extra:${id}`);
+      profile.extras = [...extras];
+      profile.paid = [...paidSet];
+      rebuildFromCurrent();
+      if (els.loanPopover.matches(":popover-open")) renderExtrasEditor();
+      return true;
+    }
+
+    function removeExtraPayment(id) {
+      extras = extras.filter((ex) => ex.id !== id);
+      paidSet.delete(`extra:${id}`);
+      const profile = activeProfile();
+      if (profile) {
+        profile.extras = [...extras];
+        profile.paid = [...paidSet];
+      }
+      rebuildFromCurrent();
+      if (els.loanPopover.matches(":popover-open")) renderExtrasEditor();
+    }
+
+    function buildSchedule(principal, annualRate, years, startStr, extrasList = []) {
       const n = years * 12;
       const r = annualRate / 100 / 12;
       let payment;
@@ -1333,37 +1538,92 @@
       }
 
       const start = new Date(startStr + "T12:00:00");
+      const events = [];
+
+      for (let i = 1; i <= n; i++) {
+        const due = new Date(start);
+        due.setMonth(start.getMonth() + (i - 1));
+        events.push({ kind: "scheduled", n: i, due, order: 0 });
+      }
+
+      for (const ex of extrasList) {
+        const due = new Date(ex.date + "T12:00:00");
+        if (Number.isNaN(due.getTime()) || !(Number(ex.amount) > 0)) continue;
+        events.push({
+          kind: "extra",
+          id: ex.id,
+          amount: Number(ex.amount),
+          due,
+          order: 1,
+        });
+      }
+
+      events.sort((a, b) => {
+        const diff = a.due.getTime() - b.due.getTime();
+        if (diff !== 0) return diff;
+        return a.order - b.order;
+      });
+
       let balance = principal;
       const rows = [];
 
-      for (let i = 1; i <= n; i++) {
-        const interest = r === 0 ? 0 : balance * r;
-        let principalPart = payment - interest;
-        if (i === n || principalPart > balance) {
-          principalPart = balance;
+      for (const ev of events) {
+        if (ev.kind === "scheduled") {
+          let interest = 0;
+          let principalPart = 0;
+          if (balance > 0.005) {
+            interest = r === 0 ? 0 : balance * r;
+            principalPart = payment - interest;
+            if (principalPart > balance) principalPart = balance;
+            if (principalPart < 0) {
+              interest = Math.min(interest, balance);
+              principalPart = 0;
+            }
+          }
+          const actualPayment = principalPart + interest;
+          balance = Math.max(0, balance - principalPart);
+          if (balance < 0.005) balance = 0;
+
+          rows.push({
+            kind: "scheduled",
+            n: ev.n,
+            label: String(ev.n),
+            due: ev.due,
+            payKey: isoDate(ev.due),
+            payment: actualPayment,
+            principal: principalPart,
+            interest,
+            balance,
+          });
+        } else {
+          let principalPart = 0;
+          if (balance > 0.005) {
+            principalPart = Math.min(ev.amount, balance);
+          }
+          balance = Math.max(0, balance - principalPart);
+          if (balance < 0.005) balance = 0;
+
+          rows.push({
+            kind: "extra",
+            n: null,
+            label: "Extra",
+            id: ev.id,
+            due: ev.due,
+            payKey: `extra:${ev.id}`,
+            payment: principalPart,
+            principal: principalPart,
+            interest: 0,
+            balance,
+            requested: ev.amount,
+          });
         }
-        const actualPayment = principalPart + interest;
-        balance = Math.max(0, balance - principalPart);
-
-        const due = new Date(start);
-        due.setMonth(start.getMonth() + (i - 1));
-
-        rows.push({
-          n: i,
-          due,
-          dueKey: isoDate(due),
-          payment: actualPayment,
-          principal: principalPart,
-          interest,
-          balance,
-        });
       }
 
       return { rows, payment, totalInterest: rows.reduce((s, x) => s + x.interest, 0) };
     }
 
     function paymentStatus(row) {
-      if (paidSet.has(row.dueKey)) return "paid";
+      if (paidSet.has(row.payKey)) return "paid";
       const t = today();
       const dueMonth = row.due.getFullYear() === t.getFullYear() && row.due.getMonth() === t.getMonth();
       if (row.due < t) return "missed";
@@ -1374,7 +1634,7 @@
     function currentYearStats() {
       const y = today().getFullYear();
       const yearRows = schedule.filter((r) => r.due.getFullYear() === y);
-      const paidRows = yearRows.filter((r) => paidSet.has(r.dueKey));
+      const paidRows = yearRows.filter((r) => paidSet.has(r.payKey));
       const scheduledPrincipal = yearRows.reduce((s, r) => s + r.principal, 0);
       const scheduledInterest = yearRows.reduce((s, r) => s + r.interest, 0);
       const paidPrincipal = paidRows.reduce((s, r) => s + r.principal, 0);
@@ -1391,14 +1651,28 @@
       };
     }
 
+    function chipHtml(row) {
+      const status = paymentStatus(row);
+      const extraClass = row.kind === "extra" ? " extra" : "";
+      const detail =
+        row.kind === "extra"
+          ? `Extra · all principal`
+          : `Principal ${money(row.principal)}<br />Interest ${money(row.interest)}`;
+      return `<button type="button" class="pay-chip ${status}${extraClass}" data-pay="${row.payKey}" title="Click to toggle paid">
+        <strong>${money(row.payment)}</strong>
+        ${detail}
+      </button>`;
+    }
+
     function renderYearStrip() {
       const s = currentYearStats();
-      const next = schedule.find((r) => !paidSet.has(r.dueKey));
+      const next = schedule.find((r) => !paidSet.has(r.payKey) && r.payment > 0);
+      const extraCount = extras.length;
       els.yearStrip.innerHTML = `
         <div class="stat highlight">
           <div class="label">${s.year} payments</div>
           <div class="value">${s.paidCount} / ${s.count}</div>
-          <div class="sub">${s.remaining} remaining this year</div>
+          <div class="sub">${s.remaining} remaining this year${extraCount ? ` · ${extraCount} extra` : ""}</div>
         </div>
         <div class="stat">
           <div class="label">${s.year} principal</div>
@@ -1424,9 +1698,10 @@
 
       const byMonth = new Map();
       for (const row of schedule) {
-        if (row.due.getFullYear() === viewYear) {
-          byMonth.set(row.due.getMonth(), row);
-        }
+        if (row.due.getFullYear() !== viewYear) continue;
+        const m = row.due.getMonth();
+        if (!byMonth.has(m)) byMonth.set(m, []);
+        byMonth.get(m).push(row);
       }
 
       let html = "";
@@ -1434,10 +1709,10 @@
         const name = new Date(viewYear, month, 1).toLocaleDateString(undefined, {
           month: "long",
         });
-        const row = byMonth.get(month);
+        const rows = byMonth.get(month) || [];
         const isCurrent = t.getFullYear() === viewYear && t.getMonth() === month;
 
-        if (!row) {
+        if (!rows.length) {
           html += `<div class="month-cell empty${isCurrent ? " current" : ""}">
             <div class="month-name">${name}</div>
             <div class="month-empty-note">No payment</div>
@@ -1445,14 +1720,9 @@
           continue;
         }
 
-        const status = paymentStatus(row);
         html += `<div class="month-cell${isCurrent ? " current" : ""}">
           <div class="month-name">${name}</div>
-          <button type="button" class="pay-chip ${status}" data-due="${row.dueKey}" title="Click to toggle paid">
-            <strong>${money(row.payment)}</strong>
-            Principal ${money(row.principal)}<br />
-            Interest ${money(row.interest)}
-          </button>
+          <div class="month-chips">${rows.map(chipHtml).join("")}</div>
         </div>`;
       }
 
@@ -1465,43 +1735,51 @@
         .map((row) => {
           const status = paymentStatus(row);
           const paid = status === "paid";
-          return `<tr class="${paid ? "paid-row" : ""}${row.due.getFullYear() === y ? " current-year" : ""}">
-            <td>${row.n}</td>
+          const num =
+            row.kind === "extra"
+              ? `<span class="type-pill">Extra</span>`
+              : row.label;
+          return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}${row.due.getFullYear() === y ? " current-year" : ""}">
+            <td>${num}</td>
             <td>${fmtDate(row.due)}</td>
             <td>${money(row.payment)}</td>
             <td>${money(row.principal)}</td>
             <td>${money(row.interest)}</td>
             <td>${money(row.balance)}</td>
-            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-due="${row.dueKey}">${paid ? "Paid" : "Mark paid"}</button></td>
+            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
           </tr>`;
         })
         .join("");
 
       const totalPaid = schedule
-        .filter((r) => paidSet.has(r.dueKey))
+        .filter((r) => paidSet.has(r.payKey))
         .reduce((s, r) => s + r.payment, 0);
       let bal = loanMeta.principal;
       for (const r of schedule) {
-        if (paidSet.has(r.dueKey)) bal = r.balance;
+        if (paidSet.has(r.payKey)) bal = r.balance;
         else break;
       }
+
+      const scheduledCount = schedule.filter((r) => r.kind === "scheduled").length;
+      const extraCount = schedule.filter((r) => r.kind === "extra").length;
 
       els.amortSummary.innerHTML = `
         <div><div class="k">Monthly payment</div><div class="v">${money(loanMeta.payment)}</div></div>
         <div><div class="k">Total interest (full term)</div><div class="v">${money(loanMeta.totalInterest)}</div></div>
         <div><div class="k">Balance after tracked pays</div><div class="v">${money(bal)}</div></div>
       `;
-      els.paymentHint.textContent = `${schedule.length} payments · ${money(totalPaid)} marked paid`;
+      els.paymentHint.textContent = `${scheduledCount} scheduled${extraCount ? ` + ${extraCount} extra` : ""} · ${money(totalPaid)} marked paid`;
     }
 
     function renderTrack() {
       const filter = els.trackFilter.value;
       const y = today().getFullYear();
       const rows = schedule.filter((row) => {
-        const paid = paidSet.has(row.dueKey);
+        const paid = paidSet.has(row.payKey);
         if (filter === "paid") return paid;
         if (filter === "unpaid") return !paid;
         if (filter === "year") return row.due.getFullYear() === y;
+        if (filter === "extra") return row.kind === "extra";
         return true;
       });
 
@@ -1512,14 +1790,22 @@
 
       els.trackBody.innerHTML = rows
         .map((row) => {
-          const paid = paidSet.has(row.dueKey);
-          return `<tr class="${paid ? "paid-row" : ""}">
-            <td>${row.n}</td>
-            <td>${fmtDate(row.due)}</td>
+          const paid = paidSet.has(row.payKey);
+          const num =
+            row.kind === "extra"
+              ? `<span class="type-pill">Extra</span>`
+              : row.label;
+          const remove =
+            row.kind === "extra"
+              ? ` <button type="button" class="btn-text danger" data-remove-extra="${row.id}" style="padding:0.2rem 0.4rem;font-size:0.8rem;">Remove</button>`
+              : "";
+          return `<tr class="${paid ? "paid-row" : ""}${row.kind === "extra" ? " extra-row" : ""}">
+            <td>${num}</td>
+            <td>${fmtDate(row.due)}${remove}</td>
             <td>${money(row.payment)}</td>
             <td>${money(row.principal)}</td>
             <td>${money(row.interest)}</td>
-            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-due="${row.dueKey}">${paid ? "Paid" : "Mark paid"}</button></td>
+            <td><button type="button" class="status-btn ${paid ? "paid" : ""}" data-pay="${row.payKey}">${paid ? "Paid" : "Mark paid"}</button></td>
           </tr>`;
         })
         .join("");
@@ -1532,16 +1818,25 @@
       renderTrack();
     }
 
-    function togglePaid(dueKey) {
-      if (paidSet.has(dueKey)) paidSet.delete(dueKey);
-      else paidSet.add(dueKey);
+    function togglePaid(payKey) {
+      if (paidSet.has(payKey)) paidSet.delete(payKey);
+      else paidSet.add(payKey);
       persistActivePayments();
       renderAll();
     }
 
     function applyLoan(meta, paidList, opts = {}) {
-      const { persist = true } = opts;
-      const built = buildSchedule(meta.principal, meta.rate, meta.term, meta.startDate);
+      const { persist = true, extras: extrasOpt } = opts;
+      extras = Array.isArray(extrasOpt)
+        ? extrasOpt.map((ex) => ({ ...ex }))
+        : [...extras];
+      const built = buildSchedule(
+        meta.principal,
+        meta.rate,
+        meta.term,
+        meta.startDate,
+        extras
+      );
       schedule = built.rows;
       loanMeta = {
         ...meta,
@@ -1549,7 +1844,8 @@
         totalInterest: built.totalInterest,
       };
       paidSet = new Set(paidList || []);
-      viewYear = today().getFullYear();
+      if (viewYear == null) viewYear = today().getFullYear();
+      if (!els.extraDate.value) els.extraDate.value = isoDate(today());
       renderAll();
       updateEmptyState();
       if (persist) persistActivePayments();
@@ -1573,6 +1869,26 @@
       persistActivePayments();
       renderAll();
       updateProfileMeta();
+    });
+
+    els.extraForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const date = els.extraDate.value;
+      const amount = Number(els.extraAmount.value);
+      if (!date || !(amount > 0)) return;
+      if (!activeProfile()?.loan) {
+        window.alert("Create a profile with loan details first.");
+        return;
+      }
+      addExtraPayment(date, amount);
+      els.extraAmount.value = "";
+      els.extraAmount.focus();
+    });
+
+    els.extrasList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-remove-extra]");
+      if (!btn) return;
+      removeExtraPayment(btn.dataset.removeExtra);
     });
 
     els.prevYear.addEventListener("click", () => {
@@ -1599,18 +1915,23 @@
     });
 
     els.calendarGrid.addEventListener("click", (e) => {
-      const chip = e.target.closest("[data-due]");
-      if (chip) togglePaid(chip.dataset.due);
+      const chip = e.target.closest("[data-pay]");
+      if (chip) togglePaid(chip.dataset.pay);
     });
 
     els.amortBody.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-due]");
-      if (btn) togglePaid(btn.dataset.due);
+      const btn = e.target.closest("[data-pay]");
+      if (btn) togglePaid(btn.dataset.pay);
     });
 
     els.trackBody.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-due]");
-      if (btn) togglePaid(btn.dataset.due);
+      const removeBtn = e.target.closest("[data-remove-extra]");
+      if (removeBtn) {
+        removeExtraPayment(removeBtn.dataset.removeExtra);
+        return;
+      }
+      const btn = e.target.closest("[data-pay]");
+      if (btn) togglePaid(btn.dataset.pay);
     });
 
     els.trackFilter.addEventListener("change", renderTrack);
@@ -1619,7 +1940,7 @@
       const t = today();
       for (const row of schedule) {
         if (row.due <= t || (row.due.getFullYear() === t.getFullYear() && row.due.getMonth() === t.getMonth())) {
-          paidSet.add(row.dueKey);
+          paidSet.add(row.payKey);
         }
       }
       persistActivePayments();
