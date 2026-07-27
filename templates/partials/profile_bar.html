@@ -1,4 +1,4 @@
-<section class="profile-bar{% if !has_profiles %} hidden{% endif %}" id="profileBar" aria-label="Profiles">
+<section class="profile-bar{% if !has_profiles %} hidden{% endif %}" id="profileBar" aria-label="Profiles" data-is-owner="{% if is_owner %}true{% else %}false{% endif %}">
   <div class="profile-select-wrap">
     <span>Profile</span>
     <select id="profileSelect" name="profile_id" aria-label="Active profile"
@@ -13,7 +13,7 @@
       <option value="">No profiles yet</option>
       {% else %}
         {% for p in profiles %}
-        <option value="{{ p.id }}"{% if p.selected %} selected{% endif %}>{{ p.name }}</option>
+        <option value="{{ p.id }}" data-shared="{% if p.is_shared %}true{% else %}false{% endif %}"{% if p.selected %} selected{% endif %}>{% if p.is_shared %}{{ p.name }} (shared){% else %}{{ p.name }}{% endif %}</option>
         {% endfor %}
       {% endif %}
     </select>
@@ -24,8 +24,8 @@
       <button type="button" class="menu-toggle" id="profileMenuBtn" aria-label="More profile actions" aria-haspopup="menu" aria-expanded="false"{% if !has_profiles %} disabled{% endif %}>···</button>
       <div class="menu-panel" role="menu" id="profileMenuPanel">
         <button type="button" role="menuitem" id="newProfileBtn">New profile</button>
-        <button type="button" role="menuitem" id="renameProfileBtn"{% if !has_profiles %} disabled{% endif %}>Rename…</button>
-        <button type="button" role="menuitem" class="menu-danger" id="deleteProfileBtn"{% if !has_profiles %} disabled{% endif %}>Delete profile</button>
+        <button type="button" role="menuitem" id="renameProfileBtn"{% if !has_profiles || !is_owner %} disabled{% endif %}{% if !is_owner %} hidden{% endif %}>Rename…</button>
+        <button type="button" role="menuitem" class="menu-danger" id="deleteProfileBtn"{% if !has_profiles || !is_owner %} disabled{% endif %}{% if !is_owner %} hidden{% endif %}>Delete profile</button>
       </div>
     </div>
   </div>

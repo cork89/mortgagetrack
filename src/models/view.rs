@@ -69,6 +69,7 @@ pub struct ProfileOption {
     pub id: String,
     pub name: String,
     pub selected: bool,
+    pub is_shared: bool,
 }
 
 #[derive(Debug, Clone)]

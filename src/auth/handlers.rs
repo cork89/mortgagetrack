@@ -1,7 +1,7 @@
 //! Registration, login, and logout handlers.
 
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -16,6 +16,7 @@ use super::middleware::{
 use super::models::{
     create_user, find_user_by_email, validate_email, validate_password, verify_password,
 };
+use super::next::safe_next;
 use crate::app_state::AppState;
 use crate::error::{AppError, AppResult};
 use crate::templates::{AuthErrorPartial, HtmlTemplate, LoginTemplate, RegisterTemplate};
@@ -28,9 +29,15 @@ pub fn routes() -> Router<AppState> {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AuthQuery {
+    pub next: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct LoginForm {
     pub email: String,
     pub password: String,
+    pub next: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,26 +45,33 @@ pub struct RegisterForm {
     pub email: String,
     pub password: String,
     pub confirm_password: String,
+    pub next: Option<String>,
 }
 
-async fn login_page(session: Session) -> AppResult<Response> {
+async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
+    let next = safe_next(q.next.as_deref()).unwrap_or("").to_string();
     if get_user_id(&session).await?.is_some() {
-        return Ok(Redirect::to(HOME_PATH).into_response());
+        let dest = if next.is_empty() { HOME_PATH } else { &next };
+        return Ok(Redirect::to(dest).into_response());
     }
     Ok(HtmlTemplate(LoginTemplate {
         error: String::new(),
         email: String::new(),
+        next,
     })
     .into_response())
 }
 
-async fn register_page(session: Session) -> AppResult<Response> {
+async fn register_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
+    let next = safe_next(q.next.as_deref()).unwrap_or("").to_string();
     if get_user_id(&session).await?.is_some() {
-        return Ok(Redirect::to(HOME_PATH).into_response());
+        let dest = if next.is_empty() { HOME_PATH } else { &next };
+        return Ok(Redirect::to(dest).into_response());
     }
     Ok(HtmlTemplate(RegisterTemplate {
         error: String::new(),
         email: String::new(),
+        next,
     })
     .into_response())
 }
@@ -68,9 +82,18 @@ async fn login_submit(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
+    let next = safe_next(form.next.as_deref())
+        .unwrap_or(HOME_PATH)
+        .to_string();
     match login_inner(&state, &session, &form).await {
-        Ok(()) => hx_redirect(&headers, HOME_PATH),
-        Err(err) => auth_error_response(&headers, err.to_string(), &form.email, true),
+        Ok(()) => hx_redirect(&headers, &next),
+        Err(err) => auth_error_response(
+            &headers,
+            err.to_string(),
+            &form.email,
+            true,
+            form.next.as_deref().unwrap_or(""),
+        ),
     }
 }
 
@@ -102,9 +125,18 @@ async fn register_submit(
     headers: HeaderMap,
     Form(form): Form<RegisterForm>,
 ) -> Response {
+    let next = safe_next(form.next.as_deref())
+        .unwrap_or(HOME_PATH)
+        .to_string();
     match register_inner(&state, &session, &form).await {
-        Ok(()) => hx_redirect(&headers, HOME_PATH),
-        Err(err) => auth_error_response(&headers, err.to_string(), &form.email, false),
+        Ok(()) => hx_redirect(&headers, &next),
+        Err(err) => auth_error_response(
+            &headers,
+            err.to_string(),
+            &form.email,
+            false,
+            form.next.as_deref().unwrap_or(""),
+        ),
     }
 }
 
@@ -137,7 +169,9 @@ fn auth_error_response(
     message: String,
     email: &str,
     is_login: bool,
+    next: &str,
 ) -> Response {
+    let next = safe_next(Some(next)).unwrap_or("").to_string();
     if is_htmx(headers) {
         (
             StatusCode::BAD_REQUEST,
@@ -150,6 +184,7 @@ fn auth_error_response(
             HtmlTemplate(LoginTemplate {
                 error: message,
                 email: email.to_string(),
+                next,
             }),
         )
             .into_response()
@@ -159,6 +194,7 @@ fn auth_error_response(
             HtmlTemplate(RegisterTemplate {
                 error: message,
                 email: email.to_string(),
+                next,
             }),
         )
             .into_response()

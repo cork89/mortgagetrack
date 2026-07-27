@@ -62,8 +62,14 @@ pub struct ExtraPayment {
     pub amount: f64,
 }
 
-fn user_key(user_id: Uuid) -> String {
+pub(crate) fn user_key(user_id: Uuid) -> String {
     user_id.to_string()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileRole {
+    Owner,
+    Editor,
 }
 
 pub async fn require_owned_profile(
@@ -84,16 +90,55 @@ pub async fn require_owned_profile(
     Ok(())
 }
 
+pub async fn require_profile_access(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+) -> AppResult<ProfileRole> {
+    let key = user_key(user_id);
+    let owned: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM profiles WHERE id = ? AND user_id = ?")
+            .bind(profile_id)
+            .bind(&key)
+            .fetch_optional(pool)
+            .await?;
+    if owned.is_some() {
+        return Ok(ProfileRole::Owner);
+    }
+
+    let collab: Option<(String,)> = sqlx::query_as(
+        "SELECT user_id FROM profile_collaborators WHERE profile_id = ? AND user_id = ?",
+    )
+    .bind(profile_id)
+    .bind(&key)
+    .fetch_optional(pool)
+    .await?;
+
+    if collab.is_some() {
+        return Ok(ProfileRole::Editor);
+    }
+
+    Err(AppError::NotFound("Profile not found".into()))
+}
+
 pub async fn list_profiles(pool: &SqlitePool, user_id: Uuid) -> AppResult<Vec<Profile>> {
+    let key = user_key(user_id);
     let rows = sqlx::query_as::<_, Profile>(
         r#"
         SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest
         FROM profiles
         WHERE user_id = ?
+        UNION
+        SELECT p.id, p.user_id, p.name, p.principal, p.rate, p.term_years, p.start_date,
+               p.monthly_payment, p.total_interest
+        FROM profiles p
+        INNER JOIN profile_collaborators c ON c.profile_id = p.id
+        WHERE c.user_id = ?
         ORDER BY name COLLATE NOCASE
         "#,
     )
-    .bind(user_key(user_id))
+    .bind(&key)
+    .bind(&key)
     .fetch_all(pool)
     .await?;
     Ok(rows)
@@ -104,15 +149,24 @@ pub async fn load_profile(
     user_id: Uuid,
     id: &str,
 ) -> AppResult<Option<Profile>> {
+    let key = user_key(user_id);
     let row = sqlx::query_as::<_, Profile>(
         r#"
         SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest
         FROM profiles
-        WHERE id = ? AND user_id = ?
+        WHERE id = ?
+          AND (
+            user_id = ?
+            OR EXISTS (
+              SELECT 1 FROM profile_collaborators c
+              WHERE c.profile_id = profiles.id AND c.user_id = ?
+            )
+          )
         "#,
     )
     .bind(id)
-    .bind(user_key(user_id))
+    .bind(&key)
+    .bind(&key)
     .fetch_optional(pool)
     .await?;
     Ok(row)
@@ -135,7 +189,7 @@ pub async fn set_active_profile(
     id: Option<&str>,
 ) -> AppResult<()> {
     if let Some(profile_id) = id {
-        require_owned_profile(pool, user_id, profile_id).await?;
+        require_profile_access(pool, user_id, profile_id).await?;
     }
 
     sqlx::query(
@@ -187,7 +241,7 @@ pub async fn upsert_payment_note(
     pay_key: &str,
     note: &str,
 ) -> AppResult<()> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
     let trimmed = note.trim();
     if trimmed.is_empty() {
         sqlx::query("DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?")
@@ -274,8 +328,13 @@ pub async fn update_profile_loan(
     term_years: i32,
     start_date: NaiveDate,
 ) -> AppResult<Profile> {
-    require_owned_profile(pool, user_id, id).await?;
-    ensure_unique_name(pool, user_id, name, Some(id)).await?;
+    require_profile_access(pool, user_id, id).await?;
+    let profile = load_profile(pool, user_id, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
+    let owner_id = Uuid::parse_str(&profile.user_id)
+        .map_err(|_| AppError::Internal("invalid profile owner id".into()))?;
+    ensure_unique_name(pool, owner_id, name, Some(id)).await?;
     let extras = list_extras(pool, id).await?;
     let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
         .iter()
@@ -292,7 +351,7 @@ pub async fn update_profile_loan(
         UPDATE profiles
         SET name = ?, principal = ?, rate = ?, term_years = ?, start_date = ?,
             monthly_payment = ?, total_interest = ?
-        WHERE id = ? AND user_id = ?
+        WHERE id = ?
         "#,
     )
     .bind(name)
@@ -303,7 +362,6 @@ pub async fn update_profile_loan(
     .bind(built.payment)
     .bind(built.total_interest)
     .bind(id)
-    .bind(user_key(user_id))
     .execute(pool)
     .await?;
 
@@ -374,7 +432,7 @@ pub async fn toggle_paid(
     profile_id: &str,
     pay_key: &str,
 ) -> AppResult<bool> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
 
     let existing: Option<(String,)> =
         sqlx::query_as("SELECT pay_key FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
@@ -401,7 +459,7 @@ pub async fn toggle_paid(
 }
 
 pub async fn clear_paid(pool: &SqlitePool, user_id: Uuid, profile_id: &str) -> AppResult<()> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
     sqlx::query("DELETE FROM paid_keys WHERE profile_id = ?")
         .bind(profile_id)
         .execute(pool)
@@ -415,7 +473,7 @@ pub async fn mark_due_paid(
     profile_id: &str,
     pay_keys: &[String],
 ) -> AppResult<()> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
     for key in pay_keys {
         sqlx::query("INSERT OR IGNORE INTO paid_keys (profile_id, pay_key) VALUES (?, ?)")
             .bind(profile_id)
@@ -433,7 +491,7 @@ pub async fn add_extra(
     date: NaiveDate,
     amount: f64,
 ) -> AppResult<ExtraPayment> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
         return Err(AppError::BadRequest("Amount must be positive".into()));
     }
@@ -470,7 +528,7 @@ pub async fn delete_extra(
     profile_id: &str,
     extra_id: &str,
 ) -> AppResult<()> {
-    require_owned_profile(pool, user_id, profile_id).await?;
+    require_profile_access(pool, user_id, profile_id).await?;
     let pay_key = format!("extra:{extra_id}");
     sqlx::query("DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
         .bind(profile_id)
@@ -520,15 +578,12 @@ async fn refresh_loan_totals(
         loan.start_date,
         &extra_tuples,
     );
-    sqlx::query(
-        "UPDATE profiles SET monthly_payment = ?, total_interest = ? WHERE id = ? AND user_id = ?",
-    )
-    .bind(built.payment)
-    .bind(built.total_interest)
-    .bind(profile_id)
-    .bind(user_key(user_id))
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE profiles SET monthly_payment = ?, total_interest = ? WHERE id = ?")
+        .bind(built.payment)
+        .bind(built.total_interest)
+        .bind(profile_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

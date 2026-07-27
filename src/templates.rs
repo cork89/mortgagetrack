@@ -58,6 +58,7 @@ pub fn panel_update<T: Template>(
 pub struct IndexTemplate {
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
+    pub is_owner: bool,
     pub empty: EmptyState,
     pub dashboard: Option<DashboardView>,
     pub default_start: String,
@@ -89,7 +90,25 @@ pub struct ItemCardTemplate {
 pub struct ProfileBarTemplate {
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
+    pub is_owner: bool,
     pub dashboard: Option<DashboardView>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CollaboratorView {
+    pub user_id: String,
+    pub email: String,
+}
+
+#[derive(Template)]
+#[template(path = "partials/share_panel.html")]
+pub struct SharePanelTemplate {
+    pub profile_id: String,
+    pub is_owner: bool,
+    pub has_active_invite: bool,
+    pub active_expires_at: String,
+    pub fresh_invite_url: String,
+    pub collaborators: Vec<CollaboratorView>,
 }
 
 #[derive(Template)]
@@ -168,6 +187,7 @@ pub struct ErrorPartial {
 pub struct LoginTemplate {
     pub error: String,
     pub email: String,
+    pub next: String,
 }
 
 #[derive(Template)]
@@ -175,6 +195,7 @@ pub struct LoginTemplate {
 pub struct RegisterTemplate {
     pub error: String,
     pub email: String,
+    pub next: String,
 }
 
 #[derive(Template)]

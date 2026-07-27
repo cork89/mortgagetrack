@@ -222,6 +222,52 @@
     return `Profile ${count + 1}`;
   }
 
+  function isActiveOwner() {
+    const select = document.getElementById("profileSelect");
+    const opt = select?.selectedOptions?.[0];
+    if (opt?.dataset.shared != null) return opt.dataset.shared !== "true";
+    const bar = document.getElementById("profileBar");
+    return bar?.dataset.isOwner !== "false";
+  }
+
+  function syncOwnerMenu() {
+    const owner = isActiveOwner();
+    const bar = document.getElementById("profileBar");
+    if (bar) bar.dataset.isOwner = owner ? "true" : "false";
+    ["renameProfileBtn", "deleteProfileBtn"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.hidden = !owner;
+      el.disabled = !owner || !document.getElementById("profileSelect")?.value;
+    });
+  }
+
+  function hideShareEditor() {
+    const wrap = document.getElementById("shareEditor");
+    const panel = document.getElementById("sharePanel");
+    wrap?.classList.add("hidden");
+    if (panel) panel.innerHTML = "";
+  }
+
+  function fillShareInviteUrl() {
+    const input = document.getElementById("shareInviteUrl");
+    if (!input) return;
+    const path = input.dataset.path || "";
+    if (path) input.value = `${window.location.origin}${path}`;
+  }
+
+  function loadSharePanel(profileId) {
+    const wrap = document.getElementById("shareEditor");
+    const panel = document.getElementById("sharePanel");
+    if (!wrap || !panel || !profileId) return;
+    wrap.classList.remove("hidden");
+    if (typeof htmx === "undefined") return;
+    htmx.ajax("GET", `/profiles/${profileId}/share-panel`, {
+      target: "#sharePanel",
+      swap: "innerHTML",
+    });
+  }
+
   function openCreate() {
     closeProfileMenu();
     setLoanFormMode("create");
@@ -231,6 +277,7 @@
     document.getElementById("loanFields").classList.remove("hidden");
     document.getElementById("resetWrap").classList.add("hidden");
     document.getElementById("extrasEditor").classList.add("hidden");
+    hideShareEditor();
     document.getElementById("profileName").value = nextProfileName();
     document.getElementById("principal").value = "400000";
     document.getElementById("rate").value = "6.5";
@@ -271,11 +318,13 @@
       document.body.appendChild(f);
       f.submit();
     };
+    loadSharePanel(id);
     popover()?.showPopover();
   }
 
   function openRename() {
     closeProfileMenu();
+    if (!isActiveOwner()) return;
     const dash = dashboard();
     const select = document.getElementById("profileSelect");
     const id = dash?.dataset.profileId || select?.value;
@@ -287,8 +336,10 @@
     document.getElementById("loanFields").classList.add("hidden");
     document.getElementById("resetWrap").classList.add("hidden");
     document.getElementById("extrasEditor").classList.add("hidden");
+    hideShareEditor();
+    const label = select?.selectedOptions?.[0]?.textContent || "";
     document.getElementById("profileName").value =
-      dash?.dataset.name || select?.selectedOptions?.[0]?.textContent || "";
+      dash?.dataset.name || label.replace(/\s*\(shared\)\s*$/, "") || "";
     document.getElementById("error").textContent = "";
     popover()?.showPopover();
     document.getElementById("profileName").focus();
@@ -381,6 +432,8 @@
     document.getElementById("newProfileBtn")?.addEventListener("click", openCreate);
     document.getElementById("editProfileBtn")?.addEventListener("click", openEdit);
     document.getElementById("renameProfileBtn")?.addEventListener("click", openRename);
+    document.getElementById("profileSelect")?.addEventListener("change", syncOwnerMenu);
+    syncOwnerMenu();
     document.getElementById("emptyNewBtn")?.addEventListener("click", (e) => {
       if (e.currentTarget.dataset.emptyAction === "edit") openEdit();
       else openCreate();
@@ -399,6 +452,7 @@
     });
     document.getElementById("deleteProfileBtn")?.addEventListener("click", () => {
       closeProfileMenu();
+      if (!isActiveOwner()) return;
       const select = document.getElementById("profileSelect");
       const id = select?.value;
       const name = select?.selectedOptions?.[0]?.textContent || "this profile";
@@ -409,6 +463,25 @@
       f.action = `/profiles/${id}/delete`;
       document.body.appendChild(f);
       f.submit();
+    });
+    document.getElementById("sharePanel")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("#copyShareLinkBtn");
+      if (!btn) return;
+      const input = document.getElementById("shareInviteUrl");
+      fillShareInviteUrl();
+      const value = input?.value || "";
+      if (!value) return;
+      navigator.clipboard?.writeText(value).then(() => {
+        btn.textContent = "Copied";
+        setTimeout(() => {
+          btn.textContent = "Copy link";
+        }, 1500);
+      });
+    });
+    document.body.addEventListener("htmx:afterSwap", (e) => {
+      if (e.detail?.target?.id === "sharePanel") {
+        fillShareInviteUrl();
+      }
     });
     document.getElementById("profileMenuBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();

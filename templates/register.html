@@ -17,6 +17,9 @@
     hx-target="#auth-error"
     hx-swap="innerHTML"
   >
+    {% if !next.is_empty() %}
+    <input type="hidden" name="next" value="{{ next }}" />
+    {% endif %}
     <div id="auth-error" aria-live="polite">
       {% if !error.is_empty() %}
       <p class="error" role="alert">{{ error }}</p>
@@ -43,7 +46,7 @@
 
   <p class="auth-switch">
     Already have an account?
-    <a href="/login">Sign in</a>
+    <a href="/login{% if !next.is_empty() %}?next={{ next }}{% endif %}">Sign in</a>
   </p>
 </section>
 {% endblock %}

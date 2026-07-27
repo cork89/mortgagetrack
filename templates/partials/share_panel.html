@@ -1,0 +1,61 @@
+<div class="share-panel" id="sharePanelInner" data-profile-id="{{ profile_id }}">
+  {% if is_owner %}
+  <h3>Share</h3>
+  <p class="share-help">Send a one-time link. It expires in 24 hours; after they join, they keep edit access until you remove them.</p>
+
+  {% if !fresh_invite_url.is_empty() %}
+  <div class="share-invite-fresh">
+    <label class="share-link-label">
+      Invite link
+      <input id="shareInviteUrl" type="text" readonly value="" data-path="{{ fresh_invite_url }}" />
+    </label>
+    <button type="button" class="btn-ghost" id="copyShareLinkBtn">Copy link</button>
+    <p class="share-meta">Expires {{ active_expires_at }} · single use</p>
+  </div>
+  {% else if has_active_invite %}
+  <p class="share-meta">An unused invite is still valid until {{ active_expires_at }}. Generate a new link to replace it.</p>
+  {% endif %}
+
+  <button type="button"
+    class="btn-ghost share-generate-btn"
+    id="generateShareLinkBtn"
+    hx-post="/profiles/{{ profile_id }}/share"
+    hx-target="#sharePanel"
+    hx-swap="innerHTML">
+    Generate invite link
+  </button>
+
+  <div class="share-collaborators">
+    <h4>People with access</h4>
+    {% if collaborators.is_empty() %}
+    <p class="share-meta">No collaborators yet.</p>
+    {% else %}
+    <ul class="share-collab-list">
+      {% for c in collaborators %}
+      <li>
+        <span>{{ c.email }}</span>
+        <button type="button"
+          class="btn-ghost menu-danger"
+          hx-post="/profiles/{{ profile_id }}/collaborators/{{ c.user_id }}/remove"
+          hx-target="#sharePanel"
+          hx-swap="innerHTML"
+          hx-confirm="Remove {{ c.email }}’s access to this profile?">
+          Remove
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% else %}
+  <h3>Shared with you</h3>
+  <p class="share-help">You can edit this profile. Leaving removes your access.</p>
+  <button type="button"
+    class="btn-ghost menu-danger"
+    id="leaveSharedProfileBtn"
+    hx-post="/profiles/{{ profile_id }}/leave"
+    hx-confirm="Leave this shared profile? You will lose edit access.">
+    Leave profile
+  </button>
+  {% endif %}
+</div>

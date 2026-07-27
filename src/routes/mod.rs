@@ -1,4 +1,5 @@
 mod pages;
+mod sharing;
 
 use axum::Router;
 
@@ -9,4 +10,5 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .merge(auth::routes())
         .merge(pages::routes())
+        .merge(sharing::routes())
 }

@@ -498,11 +498,21 @@ async fn load_page(
     user: &AuthUser,
 ) -> AppResult<IndexTemplate> {
     let profiles = list_profiles(&state.pool, user.id).await?;
-    let active_id = get_active_profile_id(&state.pool, user.id).await?;
-    let active = match &active_id {
+    let mut active_id = get_active_profile_id(&state.pool, user.id).await?;
+    let mut active = match &active_id {
         Some(id) => load_profile(&state.pool, user.id, id).await?,
         None => None,
     };
+    // Access may have been revoked; fall back to another visible profile.
+    if active_id.is_some() && active.is_none() {
+        let fallback = profiles.first().map(|p| p.id.as_str());
+        set_active_profile(&state.pool, user.id, fallback).await?;
+        active_id = fallback.map(|s| s.to_string());
+        active = match &active_id {
+            Some(id) => load_profile(&state.pool, user.id, id).await?,
+            None => None,
+        };
+    }
 
     let today = state.today();
     let view_year = q.year.unwrap_or_else(|| today.year());
@@ -529,14 +539,21 @@ async fn load_page(
         None
     };
 
+    let user_key = user.id.to_string();
     let profile_opts: Vec<ProfileOption> = profiles
         .iter()
         .map(|p| ProfileOption {
             id: p.id.clone(),
             name: p.name.clone(),
             selected: active_id.as_deref() == Some(p.id.as_str()),
+            is_shared: p.user_id != user_key,
         })
         .collect();
+
+    let is_owner = match &active {
+        Some(p) => p.user_id == user_key,
+        None => true,
+    };
 
     let default_start = {
         let d = today;
@@ -559,6 +576,7 @@ async fn load_page(
     Ok(IndexTemplate {
         has_profiles: !profiles.is_empty(),
         profiles: profile_opts,
+        is_owner,
         empty: empty_state(active.as_ref()),
         dashboard,
         default_start,
