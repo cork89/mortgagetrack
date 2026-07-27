@@ -111,12 +111,14 @@ pub struct PaymentRowView {
     pub year_label: String,
     pub year_sub: String,
     pub is_current_year: bool,
+    pub is_current_month: bool,
     pub label_html: String,
     pub due: String,
     pub payment: String,
     pub principal: String,
     pub interest: String,
     pub balance: String,
+    pub balance_short: String,
     pub pay_key: String,
     pub paid: bool,
     pub is_extra: bool,
@@ -162,7 +164,9 @@ pub struct ChartPair {
 #[derive(Debug, Clone)]
 pub struct DashboardView {
     pub profile_id: String,
-    pub profile_meta: String,
+    pub profile_principal: String,
+    pub profile_rate: String,
+    pub profile_term: String,
     pub year_stats: Vec<YearStat>,
     pub view_year: i32,
     pub months: Vec<MonthCell>,
@@ -194,6 +198,21 @@ pub fn money(n: f64) -> String {
         out.push(*ch as char);
     }
     let formatted = format!("${out}.{:02}", cents.clamp(0, 99));
+    if neg {
+        format!("-{formatted}")
+    } else {
+        formatted
+    }
+}
+
+fn money_short(n: f64) -> String {
+    let neg = n < 0.0;
+    let abs = n.abs();
+    let formatted = if abs >= 1000.0 {
+        format!("${:.0}k", abs / 1000.0)
+    } else {
+        money(abs)
+    };
     if neg {
         format!("-{formatted}")
     } else {
@@ -288,19 +307,11 @@ pub fn build_dashboard(
         yearly: build_chart(schedule, "yearly"),
     };
 
-    let paid_count = paid.len();
-    let profile_meta = format!(
-        "{} · {}% · {}yr · {} payment{} tracked",
-        money(loan.principal),
-        loan.rate,
-        loan.term_years,
-        paid_count,
-        if paid_count == 1 { "" } else { "s" }
-    );
-
     Some(DashboardView {
         profile_id: profile.id.clone(),
-        profile_meta,
+        profile_principal: money(loan.principal),
+        profile_rate: format!("{}%", loan.rate),
+        profile_term: format!("{}yr", loan.term_years),
         year_stats,
         view_year,
         months,
@@ -467,6 +478,20 @@ fn payments_table(
         })
         .collect();
 
+    let current_month_key = rows
+        .iter()
+        .find(|r| {
+            r.kind == RowKind::Scheduled
+                && r.due.year() == today.year()
+                && r.due.month() == today.month()
+        })
+        .or_else(|| {
+            rows.iter().find(|r| {
+                r.due.year() == today.year() && r.due.month() == today.month()
+            })
+        })
+        .map(|r| r.pay_key.as_str());
+
     let mut out = Vec::new();
     if rows.is_empty() {
         out.push(PaymentRowView {
@@ -474,12 +499,14 @@ fn payments_table(
             year_label: String::new(),
             year_sub: String::new(),
             is_current_year: false,
+            is_current_month: false,
             label_html: String::new(),
             due: String::new(),
             payment: String::new(),
             principal: String::new(),
             interest: String::new(),
             balance: String::new(),
+            balance_short: String::new(),
             pay_key: String::new(),
             paid: false,
             is_extra: false,
@@ -512,12 +539,14 @@ fn payments_table(
                     money(payment_total)
                 ),
                 is_current_year: year == y,
+                is_current_month: false,
                 label_html: String::new(),
                 due: String::new(),
                 payment: money(payment_total),
                 principal: money(principal_total),
                 interest: money(interest_total),
                 balance: String::new(),
+                balance_short: String::new(),
                 pay_key: String::new(),
                 paid: false,
                 is_extra: false,
@@ -540,12 +569,14 @@ fn payments_table(
                     year_label: String::new(),
                     year_sub: String::new(),
                     is_current_year: row.due.year() == y,
+                    is_current_month: current_month_key == Some(row.pay_key.as_str()),
                     label_html,
                     due: fmt_date(row.due),
                     payment: money(row.payment),
                     principal: money(row.principal),
                     interest: money(row.interest),
                     balance: money(row.balance),
+                    balance_short: money_short(row.balance),
                     pay_key: row.pay_key.clone(),
                     paid: is_paid,
                     is_extra: row.kind == RowKind::Extra,

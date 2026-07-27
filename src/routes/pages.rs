@@ -341,7 +341,7 @@ async fn mark_due_handler(
         .await?
         .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
     let extras = list_extras(&state.pool, &id).await?;
-    let today = chrono::Local::now().date_naive();
+    let today = state.today();
 
     let loan = profile
         .loan()
@@ -504,7 +504,7 @@ async fn load_page(
         None => None,
     };
 
-    let today = chrono::Local::now().date_naive();
+    let today = state.today();
     let view_year = q.year.unwrap_or_else(|| today.year());
     let filter = PaymentFilter::parse(q.filter.as_deref().unwrap_or("all"));
     let grain = q.grain.as_deref().unwrap_or("monthly");

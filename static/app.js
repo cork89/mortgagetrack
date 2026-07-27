@@ -43,7 +43,13 @@
     const meta = document.getElementById("profileMeta");
     if (!meta) return;
     const dash = dashboard();
-    meta.textContent = dash?.dataset.meta || "";
+    const principal = meta.querySelector('[data-field="principal"]');
+    const rate = meta.querySelector('[data-field="rate"]');
+    const term = meta.querySelector('[data-field="term"]');
+    if (principal) principal.textContent = dash?.dataset.principalDisplay || "";
+    if (rate) rate.textContent = dash?.dataset.rateDisplay || "";
+    if (term) term.textContent = dash?.dataset.termDisplay || "";
+    meta.hidden = !dash;
   }
 
   function partialUrl(id) {
@@ -86,6 +92,22 @@
     if (id === "chart") wireChartTooltip();
   }
 
+  let scrolledToCurrentPayment = false;
+
+  function maybeScrollToCurrentMonthPayment() {
+    if (scrolledToCurrentPayment) return;
+    const panel = panelEl("payments");
+    if (!panel?.classList.contains("active")) return;
+    const target = [...panel.querySelectorAll(".payment-current-month")].find(
+      (el) => el.getClientRects().length > 0
+    );
+    scrolledToCurrentPayment = true;
+    if (!target) return;
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }
+
   function activateTab(tabId, { focus = true, syncUrl = true } = {}) {
     const id = normalizeTab(tabId);
     const target = document.querySelector(`.tab[data-tab="${id}"]`);
@@ -111,7 +133,10 @@
         history.replaceState(null, "", next);
       }
     }
-    refreshPanelIfStale(id);
+    const refresh = refreshPanelIfStale(id);
+    if (id === "payments") {
+      Promise.resolve(refresh).finally(() => maybeScrollToCurrentMonthPayment());
+    }
   }
 
   function closeProfileMenu() {

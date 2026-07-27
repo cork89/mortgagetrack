@@ -29,5 +29,34 @@
       </div>
     </div>
   </div>
-  <p class="profile-meta" id="profileMeta">{% match dashboard %}{% when Some with (d) %}{{ d.profile_meta }}{% else %}{% endmatch %}</p>
+  <div class="profile-meta" id="profileMeta"{% match dashboard %}{% when None %} hidden{% else %}{% endmatch %}>
+    {% match dashboard %}
+    {% when Some with (d) %}
+    <div class="profile-chip">
+      <span class="label">Principal</span>
+      <span class="value" data-field="principal">{{ d.profile_principal }}</span>
+    </div>
+    <div class="profile-chip">
+      <span class="label">Rate</span>
+      <span class="value" data-field="rate">{{ d.profile_rate }}</span>
+    </div>
+    <div class="profile-chip">
+      <span class="label">Term</span>
+      <span class="value" data-field="term">{{ d.profile_term }}</span>
+    </div>
+    {% else %}
+    <div class="profile-chip">
+      <span class="label">Principal</span>
+      <span class="value" data-field="principal"></span>
+    </div>
+    <div class="profile-chip">
+      <span class="label">Rate</span>
+      <span class="value" data-field="rate"></span>
+    </div>
+    <div class="profile-chip">
+      <span class="label">Term</span>
+      <span class="value" data-field="term"></span>
+    </div>
+    {% endmatch %}
+  </div>
 </section>

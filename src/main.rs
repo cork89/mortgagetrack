@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use axum::Router;
+use chrono::NaiveDate;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use time::Duration;
@@ -47,7 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_same_site(tower_sessions::cookie::SameSite::Lax)
         .with_expiry(Expiry::OnInactivity(Duration::days(14)));
 
-    let state = AppState { pool };
+    let today_override = parse_current_date_override()?;
+    let state = AppState {
+        pool,
+        today_override,
+    };
 
     let static_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
     let app = Router::new()
@@ -63,10 +68,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(3000);
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
+    if let Some(today) = today_override {
+        tracing::warn!("CURRENT_DATE override active: {today}");
+    }
     tracing::info!("Homestead listening on http://{addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn parse_current_date_override() -> Result<Option<NaiveDate>, Box<dyn std::error::Error>> {
+    let Some(raw) = std::env::var("CURRENT_DATE").ok() else {
+        return Ok(None);
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let date = NaiveDate::parse_from_str(raw, "%Y-%m-%d")
+        .map_err(|e| format!("CURRENT_DATE must be YYYY-MM-DD, got {raw:?}: {e}"))?;
+    Ok(Some(date))
 }
 
 async fn connect_db(url: &str) -> Result<SqlitePool, sqlx::Error> {

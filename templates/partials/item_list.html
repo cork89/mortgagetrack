@@ -1,6 +1,6 @@
 {# Payment schedule table rows for the active loan #}
 <div class="table-wrap" id="paymentsTableWrap">
-  <table>
+  <table class="payments-table">
     <colgroup>
       <col class="col-num" />
       <col class="col-date" />
@@ -28,25 +28,28 @@
         {% for row in dashboard.payment_rows %}
           {% if row.is_year_header %}
           <tr class="year-summary{% if row.is_current_year %} current-year{% endif %}">
-            <td class="cell-text" colspan="2">
+            <td class="cell-text cell-year" colspan="2" data-label="Year">
               <span class="year-label">{{ row.year_label }}</span>
               <span class="year-sub">{{ row.year_sub }}</span>
             </td>
-            <td>{{ row.payment }}</td>
-            <td>{{ row.principal }}</td>
-            <td>{{ row.interest }}</td>
-            <td></td>
-            <td class="cell-status"></td>
+            <td class="cell-payment" data-label="Payment">{{ row.payment }}</td>
+            <td class="cell-principal" data-label="Principal">{{ row.principal }}</td>
+            <td class="cell-interest" data-label="Interest">{{ row.interest }}</td>
+            <td class="cell-balance" data-label="Balance"></td>
+            <td class="cell-status" data-label="Status"></td>
           </tr>
           {% else %}
-          <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
-            <td class="cell-text">{{ row.label_html|safe }}</td>
-            <td class="cell-text">{{ row.due }}</td>
-            <td>{{ row.payment }}</td>
-            <td>{{ row.principal }}</td>
-            <td>{{ row.interest }}</td>
-            <td>{{ row.balance }}</td>
-            <td class="cell-status">
+          <tr class="payment-row{% if row.paid %} paid-row{% endif %}{% if row.is_extra %} extra-row{% endif %}{% if row.is_current_year %} current-year{% endif %}{% if row.zeroed %} zeroed-row{% endif %}">
+            <td class="cell-text cell-num" data-label="#">{{ row.label_html|safe }}</td>
+            <td class="cell-text cell-due" data-label="Due date">{{ row.due }}</td>
+            <td class="cell-payment" data-label="Payment"><span class="pay-amount">{{ row.payment }}</span></td>
+            <td class="cell-principal" data-label="Principal">{{ row.principal }}</td>
+            <td class="cell-interest" data-label="Interest">{{ row.interest }}</td>
+            <td class="cell-balance" data-label="Balance">
+              <span class="bal-full">{{ row.balance }}</span>
+              <span class="bal-short">{{ row.balance_short }}</span>
+            </td>
+            <td class="cell-status" data-label="Status">
               <div class="status-actions">
                 {% if !row.zeroed %}
                 <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"

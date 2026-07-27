@@ -1,10 +1,11 @@
-<div class="panel-surface">
-  <div class="panel-head">
-    <div>
+{% import "partials/payment_macros.html" as pays %}
+<div class="panel-surface payments-panel">
+  <div class="panel-head payments-head">
+    <div class="payments-head-copy">
       <h2>Payments</h2>
       <span class="hint">{{ summary.hint }}</span>
     </div>
-    <div class="track-filters">
+    <div class="payments-toolbar">
       <label class="filter-label">
         <span>Filter</span>
         <select name="filter"
@@ -24,30 +25,31 @@
         hx-post="/profiles/{{ profile_id }}/mark-due?tab=payments&filter={{ payment_filter }}&year={{ view_year }}&grain={{ grain }}"
         hx-target="#panel-payments"
         hx-swap="innerHTML show:none">
-        Mark all due as paid
+        <span class="btn-label-full">Mark all due as paid</span>
+        <span class="btn-label-short">Mark all paid</span>
       </button>
+      <details class="extra-disclosure">
+        <summary class="btn-primary btn-compact">Add Extra</summary>
+        <form class="extra-form"
+          hx-post="/profiles/{{ profile_id }}/extras"
+          hx-target="#panel-payments"
+          hx-swap="innerHTML show:none">
+          <input type="hidden" name="filter" value="{{ payment_filter }}" />
+          <label>
+            Extra payment date
+            <input name="date" type="date" value="{{ extra_date_default }}" required />
+          </label>
+          <label class="amount">
+            Amount
+            <input name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+          </label>
+          <button type="submit" class="btn-primary">Add payment</button>
+        </form>
+      </details>
     </div>
   </div>
-  <details class="extra-disclosure">
-    <summary>Add extra payment</summary>
-    <form class="extra-form"
-      hx-post="/profiles/{{ profile_id }}/extras"
-      hx-target="#panel-payments"
-      hx-swap="innerHTML show:none">
-      <input type="hidden" name="filter" value="{{ payment_filter }}" />
-      <label>
-        Extra payment date
-        <input name="date" type="date" value="{{ extra_date_default }}" required />
-      </label>
-      <label class="amount">
-        Amount
-        <input name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
-      </label>
-      <button type="submit" class="btn-primary">Add payment</button>
-    </form>
-  </details>
-  <div class="table-wrap">
-    <table>
+  <div class="table-wrap payments-desktop">
+    <table class="payments-table">
       <colgroup>
         <col class="col-num" />
         <col class="col-date" />
@@ -86,7 +88,7 @@
               <td class="cell-status"></td>
             </tr>
             {% else %}
-            <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
+            <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.is_current_month %}payment-current-month {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
               <td class="cell-text">{{ row.label_html|safe }}</td>
               <td class="cell-text">{{ row.due }}</td>
               <td>{{ row.payment }}</td>
@@ -94,39 +96,7 @@
               <td>{{ row.interest }}</td>
               <td>{{ row.balance }}</td>
               <td class="cell-status">
-                <div class="status-actions">
-                  <button type="button"
-                    class="status-btn note-btn{% if row.has_note %} paid{% endif %}"
-                    data-pay-key="{{ row.pay_key }}"
-                    data-due="{{ row.due }}"
-                    data-note-json="{{ row.note_json }}"
-                    aria-label="{% if row.has_note %}Edit note{% else %}Add note{% endif %}"
-                    title="{% if row.has_note %}Edit note{% else %}Add note{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                    </svg>
-                  </button>
-                  {% if !row.zeroed %}
-                  <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"
-                    hx-post="/profiles/{{ profile_id }}/toggle-paid"
-                    hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-                    hx-target="#panel-payments"
-                    hx-swap="innerHTML show:none"
-                    aria-label="{% if row.paid %}Mark unpaid{% else %}Mark paid{% endif %}"
-                    title="{% if row.paid %}Mark unpaid{% else %}Mark paid{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-                    </svg>
-                  </button>
-                  {% endif %}
-                  {% if row.is_extra %}
-                  <button type="button" class="btn-text danger status-btn-remove"
-                    hx-post="/profiles/{{ profile_id }}/extras/{{ row.extra_id }}"
-                    hx-target="#panel-payments"
-                    hx-swap="innerHTML show:none"
-                    hx-confirm="Remove this extra payment?">Remove</button>
-                  {% endif %}
-                </div>
+                {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
               </td>
             </tr>
             {% endif %}
@@ -134,6 +104,43 @@
         {% endif %}
       </tbody>
     </table>
+  </div>
+  <div class="pay-cards">
+    {% if payment_rows.is_empty() %}
+    <p class="empty-state">No payments match this filter.</p>
+    {% else %}
+      {% for row in payment_rows %}
+        {% if row.is_year_header %}
+        <div class="pay-year{% if row.is_current_year %} current-year{% endif %}">{{ row.year_label }}</div>
+        {% else %}
+        <article class="pay-card{% if row.paid %} paid{% endif %}{% if row.is_extra %} extra{% endif %}{% if row.is_current_month %} payment-current-month{% endif %}{% if row.zeroed %} zeroed{% endif %}">
+          <div class="pay-card-main">
+            <div class="pay-card-lead">
+              {% if row.is_extra %}
+              <span class="type-pill">Extra</span>
+              {% else %}
+              <span class="pay-date">{{ row.due }}</span>
+              {% endif %}
+            </div>
+            <div class="pay-card-amt">
+              <span class="pay-amount">{{ row.payment }}</span>
+              <span class="pay-amount-label">Payment</span>
+            </div>
+          </div>
+          <div class="pay-card-foot">
+            <div class="pay-card-meta">
+              <span>P: {{ row.principal }}</span>
+              <span class="pay-sep" aria-hidden="true">|</span>
+              <span>I: {{ row.interest }}</span>
+              <span class="pay-sep" aria-hidden="true">|</span>
+              <span>B: {{ row.balance_short }}</span>
+            </div>
+            {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
+          </div>
+        </article>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
   </div>
   <div class="summary-bar">
     <div><div class="k">Monthly payment</div><div class="v">{{ summary.monthly_payment }}</div></div>
