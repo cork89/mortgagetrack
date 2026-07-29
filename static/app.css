@@ -136,7 +136,9 @@
       background: #fff;
     }
 
-    button:focus-visible {
+    button:focus-visible,
+    .btn-primary:focus-visible,
+    .btn-ghost:focus-visible {
       outline: 2px solid var(--sea);
       outline-offset: 2px;
     }
@@ -197,17 +199,27 @@
       align-items: center;
     }
 
-    button {
+    button,
+    .btn-primary,
+    .btn-ghost {
       font: inherit;
       cursor: pointer;
       border: none;
       border-radius: 10px;
       padding: 0.85rem 1.25rem;
       font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
       transition: transform 0.15s ease, background 0.2s, opacity 0.2s;
     }
 
-    button:active { transform: scale(0.98); }
+    button:active,
+    .btn-primary:active,
+    .btn-ghost:active {
+      transform: scale(0.98);
+    }
 
     .btn-primary {
       background: var(--sea);

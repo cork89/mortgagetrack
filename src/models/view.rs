@@ -296,7 +296,7 @@ pub fn build_dashboard(
     );
     let schedule = &built.rows;
 
-    let year_stats = year_strip(schedule, &paid, extras.len(), today);
+    let year_stats = year_strip(schedule, &paid, extras.len(), loan.principal, today);
     let months = calendar_months(schedule, &paid, view_year, today);
     let (payment_rows, summary) = payments_table(schedule, &paid, notes, &loan, filter, today);
     let chart = ChartPair {
@@ -355,6 +355,7 @@ fn year_strip(
     schedule: &[ScheduleRow],
     paid: &HashSet<String>,
     extra_count: usize,
+    original_principal: f64,
     today: NaiveDate,
 ) -> Vec<YearStat> {
     let y = today.year();
@@ -376,9 +377,18 @@ fn year_strip(
     let paid_interest: f64 = paid_rows.iter().map(|r| r.interest).sum();
     let remaining = year_rows.len() - paid_rows.len();
 
-    let next = schedule
+    let total_paid_principal: f64 = schedule
         .iter()
-        .find(|r| !paid.contains(&r.pay_key) && r.payment > 0.0);
+        .filter(|r| paid.contains(&r.pay_key))
+        .map(|r| r.principal)
+        .sum();
+    let pct_paid = if original_principal <= 0.0 {
+        0
+    } else {
+        ((total_paid_principal / original_principal) * 100.0)
+            .clamp(0.0, 100.0)
+            .round() as u32
+    };
 
     let mut extra_note = String::new();
     if extra_count > 0 {
@@ -387,11 +397,13 @@ fn year_strip(
 
     vec![
         YearStat {
-            label: "Next unpaid".into(),
-            value: next.map(|r| money(r.payment)).unwrap_or_else(|| "All caught up".into()),
-            sub: next
-                .map(|r| fmt_date(r.due))
-                .unwrap_or_else(|| "Nothing left to mark".into()),
+            label: "Total % paid".into(),
+            value: format!("{pct_paid}%"),
+            sub: format!(
+                "{} of {} principal",
+                money(total_paid_principal),
+                money(original_principal)
+            ),
             class: "stat highlight next-hero".into(),
         },
         YearStat {
