@@ -154,6 +154,46 @@
     return document.getElementById("notePopover");
   }
 
+  function dashboardVersion() {
+    return dashboard()?.dataset.version || "";
+  }
+
+  function syncDashboardVersion(version) {
+    if (version == null || version === "") return;
+    const next = String(version);
+    const dash = dashboard();
+    if (dash) dash.dataset.version = next;
+    const profileVersion = document.getElementById("profileVersion");
+    if (profileVersion) profileVersion.value = next;
+    const noteVersion = document.getElementById("noteVersion");
+    if (noteVersion) noteVersion.value = next;
+  }
+
+  function isProfileWritePath(path) {
+    if (!path || !path.startsWith("/profiles/")) return false;
+    if (path === "/profiles" || path === "/profiles/switch") return false;
+    if (path.includes("/share") || path.includes("/leave") || path.includes("/collaborators")) {
+      return false;
+    }
+    if (/\/profiles\/[^/]+\/delete$/.test(path)) return false;
+    return true;
+  }
+
+  function showConflictToast(message) {
+    let toast = document.getElementById("conflictToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "conflictToast";
+      toast.className = "conflict-toast";
+      toast.setAttribute("role", "status");
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message || "Someone else updated this profile. Your view has been refreshed.";
+    toast.classList.add("visible");
+    clearTimeout(showConflictToast._timer);
+    showConflictToast._timer = setTimeout(() => toast.classList.remove("visible"), 6000);
+  }
+
   function openNotePopover(btn) {
     const dash = dashboard();
     const profileId = dash?.dataset.profileId;
@@ -176,6 +216,7 @@
     document.getElementById("noteFilter").value = dash.dataset.filter || "all";
     document.getElementById("noteYear").value = dash.dataset.year || String(new Date().getFullYear());
     document.getElementById("noteGrain").value = dash.dataset.grain || "monthly";
+    document.getElementById("noteVersion").value = dash.dataset.version || "";
     document.getElementById("noteText").value = note;
     document.getElementById("notePopoverDue").textContent = btn.dataset.due
       ? `Due ${btn.dataset.due}`
@@ -285,6 +326,8 @@
     const start = document.getElementById("startDate");
     if (start) start.value = start.dataset.default || start.value;
     document.getElementById("error").textContent = "";
+    const versionInput = document.getElementById("profileVersion");
+    if (versionInput) versionInput.value = "";
     popover()?.showPopover();
     document.getElementById("profileName").focus();
   }
@@ -310,13 +353,16 @@
     document.getElementById("term").value = dash.dataset.term || "30";
     document.getElementById("startDate").value = dash.dataset.start || "";
     document.getElementById("error").textContent = "";
+    const versionInput = document.getElementById("profileVersion");
+    if (versionInput) versionInput.value = dash.dataset.version || "";
     document.getElementById("resetPaidBtn").onclick = () => {
       if (!confirm("Clear all tracked payments for this profile?")) return;
-      const f = document.createElement("form");
-      f.method = "post";
-      f.action = `/profiles/${id}/clear-paid`;
-      document.body.appendChild(f);
-      f.submit();
+      const version = dashboardVersion();
+      if (!version || typeof htmx === "undefined") return;
+      htmx.ajax("POST", `/profiles/${id}/clear-paid`, {
+        values: { version },
+        headers: { "HX-Request": "true" },
+      });
     };
     loadSharePanel(id);
     popover()?.showPopover();
@@ -340,6 +386,8 @@
     const label = select?.selectedOptions?.[0]?.textContent || "";
     document.getElementById("profileName").value =
       dash?.dataset.name || label.replace(/\s*\(shared\)\s*$/, "") || "";
+    const versionInput = document.getElementById("profileVersion");
+    if (versionInput) versionInput.value = dash?.dataset.version || "";
     document.getElementById("error").textContent = "";
     popover()?.showPopover();
     document.getElementById("profileName").focus();
@@ -416,6 +464,23 @@
   }
 
   function bindUi() {
+    document.body.addEventListener("htmx:configRequest", (e) => {
+      const path = e.detail.path || "";
+      if (!isProfileWritePath(path) || e.detail.verb !== "post") return;
+      const version = dashboardVersion();
+      if (!version) return;
+      e.detail.parameters = e.detail.parameters || {};
+      e.detail.parameters.version = version;
+    });
+    document.body.addEventListener("htmx:beforeSwap", (e) => {
+      if (e.detail.xhr?.status !== 409) return;
+      e.detail.shouldSwap = true;
+      e.detail.isError = false;
+      const message = e.detail.xhr.getResponseHeader("X-Conflict-Message");
+      showConflictToast(message);
+      popover()?.hidePopover();
+      closeNotePopover();
+    });
     document.getElementById("loanForm")?.addEventListener("submit", (e) => {
       const form = e.currentTarget;
       const mode = form.dataset.mode || "create";
@@ -530,7 +595,9 @@
   document.addEventListener("DOMContentLoaded", bindUi);
 
   document.body.addEventListener("markPanelsStale", (e) => {
-    markPanelsStale(e.detail || {});
+    const detail = e.detail || {};
+    if (detail.version != null) syncDashboardVersion(detail.version);
+    markPanelsStale(detail);
   });
 
   document.body.addEventListener("htmx:afterSwap", (e) => {

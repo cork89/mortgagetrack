@@ -5,9 +5,9 @@
 {% block body %}
 <section class="auth-panel" aria-labelledby="auth-heading">
   <header class="brand-block auth-brand">
-    <h1 class="brand" id="auth-heading">Homestead</h1>
+    <h1 class="brand" id="auth-heading"><a class="brand-home" href="/">Homestead</a></h1>
     <span class="brand-rule" aria-hidden="true"></span>
-    <p class="tagline">Create an account to track your mortgage.</p>
+    <p class="tagline">{% if share_invite %}Create an account to accept this profile invite.{% else %}Create an account to track your mortgage.{% endif %}</p>
   </header>
 
   <form class="auth-form"
@@ -46,7 +46,7 @@
 
   <p class="auth-switch">
     Already have an account?
-    <a href="/login{% if !next.is_empty() %}?next={{ next }}{% endif %}">Sign in</a>
+    <a href="/login{% if !next_query.is_empty() %}?next={{ next_query }}{% endif %}">Sign in</a>
   </p>
 </section>
 {% endblock %}

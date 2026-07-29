@@ -165,6 +165,7 @@ pub struct ChartPair {
 #[derive(Debug, Clone)]
 pub struct DashboardView {
     pub profile_id: String,
+    pub profile_version: i64,
     pub profile_principal: String,
     pub profile_rate: String,
     pub profile_term: String,
@@ -310,6 +311,7 @@ pub fn build_dashboard(
 
     Some(DashboardView {
         profile_id: profile.id.clone(),
+        profile_version: profile.version,
         profile_principal: money(loan.principal),
         profile_rate: format!("{}%", loan.rate),
         profile_term: format!("{}yr", loan.term_years),
@@ -590,11 +592,6 @@ fn payments_table(
         }
     }
 
-    let total_paid: f64 = schedule
-        .iter()
-        .filter(|r| paid.contains(&r.pay_key))
-        .map(|r| r.payment)
-        .sum();
     let mut bal = loan.principal;
     for r in schedule {
         if paid.contains(&r.pay_key) {
@@ -604,21 +601,18 @@ fn payments_table(
         }
     }
     let scheduled_count = schedule.iter().filter(|r| r.kind == RowKind::Scheduled).count();
-    let extra_count = schedule.iter().filter(|r| r.kind == RowKind::Extra).count();
-    let extra_bit = if extra_count > 0 {
-        format!(" + {extra_count} extra")
+    let paid_count = schedule.iter().filter(|r| paid.contains(&r.pay_key)).count();
+    let pct_paid = if schedule.is_empty() {
+        0
     } else {
-        String::new()
+        ((paid_count as f64 / schedule.len() as f64) * 100.0).round() as u32
     };
 
     let summary = YearSummary {
         monthly_payment: money(loan.payment),
         total_interest: money(loan.total_interest),
         balance_after: money(bal),
-        hint: format!(
-            "{scheduled_count} scheduled{extra_bit} · {} marked paid",
-            money(total_paid)
-        ),
+        hint: format!("{scheduled_count} scheduled · {pct_paid}% paid"),
     };
 
     // Fix empty marker: use empty payment_rows when no matches

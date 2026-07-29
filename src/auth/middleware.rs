@@ -9,6 +9,7 @@ use tower_sessions::Session;
 use crate::error::{AppError, AppResult};
 
 pub const USER_ID_KEY: &str = "user_id";
+pub const PENDING_SHARE_KEY: &str = "pending_share_token";
 
 /// Post-auth landing page (Homestead dashboard lives at `/`).
 pub const HOME_PATH: &str = "/";
@@ -56,6 +57,27 @@ pub async fn set_user_id(session: &Session, user_id: uuid::Uuid) -> AppResult<()
         .insert(USER_ID_KEY, user_id.to_string())
         .await
         .map_err(|err| AppError::Internal(format!("session error: {err}")))
+}
+
+pub async fn set_pending_share(session: &Session, token: &str) -> AppResult<()> {
+    session
+        .insert(PENDING_SHARE_KEY, token)
+        .await
+        .map_err(|err| AppError::Internal(format!("session error: {err}")))
+}
+
+pub async fn take_pending_share(session: &Session) -> AppResult<Option<String>> {
+    let token: Option<String> = session
+        .get(PENDING_SHARE_KEY)
+        .await
+        .map_err(|err| AppError::Internal(format!("session error: {err}")))?;
+    if token.is_some() {
+        session
+            .remove::<String>(PENDING_SHARE_KEY)
+            .await
+            .map_err(|err| AppError::Internal(format!("session error: {err}")))?;
+    }
+    Ok(token)
 }
 
 /// Clear and destroy the session (`tower-sessions` equivalent of purge).

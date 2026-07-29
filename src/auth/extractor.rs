@@ -5,17 +5,33 @@ use axum::{
     http::{header, request::Parts, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
+use sqlx::SqlitePool;
 use tower_sessions::Session;
 use uuid::Uuid;
 
 use super::middleware::{get_user_id, is_htmx};
 use super::models::find_user_by_id;
 use crate::app_state::AppState;
+use crate::error::AppResult;
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub id: Uuid,
     pub email: String,
+}
+
+/// Resolve the signed-in user from the session, if any.
+pub async fn current_user(session: &Session, pool: &SqlitePool) -> AppResult<Option<AuthUser>> {
+    let Some(user_id) = get_user_id(session).await? else {
+        return Ok(None);
+    };
+    let Some(user) = find_user_by_id(pool, user_id).await? else {
+        return Ok(None);
+    };
+    Ok(Some(AuthUser {
+        id: user_id,
+        email: user.email,
+    }))
 }
 
 impl FromRequestParts<AppState> for AuthUser {

@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <div class="wrap">
     {% block body %}{% endblock %}
   </div>

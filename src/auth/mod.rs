@@ -13,7 +13,11 @@ mod models;
 mod next;
 mod seed;
 
-pub use extractor::AuthUser;
+pub use extractor::{current_user, AuthUser};
 pub use handlers::routes;
-pub use middleware::{get_user_id, hx_redirect, HOME_PATH};
+pub use middleware::{
+    get_user_id, hx_redirect, is_htmx, purge_session, set_pending_share, set_user_id,
+    take_pending_share, HOME_PATH,
+};
+pub use next::{encode_query_value, is_share_invite_next, safe_next, share_token_from_next};
 pub use seed::ensure_test_user;

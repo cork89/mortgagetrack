@@ -9,6 +9,9 @@ use super::amort::build_schedule;
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
+pub const PROFILE_CONFLICT_MSG: &str =
+    "Someone else updated this profile. Your view has been refreshed.";
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Profile {
     pub id: String,
@@ -20,6 +23,7 @@ pub struct Profile {
     pub start_date: Option<String>,
     pub monthly_payment: Option<f64>,
     pub total_interest: Option<f64>,
+    pub version: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -125,12 +129,12 @@ pub async fn list_profiles(pool: &SqlitePool, user_id: Uuid) -> AppResult<Vec<Pr
     let key = user_key(user_id);
     let rows = sqlx::query_as::<_, Profile>(
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
         FROM profiles
         WHERE user_id = ?
         UNION
         SELECT p.id, p.user_id, p.name, p.principal, p.rate, p.term_years, p.start_date,
-               p.monthly_payment, p.total_interest
+               p.monthly_payment, p.total_interest, p.version
         FROM profiles p
         INNER JOIN profile_collaborators c ON c.profile_id = p.id
         WHERE c.user_id = ?
@@ -152,7 +156,7 @@ pub async fn load_profile(
     let key = user_key(user_id);
     let row = sqlx::query_as::<_, Profile>(
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
         FROM profiles
         WHERE id = ?
           AND (
@@ -234,34 +238,63 @@ pub async fn list_payment_notes(
     Ok(rows)
 }
 
+pub(crate) async fn reserve_profile_version(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    profile_id: &str,
+    expected_version: i64,
+) -> AppResult<()> {
+    let bump = sqlx::query(
+        "UPDATE profiles SET version = version + 1 WHERE id = ? AND version = ?",
+    )
+    .bind(profile_id)
+    .bind(expected_version)
+    .execute(&mut **tx)
+    .await?;
+    if bump.rows_affected() == 0 {
+        let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM profiles WHERE id = ?")
+            .bind(profile_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+        if exists.is_none() {
+            return Err(AppError::NotFound("Profile not found".into()));
+        }
+        return Err(AppError::Conflict(PROFILE_CONFLICT_MSG.into()));
+    }
+    Ok(())
+}
+
 pub async fn upsert_payment_note(
     pool: &SqlitePool,
     user_id: Uuid,
     profile_id: &str,
     pay_key: &str,
     note: &str,
+    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let trimmed = note.trim();
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
     if trimmed.is_empty() {
         sqlx::query("DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?")
             .bind(profile_id)
             .bind(pay_key)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-        return Ok(());
+    } else {
+        sqlx::query(
+            r#"
+            INSERT INTO payment_notes (profile_id, pay_key, note) VALUES (?, ?, ?)
+            ON CONFLICT(profile_id, pay_key) DO UPDATE SET note = excluded.note
+            "#,
+        )
+        .bind(profile_id)
+        .bind(pay_key)
+        .bind(trimmed)
+        .execute(&mut *tx)
+        .await?;
     }
-    sqlx::query(
-        r#"
-        INSERT INTO payment_notes (profile_id, pay_key, note) VALUES (?, ?, ?)
-        ON CONFLICT(profile_id, pay_key) DO UPDATE SET note = excluded.note
-        "#,
-    )
-    .bind(profile_id)
-    .bind(pay_key)
-    .bind(trimmed)
-    .execute(pool)
-    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -296,8 +329,8 @@ pub async fn create_profile(
 
     sqlx::query(
         r#"
-        INSERT INTO profiles (id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO profiles (id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         "#,
     )
     .bind(&id)
@@ -327,6 +360,7 @@ pub async fn update_profile_loan(
     rate: f64,
     term_years: i32,
     start_date: NaiveDate,
+    expected_version: i64,
 ) -> AppResult<Profile> {
     require_profile_access(pool, user_id, id).await?;
     let profile = load_profile(pool, user_id, id)
@@ -346,6 +380,8 @@ pub async fn update_profile_loan(
     let built = build_schedule(principal, rate, term_years, start_date, &extra_tuples);
     let start = start_date.format("%Y-%m-%d").to_string();
 
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, id, expected_version).await?;
     let result = sqlx::query(
         r#"
         UPDATE profiles
@@ -362,12 +398,13 @@ pub async fn update_profile_loan(
     .bind(built.payment)
     .bind(built.total_interest)
     .bind(id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Profile not found".into()));
     }
+    tx.commit().await?;
 
     load_profile(pool, user_id, id)
         .await?
@@ -379,18 +416,22 @@ pub async fn rename_profile(
     user_id: Uuid,
     id: &str,
     name: &str,
+    expected_version: i64,
 ) -> AppResult<()> {
     require_owned_profile(pool, user_id, id).await?;
     ensure_unique_name(pool, user_id, name, Some(id)).await?;
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, id, expected_version).await?;
     let result = sqlx::query("UPDATE profiles SET name = ? WHERE id = ? AND user_id = ?")
         .bind(name)
         .bind(id)
         .bind(user_key(user_id))
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Profile not found".into()));
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -431,39 +472,52 @@ pub async fn toggle_paid(
     user_id: Uuid,
     profile_id: &str,
     pay_key: &str,
+    expected_version: i64,
 ) -> AppResult<bool> {
     require_profile_access(pool, user_id, profile_id).await?;
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
 
     let existing: Option<(String,)> =
         sqlx::query_as("SELECT pay_key FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
             .bind(profile_id)
             .bind(pay_key)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *tx)
             .await?;
 
-    if existing.is_some() {
+    let now_paid = if existing.is_some() {
         sqlx::query("DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
             .bind(profile_id)
             .bind(pay_key)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(false)
+        false
     } else {
         sqlx::query("INSERT INTO paid_keys (profile_id, pay_key) VALUES (?, ?)")
             .bind(profile_id)
             .bind(pay_key)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(true)
-    }
+        true
+    };
+    tx.commit().await?;
+    Ok(now_paid)
 }
 
-pub async fn clear_paid(pool: &SqlitePool, user_id: Uuid, profile_id: &str) -> AppResult<()> {
+pub async fn clear_paid(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+    expected_version: i64,
+) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
     sqlx::query("DELETE FROM paid_keys WHERE profile_id = ?")
         .bind(profile_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -472,15 +526,19 @@ pub async fn mark_due_paid(
     user_id: Uuid,
     profile_id: &str,
     pay_keys: &[String],
+    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
     for key in pay_keys {
         sqlx::query("INSERT OR IGNORE INTO paid_keys (profile_id, pay_key) VALUES (?, ?)")
             .bind(profile_id)
             .bind(key)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -490,6 +548,7 @@ pub async fn add_extra(
     profile_id: &str,
     date: NaiveDate,
     amount: f64,
+    expected_version: i64,
 ) -> AppResult<ExtraPayment> {
     require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
@@ -497,22 +556,25 @@ pub async fn add_extra(
     }
     let id = Uuid::new_v4().to_string();
     let date_str = date.format("%Y-%m-%d").to_string();
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
     sqlx::query("INSERT INTO extras (id, profile_id, date, amount) VALUES (?, ?, ?, ?)")
         .bind(&id)
         .bind(profile_id)
         .bind(&date_str)
         .bind(amount)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
     let pay_key = format!("extra:{id}");
     sqlx::query("INSERT OR IGNORE INTO paid_keys (profile_id, pay_key) VALUES (?, ?)")
         .bind(profile_id)
         .bind(&pay_key)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-    refresh_loan_totals(pool, user_id, profile_id).await?;
+    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
+    tx.commit().await?;
 
     Ok(ExtraPayment {
         id,
@@ -527,43 +589,47 @@ pub async fn delete_extra(
     user_id: Uuid,
     profile_id: &str,
     extra_id: &str,
+    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let pay_key = format!("extra:{extra_id}");
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
     sqlx::query("DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?")
         .bind(profile_id)
         .bind(&pay_key)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?")
         .bind(profile_id)
         .bind(&pay_key)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     let result = sqlx::query("DELETE FROM extras WHERE id = ? AND profile_id = ?")
         .bind(extra_id)
         .bind(profile_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound("Extra payment not found".into()));
     }
-    refresh_loan_totals(pool, user_id, profile_id).await?;
+    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
+    tx.commit().await?;
     Ok(())
 }
 
-async fn refresh_loan_totals(
-    pool: &SqlitePool,
+async fn refresh_loan_totals_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     user_id: Uuid,
     profile_id: &str,
 ) -> AppResult<()> {
-    let profile = load_profile(pool, user_id, profile_id)
+    let profile = load_profile_in_tx(tx, user_id, profile_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
     let Some(loan) = profile.loan() else {
         return Ok(());
     };
-    let extras = list_extras(pool, profile_id).await?;
+    let extras = list_extras_in_tx(tx, profile_id).await?;
     let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
         .iter()
         .filter_map(|ex| {
@@ -582,9 +648,55 @@ async fn refresh_loan_totals(
         .bind(built.payment)
         .bind(built.total_interest)
         .bind(profile_id)
-        .execute(pool)
+        .execute(&mut **tx)
         .await?;
     Ok(())
+}
+
+async fn load_profile_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    user_id: Uuid,
+    id: &str,
+) -> AppResult<Option<Profile>> {
+    let key = user_key(user_id);
+    let row = sqlx::query_as::<_, Profile>(
+        r#"
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
+        FROM profiles
+        WHERE id = ?
+          AND (
+            user_id = ?
+            OR EXISTS (
+              SELECT 1 FROM profile_collaborators c
+              WHERE c.profile_id = profiles.id AND c.user_id = ?
+            )
+          )
+        "#,
+    )
+    .bind(id)
+    .bind(&key)
+    .bind(&key)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row)
+}
+
+async fn list_extras_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    profile_id: &str,
+) -> AppResult<Vec<ExtraPayment>> {
+    let rows = sqlx::query_as::<_, ExtraPayment>(
+        r#"
+        SELECT id, profile_id, date, amount
+        FROM extras
+        WHERE profile_id = ?
+        ORDER BY date
+        "#,
+    )
+    .bind(profile_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(rows)
 }
 
 async fn ensure_unique_name(

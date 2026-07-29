@@ -31,17 +31,20 @@ where
     }
 }
 
-/// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale.
+/// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale
+/// and advance the optimistic-concurrency version after a successful write.
 pub fn panel_update<T: Template>(
     template: T,
     keep_tab: &str,
     invalidate_chart: bool,
+    version: i64,
 ) -> Response {
     let mut response = HtmlTemplate(template).into_response();
     let trigger = serde_json::json!({
         "markPanelsStale": {
             "keep": keep_tab,
-            "invalidateChart": invalidate_chart
+            "invalidateChart": invalidate_chart,
+            "version": version
         }
     });
     if let Ok(value) = HeaderValue::from_str(&trigger.to_string()) {
@@ -50,6 +53,27 @@ pub fn panel_update<T: Template>(
             value,
         );
     }
+    response
+}
+
+/// 409 conflict: refresh the dashboard and tell the client to show a message.
+pub fn conflict_dashboard(template: DashboardTemplate, message: &str) -> Response {
+    let mut response = HtmlTemplate(template).into_response();
+    *response.status_mut() = StatusCode::CONFLICT;
+    if let Ok(value) = HeaderValue::from_str(message) {
+        response.headers_mut().insert(
+            HeaderName::from_static("x-conflict-message"),
+            value,
+        );
+    }
+    response.headers_mut().insert(
+        HeaderName::from_static("hx-retarget"),
+        HeaderValue::from_static("#main-panel"),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("hx-reswap"),
+        HeaderValue::from_static("innerHTML"),
+    );
     response
 }
 
@@ -183,11 +207,17 @@ pub struct ErrorPartial {
 }
 
 #[derive(Template)]
+#[template(path = "landing.html")]
+pub struct LandingTemplate {}
+
+#[derive(Template)]
 #[template(path = "login.html")]
 pub struct LoginTemplate {
     pub error: String,
     pub email: String,
     pub next: String,
+    pub next_query: String,
+    pub share_invite: bool,
 }
 
 #[derive(Template)]
@@ -196,6 +226,8 @@ pub struct RegisterTemplate {
     pub error: String,
     pub email: String,
     pub next: String,
+    pub next_query: String,
+    pub share_invite: bool,
 }
 
 #[derive(Template)]

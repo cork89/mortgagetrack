@@ -9,16 +9,18 @@ use axum::{
 };
 use serde::Deserialize;
 use tower_sessions::Session;
+use uuid::Uuid;
 
-use super::middleware::{
-    get_user_id, hx_redirect, is_htmx, purge_session, set_user_id, HOME_PATH,
-};
 use super::models::{
     create_user, find_user_by_email, validate_email, validate_password, verify_password,
 };
-use super::next::safe_next;
 use crate::app_state::AppState;
+use crate::auth::{
+    encode_query_value, get_user_id, hx_redirect, is_htmx, is_share_invite_next, purge_session,
+    safe_next, set_pending_share, set_user_id, share_token_from_next, take_pending_share, HOME_PATH,
+};
 use crate::error::{AppError, AppResult};
+use crate::models::{accept_share_link, set_active_profile};
 use crate::templates::{AuthErrorPartial, HtmlTemplate, LoginTemplate, RegisterTemplate};
 
 pub fn routes() -> Router<AppState> {
@@ -49,29 +51,43 @@ pub struct RegisterForm {
 }
 
 async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
-    let next = safe_next(q.next.as_deref()).unwrap_or("").to_string();
+    remember_share_invite(&session, q.next.as_deref()).await?;
+    let fields = auth_next_fields(q.next.as_deref());
     if get_user_id(&session).await?.is_some() {
-        let dest = if next.is_empty() { HOME_PATH } else { &next };
+        let dest = if fields.next.is_empty() {
+            HOME_PATH
+        } else {
+            &fields.next
+        };
         return Ok(Redirect::to(dest).into_response());
     }
     Ok(HtmlTemplate(LoginTemplate {
         error: String::new(),
         email: String::new(),
-        next,
+        next: fields.next,
+        next_query: fields.next_query,
+        share_invite: fields.share_invite,
     })
     .into_response())
 }
 
 async fn register_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
-    let next = safe_next(q.next.as_deref()).unwrap_or("").to_string();
+    remember_share_invite(&session, q.next.as_deref()).await?;
+    let fields = auth_next_fields(q.next.as_deref());
     if get_user_id(&session).await?.is_some() {
-        let dest = if next.is_empty() { HOME_PATH } else { &next };
+        let dest = if fields.next.is_empty() {
+            HOME_PATH
+        } else {
+            &fields.next
+        };
         return Ok(Redirect::to(dest).into_response());
     }
     Ok(HtmlTemplate(RegisterTemplate {
         error: String::new(),
         email: String::new(),
-        next,
+        next: fields.next,
+        next_query: fields.next_query,
+        share_invite: fields.share_invite,
     })
     .into_response())
 }
@@ -82,11 +98,14 @@ async fn login_submit(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
+    remember_share_invite(&session, form.next.as_deref())
+        .await
+        .ok();
     let next = safe_next(form.next.as_deref())
         .unwrap_or(HOME_PATH)
         .to_string();
     match login_inner(&state, &session, &form).await {
-        Ok(()) => hx_redirect(&headers, &next),
+        Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
         Err(err) => auth_error_response(
             &headers,
             err.to_string(),
@@ -97,7 +116,11 @@ async fn login_submit(
     }
 }
 
-async fn login_inner(state: &AppState, session: &Session, form: &LoginForm) -> AppResult<()> {
+async fn login_inner(
+    state: &AppState,
+    session: &Session,
+    form: &LoginForm,
+) -> AppResult<Uuid> {
     let email = validate_email(&form.email)?;
     if form.password.is_empty() {
         return Err(AppError::BadRequest("Enter your password.".into()));
@@ -111,12 +134,12 @@ async fn login_inner(state: &AppState, session: &Session, form: &LoginForm) -> A
         return Err(AppError::BadRequest("Invalid email or password.".into()));
     }
 
-    // Renew session id to mitigate fixation, then store the authenticated user.
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
     })?;
-    set_user_id(session, user.uuid()?).await?;
-    Ok(())
+    let user_id = user.uuid()?;
+    set_user_id(session, user_id).await?;
+    Ok(user_id)
 }
 
 async fn register_submit(
@@ -125,11 +148,14 @@ async fn register_submit(
     headers: HeaderMap,
     Form(form): Form<RegisterForm>,
 ) -> Response {
+    remember_share_invite(&session, form.next.as_deref())
+        .await
+        .ok();
     let next = safe_next(form.next.as_deref())
         .unwrap_or(HOME_PATH)
         .to_string();
     match register_inner(&state, &session, &form).await {
-        Ok(()) => hx_redirect(&headers, &next),
+        Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
         Err(err) => auth_error_response(
             &headers,
             err.to_string(),
@@ -144,7 +170,7 @@ async fn register_inner(
     state: &AppState,
     session: &Session,
     form: &RegisterForm,
-) -> AppResult<()> {
+) -> AppResult<Uuid> {
     let email = validate_email(&form.email)?;
     validate_password(&form.password)?;
     if form.password != form.confirm_password {
@@ -155,13 +181,60 @@ async fn register_inner(
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
     })?;
-    set_user_id(session, user.uuid()?).await?;
-    Ok(())
+    let user_id = user.uuid()?;
+    set_user_id(session, user_id).await?;
+    Ok(user_id)
 }
 
 async fn logout(session: Session, headers: HeaderMap) -> AppResult<Response> {
     purge_session(&session).await?;
-    Ok(hx_redirect(&headers, "/login"))
+    Ok(hx_redirect(&headers, HOME_PATH))
+}
+
+struct AuthNextFields {
+    next: String,
+    next_query: String,
+    share_invite: bool,
+}
+
+fn auth_next_fields(next: Option<&str>) -> AuthNextFields {
+    let next = safe_next(next).unwrap_or("").to_string();
+    AuthNextFields {
+        share_invite: is_share_invite_next(&next),
+        next_query: if next.is_empty() {
+            String::new()
+        } else {
+            encode_query_value(&next)
+        },
+        next,
+    }
+}
+
+async fn remember_share_invite(session: &Session, next: Option<&str>) -> AppResult<()> {
+    let Some(next) = safe_next(next) else {
+        return Ok(());
+    };
+    let Some(token) = share_token_from_next(next) else {
+        return Ok(());
+    };
+    set_pending_share(session, token).await
+}
+
+async fn auth_success_redirect(
+    state: &AppState,
+    session: &Session,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    next: &str,
+) -> Response {
+    if let Ok(Some(token)) = take_pending_share(session).await {
+        if let Ok(profile_id) = accept_share_link(&state.pool, user_id, &token).await {
+            let _ = set_active_profile(&state.pool, user_id, Some(&profile_id)).await;
+            return hx_redirect(headers, HOME_PATH);
+        }
+    }
+    let dest = safe_next(Some(next)).unwrap_or(HOME_PATH);
+    hx_redirect(headers, dest)
 }
 
 fn auth_error_response(
@@ -171,7 +244,7 @@ fn auth_error_response(
     is_login: bool,
     next: &str,
 ) -> Response {
-    let next = safe_next(Some(next)).unwrap_or("").to_string();
+    let fields = auth_next_fields(Some(next));
     if is_htmx(headers) {
         (
             StatusCode::BAD_REQUEST,
@@ -184,7 +257,9 @@ fn auth_error_response(
             HtmlTemplate(LoginTemplate {
                 error: message,
                 email: email.to_string(),
-                next,
+                next: fields.next,
+                next_query: fields.next_query,
+                share_invite: fields.share_invite,
             }),
         )
             .into_response()
@@ -194,7 +269,9 @@ fn auth_error_response(
             HtmlTemplate(RegisterTemplate {
                 error: message,
                 email: email.to_string(),
-                next,
+                next: fields.next,
+                next_query: fields.next_query,
+                share_invite: fields.share_invite,
             }),
         )
             .into_response()

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Mortgage Track — Shave Years Off Your Mortgage{% endblock %}
+
+{% block body_class %}landing{% endblock %}
+
+{% block body %}
+<nav class="landing-sticky-nav" id="sticky-nav" aria-label="Main Navigation">
+  <div class="sticky-nav-content">
+    <span class="sticky-brand">Mortgage Track</span>
+    <a href="/register" class="btn-primary sticky-btn">Get started free</a>
+  </div>
+</nav>
+
+<section class="landing-hero" aria-label="Homestead Landing">
+  <div class="landing-hero-visual" aria-hidden="true">
+    <img src="/static/hero.jpg" alt="" class="landing-scene-photo" />
+    <div class="landing-scene-overlay"></div>
+    <div class="landing-scene-ui-glimpse">
+      <div class="hero-ledger-glimpse">
+        <div class="glimpse-header">
+          <span class="glimpse-badge">Payoff Accelerator</span>
+          <span class="glimpse-val">$384,120 remaining</span>
+        </div>
+        <div class="glimpse-bar-wrap">
+          <div class="glimpse-bar-fill"></div>
+          <div class="glimpse-bar-extra"></div>
+        </div>
+        <div class="glimpse-stats">
+          <div><span class="glimpse-dot paid"></span> 142 Paid</div>
+          <div><span class="glimpse-dot extra"></span> +$500/mo Extra</div>
+          <div><span class="glimpse-dot due"></span> 4.2 Yrs Saved</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-hero-copy">
+    <header class="landing-brand-block">
+      <h1 class="landing-brand">Homestead</h1>
+      <span class="brand-rule landing-rule" aria-hidden="true"></span>
+      <h2 class="landing-headline">Shave years off your mortgage—without the complex spreadsheets.</h2>
+      <p class="landing-lede">A private mortgage ledger to model extra principal payments, track your real schedule, and accelerate your payoff date.</p>
+    </header>
+
+    <div class="landing-cta">
+      <div class="landing-cta-group">
+        <a class="btn-primary landing-cta-primary" href="/register">Get started free</a>
+        <a class="btn-ghost landing-cta-secondary" href="/login">Sign in</a>
+      </div>
+      <p class="landing-trust-microcopy">100% Free • No bank connection required • Private &amp; secure</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // 1. Sticky Nav Logic
+    const stickyNav = document.getElementById('sticky-nav');
+    const heroCopy = document.querySelector('.landing-hero-copy');
+    
+    if (stickyNav && heroCopy) {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) {
+            stickyNav.classList.add('visible');
+          } else {
+            stickyNav.classList.remove('visible');
+          }
+        });
+      }, { threshold: 0, rootMargin: "-100px 0px 0px 0px" });
+      observer.observe(heroCopy);
+    }
+
+    // 2. Scroll Reveal Animations
+    const revealElements = document.querySelectorAll('.reveal-on-scroll');
+    const revealObserver = new IntersectionObserver((entries, obs) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-revealed');
+          obs.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
+
+    revealElements.forEach(el => revealObserver.observe(el));
+
+    // 3. Scenario Slider Logic
+    const slider = document.getElementById('extra-slider');
+    if (slider) {
+      const amtStr = document.getElementById('heading-amt');
+      const extraRow = document.getElementById('preview-extra-row');
+      const val1 = document.getElementById('preview-extra-val1');
+      const val2 = document.getElementById('preview-extra-val2');
+      const bal1 = document.getElementById('preview-balance1');
+      const chip = document.getElementById('preview-extra-chip');
+      const pillExtra = document.getElementById('preview-pill-extra');
+      
+      const bal2 = document.getElementById('preview-balance2');
+      
+      const baseBalance = 385400.50; // Balance after #40
+      
+      slider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        
+        if (val === 0) {
+          extraRow.style.display = 'none';
+          pillExtra.style.display = 'none';
+          amtStr.textContent = '0';
+          bal2.textContent = '$384,115.80';
+        } else {
+          extraRow.style.display = '';
+          pillExtra.style.display = 'inline-flex';
+          
+          const formatted = val.toLocaleString('en-US');
+          amtStr.textContent = formatted;
+          
+          val1.textContent = '$' + formatted + '.00';
+          val2.textContent = '$' + formatted + '.00';
+          chip.textContent = '+$' + formatted + ' Principal';
+          pillExtra.textContent = 'Oct 15 • +$' + formatted + ' Extra';
+          
+          const newBal = baseBalance - val;
+          const newBalFormatted = newBal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          bal1.textContent = '$' + newBalFormatted;
+          
+          // Fake #41 remaining balance
+          const newBal2 = newBal - 1284.70; 
+          bal2.textContent = '$' + newBal2.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

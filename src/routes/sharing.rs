@@ -10,7 +10,10 @@ use axum::{
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
-use crate::auth::{get_user_id, hx_redirect, AuthUser, HOME_PATH};
+use crate::auth::{
+    encode_query_value, get_user_id, hx_redirect, set_pending_share, take_pending_share, AuthUser,
+    HOME_PATH,
+};
 use crate::error::AppResult;
 use crate::models::{
     accept_share_link, active_share_link, create_share_link, get_active_profile_id, leave_profile,
@@ -37,12 +40,14 @@ async fn accept_share(
     Path(token): Path<String>,
 ) -> AppResult<Response> {
     let Some(user_id) = get_user_id(&session).await? else {
-        // Token is hex-only; safe as a query value without encoding.
-        let location = format!("/login?next=/share/{token}");
+        set_pending_share(&session, &token).await?;
+        let next = format!("/share/{token}");
+        let location = format!("/register?next={}", encode_query_value(&next));
         return Ok(Redirect::to(&location).into_response());
     };
 
     let profile_id = accept_share_link(&state.pool, user_id, &token).await?;
+    let _ = take_pending_share(&session).await;
     set_active_profile(&state.pool, user_id, Some(&profile_id)).await?;
     Ok(Redirect::to(HOME_PATH).into_response())
 }

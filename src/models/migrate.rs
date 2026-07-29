@@ -52,3 +52,23 @@ async fn profiles_have_user_id(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
             .await?;
     Ok(cols.iter().any(|(_, name)| name == "user_id"))
 }
+
+/// Add `profiles.version` for optimistic concurrency when upgrading.
+pub async fn ensure_profile_version(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if profiles_have_version(pool).await? {
+        return Ok(());
+    }
+    tracing::info!("adding profiles.version column");
+    sqlx::query("ALTER TABLE profiles ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn profiles_have_version(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let cols: Vec<(i32, String)> =
+        sqlx::query_as("SELECT cid, name FROM pragma_table_info('profiles')")
+            .fetch_all(pool)
+            .await?;
+    Ok(cols.iter().any(|(_, name)| name == "version"))
+}
