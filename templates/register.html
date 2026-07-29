@@ -17,6 +17,7 @@
     hx-target="#auth-error"
     hx-swap="innerHTML"
   >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     {% if !next.is_empty() %}
     <input type="hidden" name="next" value="{{ next }}" />
     {% endif %}

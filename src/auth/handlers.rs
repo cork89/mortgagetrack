@@ -19,6 +19,7 @@ use crate::auth::{
     encode_query_value, get_user_id, hx_redirect, is_htmx, is_share_invite_next, purge_session,
     safe_next, set_pending_share, set_user_id, share_token_from_next, take_pending_share, HOME_PATH,
 };
+use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{accept_share_link, set_active_profile};
 use crate::templates::{AuthErrorPartial, HtmlTemplate, LoginTemplate, RegisterTemplate};
@@ -27,7 +28,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/login", get(login_page).post(login_submit))
         .route("/register", get(register_page).post(register_submit))
-        .route("/logout", post(logout).get(logout))
+        .route("/logout", post(logout))
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,7 +62,9 @@ async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<R
         };
         return Ok(Redirect::to(dest).into_response());
     }
+    let csrf_token = csrf::ensure_token(&session).await?;
     Ok(HtmlTemplate(LoginTemplate {
+        csrf_token,
         error: String::new(),
         email: String::new(),
         next: fields.next,
@@ -82,7 +85,9 @@ async fn register_page(session: Session, Query(q): Query<AuthQuery>) -> AppResul
         };
         return Ok(Redirect::to(dest).into_response());
     }
+    let csrf_token = csrf::ensure_token(&session).await?;
     Ok(HtmlTemplate(RegisterTemplate {
+        csrf_token,
         error: String::new(),
         email: String::new(),
         next: fields.next,
@@ -106,13 +111,17 @@ async fn login_submit(
         .to_string();
     match login_inner(&state, &session, &form).await {
         Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
-        Err(err) => auth_error_response(
-            &headers,
-            err.to_string(),
-            &form.email,
-            true,
-            form.next.as_deref().unwrap_or(""),
-        ),
+        Err(err) => {
+            let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
+            auth_error_response(
+                &headers,
+                csrf_token,
+                err.to_string(),
+                &form.email,
+                true,
+                form.next.as_deref().unwrap_or(""),
+            )
+        }
     }
 }
 
@@ -137,6 +146,7 @@ async fn login_inner(
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
     })?;
+    csrf::rotate_token(session).await?;
     let user_id = user.uuid()?;
     set_user_id(session, user_id).await?;
     Ok(user_id)
@@ -156,13 +166,17 @@ async fn register_submit(
         .to_string();
     match register_inner(&state, &session, &form).await {
         Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
-        Err(err) => auth_error_response(
-            &headers,
-            err.to_string(),
-            &form.email,
-            false,
-            form.next.as_deref().unwrap_or(""),
-        ),
+        Err(err) => {
+            let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
+            auth_error_response(
+                &headers,
+                csrf_token,
+                err.to_string(),
+                &form.email,
+                false,
+                form.next.as_deref().unwrap_or(""),
+            )
+        }
     }
 }
 
@@ -181,6 +195,7 @@ async fn register_inner(
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
     })?;
+    csrf::rotate_token(session).await?;
     let user_id = user.uuid()?;
     set_user_id(session, user_id).await?;
     Ok(user_id)
@@ -239,6 +254,7 @@ async fn auth_success_redirect(
 
 fn auth_error_response(
     headers: &HeaderMap,
+    csrf_token: String,
     message: String,
     email: &str,
     is_login: bool,
@@ -255,6 +271,7 @@ fn auth_error_response(
         (
             StatusCode::BAD_REQUEST,
             HtmlTemplate(LoginTemplate {
+                csrf_token,
                 error: message,
                 email: email.to_string(),
                 next: fields.next,
@@ -267,6 +284,7 @@ fn auth_error_response(
         (
             StatusCode::BAD_REQUEST,
             HtmlTemplate(RegisterTemplate {
+                csrf_token,
                 error: message,
                 email: email.to_string(),
                 next: fields.next,

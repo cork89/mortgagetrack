@@ -80,6 +80,7 @@ pub fn conflict_dashboard(template: DashboardTemplate, message: &str) -> Respons
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct IndexTemplate {
+    pub csrf_token: String,
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
     pub is_owner: bool,
@@ -208,11 +209,14 @@ pub struct ErrorPartial {
 
 #[derive(Template)]
 #[template(path = "landing.html")]
-pub struct LandingTemplate {}
+pub struct LandingTemplate {
+    pub csrf_token: String,
+}
 
 #[derive(Template)]
 #[template(path = "login.html")]
 pub struct LoginTemplate {
+    pub csrf_token: String,
     pub error: String,
     pub email: String,
     pub next: String,
@@ -223,6 +227,7 @@ pub struct LoginTemplate {
 #[derive(Template)]
 #[template(path = "register.html")]
 pub struct RegisterTemplate {
+    pub csrf_token: String,
     pub error: String,
     pub email: String,
     pub next: String,

@@ -2,6 +2,37 @@
 (() => {
   const TAB_IDS = ["summary", "calendar", "payments", "chart"];
 
+  function csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || "";
+  }
+
+  document.addEventListener("htmx:configRequest", (e) => {
+    const token = csrfToken();
+    if (token) {
+      e.detail.headers["X-CSRF-Token"] = token;
+    }
+  });
+
+  document.addEventListener(
+    "submit",
+    (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if ((form.method || "get").toLowerCase() === "get") return;
+      const token = csrfToken();
+      if (!token) return;
+      let input = form.querySelector('input[name="csrf_token"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "csrf_token";
+        form.appendChild(input);
+      }
+      input.value = token;
+    },
+    true,
+  );
+
   function money(n) {
     return Number(n).toLocaleString(undefined, {
       style: "currency",

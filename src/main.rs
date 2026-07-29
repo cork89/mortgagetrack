@@ -1,5 +1,7 @@
 mod app_state;
 mod auth;
+mod config;
+mod csrf;
 mod error;
 mod models;
 mod routes;
@@ -8,6 +10,7 @@ mod templates;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use axum::middleware;
 use axum::Router;
 use chrono::NaiveDate;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -19,6 +22,7 @@ use tower_sessions_sqlx_store::SqliteStore;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
+use config::SessionConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,10 +47,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let session_store = SqliteStore::new(pool.clone());
     session_store.migrate().await?;
 
+    let session_cfg = SessionConfig::from_env();
     let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false)
-        .with_http_only(true)
-        .with_same_site(tower_sessions::cookie::SameSite::Lax)
+        .with_secure(session_cfg.secure)
+        .with_http_only(session_cfg.http_only)
+        .with_same_site(session_cfg.same_site)
         .with_expiry(Expiry::OnInactivity(Duration::days(14)));
 
     let today_override = parse_current_date_override()?;
@@ -59,6 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .merge(routes::router())
         .nest_service("/static", ServeDir::new(static_dir))
+        .layer(middleware::from_fn(csrf::protect))
         .layer(session_layer)
         .with_state(state);
 
@@ -69,10 +75,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(3000);
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
+    if !session_cfg.secure && host != "127.0.0.1" && host != "localhost" && host != "::1" {
+        tracing::warn!(
+            %host,
+            "SESSION_SECURE is false while binding on a non-loopback host; \
+             set SESSION_SECURE=true behind HTTPS"
+        );
+    }
     if let Some(today) = today_override {
         tracing::warn!("CURRENT_DATE override active: {today}");
     }
-    tracing::info!("Homestead listening on http://{addr}");
+    tracing::info!(
+        secure = session_cfg.secure,
+        "Homestead listening on http://{addr}"
+    );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())

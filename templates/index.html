@@ -4,6 +4,7 @@
 <header class="top-bar">
   <h1 class="brand">Mortgage Track</h1>
   <form class="account-chip" method="post" action="/logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <span class="account-email" title="{{ user_email }}">{{ user_email }}</span>
     <button type="submit" class="btn-text">Sign out</button>
   </form>

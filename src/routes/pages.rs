@@ -11,6 +11,7 @@ use tower_sessions::Session;
 
 use crate::app_state::AppState;
 use crate::auth::{current_user, hx_redirect, is_htmx, AuthUser};
+use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, build_dashboard, clear_paid, create_profile, delete_extra, delete_profile,
@@ -131,10 +132,12 @@ async fn index(
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<Response> {
+    let csrf_token = csrf::ensure_token(&session).await?;
     let Some(user) = current_user(&session, &state.pool).await? else {
-        return Ok(HtmlTemplate(LandingTemplate {}).into_response());
+        return Ok(HtmlTemplate(LandingTemplate { csrf_token }).into_response());
     };
-    let page = load_page(&state, &q, &user).await?;
+    let mut page = load_page(&state, &q, &user).await?;
+    page.csrf_token = csrf_token;
     Ok(HtmlTemplate(page).into_response())
 }
 
@@ -685,6 +688,7 @@ async fn load_page(
     };
 
     Ok(IndexTemplate {
+        csrf_token: String::new(),
         has_profiles: !profiles.is_empty(),
         profiles: profile_opts,
         is_owner,
