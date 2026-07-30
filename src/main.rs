@@ -60,7 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         today_override,
     };
 
-    let static_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
+    let static_dir = std::env::var("STATIC_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static"));
     let app = Router::new()
         .merge(routes::router())
         .nest_service("/static", ServeDir::new(static_dir))

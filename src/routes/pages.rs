@@ -6,7 +6,7 @@ use axum::{
     Form, Router,
 };
 use chrono::{Datelike, NaiveDate};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
@@ -58,6 +58,18 @@ pub struct IndexQuery {
     pub grain: Option<String>,
 }
 
+/// Form fields often submit `version=` (empty) on create; treat that as 0.
+fn deserialize_i64_empty_as_zero<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    match raw.as_deref().map(str::trim) {
+        None | Some("") => Ok(0),
+        Some(s) => s.parse().map_err(serde::de::Error::custom),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ProfileForm {
     pub name: String,
@@ -65,7 +77,7 @@ pub struct ProfileForm {
     pub rate: f64,
     pub term: i32,
     pub start_date: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_i64_empty_as_zero")]
     pub version: i64,
 }
 
