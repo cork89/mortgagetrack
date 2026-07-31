@@ -282,10 +282,14 @@
     form.method = "post";
     form.setAttribute("action", action);
     form.action = action;
+    form.setAttribute("hx-post", action);
+    form.setAttribute("hx-target", "#error");
+    form.setAttribute("hx-swap", "outerHTML");
     if (btn) {
       btn.setAttribute("formaction", action);
       btn.setAttribute("formmethod", "post");
     }
+    if (typeof htmx !== "undefined") htmx.process(form);
   }
 
   function nextProfileName() {
@@ -554,11 +558,10 @@
       const name = select?.selectedOptions?.[0]?.textContent || "this profile";
       if (!id) return;
       if (!confirm(`Delete profile “${name}”? This cannot be undone.`)) return;
-      const f = document.createElement("form");
-      f.method = "post";
-      f.action = `/profiles/${id}/delete`;
-      document.body.appendChild(f);
-      f.submit();
+      if (typeof htmx === "undefined") return;
+      htmx.ajax("POST", `/profiles/${id}/delete`, {
+        headers: { "HX-Request": "true" },
+      });
     });
     document.getElementById("sharePanel")?.addEventListener("click", (e) => {
       const btn = e.target.closest("#copyShareLinkBtn");

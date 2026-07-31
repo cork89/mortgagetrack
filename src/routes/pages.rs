@@ -233,10 +233,11 @@ async fn chart_partial(
 async fn create_profile_handler(
     user: AuthUser,
     State(state): State<AppState>,
+    headers: HeaderMap,
     Form(form): Form<ProfileForm>,
 ) -> Response {
     match create_profile_inner(&state, user, form).await {
-        Ok(_) => Redirect::to("/").into_response(),
+        Ok(_) => hx_redirect(&headers, "/"),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
         })
@@ -271,11 +272,12 @@ async fn create_profile_inner(
 async fn update_profile_handler(
     user: AuthUser,
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Form(form): Form<ProfileForm>,
 ) -> Response {
     match update_profile_inner(&state, user, &id, form).await {
-        Ok(_) => Redirect::to("/").into_response(),
+        Ok(_) => hx_redirect(&headers, "/"),
         Err(AppError::Conflict(msg)) => (
             StatusCode::CONFLICT,
             HtmlTemplate(ErrorPartial { message: msg }),
@@ -320,6 +322,7 @@ async fn update_profile_inner(
 async fn rename_profile_handler(
     user: AuthUser,
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Form(form): Form<RenameForm>,
 ) -> Response {
@@ -340,7 +343,7 @@ async fn rename_profile_handler(
         }
     };
     match rename_profile(&state.pool, user.id, &id, name, version).await {
-        Ok(_) => Redirect::to("/").into_response(),
+        Ok(_) => hx_redirect(&headers, "/"),
         Err(AppError::Conflict(msg)) => (
             StatusCode::CONFLICT,
             HtmlTemplate(ErrorPartial { message: msg }),
@@ -356,10 +359,11 @@ async fn rename_profile_handler(
 async fn delete_profile_handler(
     user: AuthUser,
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
-) -> AppResult<Redirect> {
+) -> AppResult<Response> {
     delete_profile(&state.pool, user.id, &id).await?;
-    Ok(Redirect::to("/"))
+    Ok(hx_redirect(&headers, "/"))
 }
 
 async fn switch_profile(
