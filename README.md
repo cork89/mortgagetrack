@@ -6,6 +6,13 @@ It allows you keep track of your mortgage payments and share with anyone you are
 
 ![example](img/example.png)
 
+## Features
+
+* Create multiple profiles for different mortgages
+* Visualize breakdown of principal vs interest on each of your payments
+* Track extra payments, both normal and recast
+* Share your profile with another user
+
 
 ## Tech
 

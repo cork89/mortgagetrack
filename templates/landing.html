@@ -57,80 +57,16 @@
 {% block scripts %}
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-    // 1. Sticky Nav Logic
     const stickyNav = document.getElementById('sticky-nav');
     const heroCopy = document.querySelector('.landing-hero-copy');
-    
+
     if (stickyNav && heroCopy) {
       const observer = new IntersectionObserver(entries => {
         entries.forEach(entry => {
-          if (!entry.isIntersecting) {
-            stickyNav.classList.add('visible');
-          } else {
-            stickyNav.classList.remove('visible');
-          }
+          stickyNav.classList.toggle('visible', !entry.isIntersecting);
         });
       }, { threshold: 0, rootMargin: "-100px 0px 0px 0px" });
       observer.observe(heroCopy);
-    }
-
-    // 2. Scroll Reveal Animations
-    const revealElements = document.querySelectorAll('.reveal-on-scroll');
-    const revealObserver = new IntersectionObserver((entries, obs) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-revealed');
-          obs.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
-
-    revealElements.forEach(el => revealObserver.observe(el));
-
-    // 3. Scenario Slider Logic
-    const slider = document.getElementById('extra-slider');
-    if (slider) {
-      const amtStr = document.getElementById('heading-amt');
-      const extraRow = document.getElementById('preview-extra-row');
-      const val1 = document.getElementById('preview-extra-val1');
-      const val2 = document.getElementById('preview-extra-val2');
-      const bal1 = document.getElementById('preview-balance1');
-      const chip = document.getElementById('preview-extra-chip');
-      const pillExtra = document.getElementById('preview-pill-extra');
-      
-      const bal2 = document.getElementById('preview-balance2');
-      
-      const baseBalance = 385400.50; // Balance after #40
-      
-      slider.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value, 10);
-        
-        if (val === 0) {
-          extraRow.style.display = 'none';
-          pillExtra.style.display = 'none';
-          amtStr.textContent = '0';
-          bal2.textContent = '$384,115.80';
-        } else {
-          extraRow.style.display = '';
-          pillExtra.style.display = 'inline-flex';
-          
-          const formatted = val.toLocaleString('en-US');
-          amtStr.textContent = formatted;
-          
-          val1.textContent = '$' + formatted + '.00';
-          val2.textContent = '$' + formatted + '.00';
-          chip.textContent = '+$' + formatted + ' Principal';
-          pillExtra.textContent = 'Oct 15 • +$' + formatted + ' Extra';
-          
-          const newBal = baseBalance - val;
-          const newBalFormatted = newBal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-          bal1.textContent = '$' + newBalFormatted;
-          
-          // Fake #41 remaining balance
-          const newBal2 = newBal - 1284.70; 
-          bal2.textContent = '$' + newBal2.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        }
-      });
     }
   });
 </script>
