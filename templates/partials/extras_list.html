@@ -6,7 +6,7 @@
 <ul class="extras-list" id="extrasList">
   {% for ex in extras %}
   <li>
-    <span><strong>${{ ex.amount }}</strong> <span class="muted">on {{ ex.date }}</span></span>
+    <span><strong>${{ ex.amount }}</strong> <span class="muted">on {{ ex.date }}{% if ex.recast %} · recast{% endif %}</span></span>
     <button type="button" class="btn-text danger"
       hx-post="/profiles/{{ profile_id }}/extras/{{ ex.id }}"
       hx-target="#main-panel"

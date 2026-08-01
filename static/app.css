@@ -654,6 +654,30 @@
       flex: 0 1 8rem;
     }
 
+    .extra-form label.recast-check {
+      flex: 0 0 auto;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.4rem;
+      min-width: 0;
+      padding-bottom: 0.65rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--ink);
+      cursor: pointer;
+      user-select: none;
+      margin-left:auto;
+    }
+
+    .extra-form label.recast-check input {
+      width: 1rem;
+      height: 1rem;
+      margin: 0;
+      padding: 0;
+      accent-color: var(--sea-deep);
+    }
+
     .extra-form input {
       padding: 0.55rem 0.7rem;
       font-size: 0.95rem;

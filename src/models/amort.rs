@@ -11,6 +11,7 @@ pub struct ScheduleRow {
     pub principal: f64,
     pub interest: f64,
     pub balance: f64,
+    pub recast: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +23,7 @@ pub enum RowKind {
 #[derive(Debug, Clone)]
 pub struct ScheduleBuilt {
     pub rows: Vec<ScheduleRow>,
+    /// Current monthly payment (after any recasts).
     pub payment: f64,
     pub total_interest: f64,
 }
@@ -34,23 +36,22 @@ struct Event {
     amount: Option<f64>,
     due: NaiveDate,
     order: u8,
+    recast: bool,
 }
+
+/// Extra payment input: (id, date, amount, recast).
+pub type ExtraInput = (String, NaiveDate, f64, bool);
 
 pub fn build_schedule(
     principal: f64,
     annual_rate: f64,
     years: i32,
     start: NaiveDate,
-    extras: &[(String, NaiveDate, f64)],
+    extras: &[ExtraInput],
 ) -> ScheduleBuilt {
     let n = years * 12;
     let r = annual_rate / 100.0 / 12.0;
-    let payment = if r == 0.0 {
-        principal / f64::from(n)
-    } else {
-        let pow = (1.0 + r).powi(n);
-        (principal * r * pow) / (pow - 1.0)
-    };
+    let mut payment = amort_payment(principal, r, n);
 
     let mut events: Vec<Event> = Vec::with_capacity(n as usize + extras.len());
 
@@ -64,10 +65,11 @@ pub fn build_schedule(
             amount: None,
             due,
             order: 0,
+            recast: false,
         });
     }
 
-    for (id, date, amount) in extras {
+    for (id, date, amount, recast) in extras {
         if *amount <= 0.0 {
             continue;
         }
@@ -78,12 +80,14 @@ pub fn build_schedule(
             amount: Some(*amount),
             due: *date,
             order: 1,
+            recast: *recast,
         });
     }
 
     events.sort_by(|a, b| a.due.cmp(&b.due).then(a.order.cmp(&b.order)));
 
     let mut balance = principal;
+    let mut remaining = n;
     let mut rows = Vec::with_capacity(events.len());
 
     for ev in events {
@@ -107,6 +111,7 @@ pub fn build_schedule(
                 if balance < 0.005 {
                     balance = 0.0;
                 }
+                remaining = (remaining - 1).max(0);
 
                 rows.push(ScheduleRow {
                     kind: RowKind::Scheduled,
@@ -118,6 +123,7 @@ pub fn build_schedule(
                     principal: principal_part,
                     interest,
                     balance,
+                    recast: false,
                 });
             }
             RowKind::Extra => {
@@ -130,10 +136,18 @@ pub fn build_schedule(
                 if balance < 0.005 {
                     balance = 0.0;
                 }
+                if ev.recast && remaining > 0 && balance > 0.005 {
+                    payment = amort_payment(balance, r, remaining);
+                }
                 let id = ev.id.clone().unwrap_or_default();
+                let label = if ev.recast {
+                    "Recast".to_string()
+                } else {
+                    "Extra".to_string()
+                };
                 rows.push(ScheduleRow {
                     kind: RowKind::Extra,
-                    label: "Extra".to_string(),
+                    label,
                     id: Some(id.clone()),
                     due: ev.due,
                     pay_key: format!("extra:{id}"),
@@ -141,6 +155,7 @@ pub fn build_schedule(
                     principal: principal_part,
                     interest: 0.0,
                     balance,
+                    recast: ev.recast,
                 });
             }
         }
@@ -151,6 +166,18 @@ pub fn build_schedule(
         rows,
         payment,
         total_interest,
+    }
+}
+
+fn amort_payment(balance: f64, r: f64, periods: i32) -> f64 {
+    if periods <= 0 || balance <= 0.005 {
+        return 0.0;
+    }
+    if r == 0.0 {
+        balance / f64::from(periods)
+    } else {
+        let pow = (1.0 + r).powi(periods);
+        (balance * r * pow) / (pow - 1.0)
     }
 }
 
@@ -207,5 +234,77 @@ mod tests {
         let built = build_schedule(400_000.0, 6.5, 30, start, &[]);
         assert_eq!(built.rows.len(), 360);
         assert!((built.payment - 2528.27).abs() < 1.0);
+    }
+
+    #[test]
+    fn extra_without_recast_keeps_payment_shortens_term() {
+        let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+        let base = build_schedule(400_000.0, 6.5, 30, start, &[]);
+        let extras = [(
+            "e1".into(),
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            50_000.0,
+            false,
+        )];
+        let built = build_schedule(400_000.0, 6.5, 30, start, &extras);
+        assert!((built.payment - base.payment).abs() < 0.01);
+
+        let last_nonzero = built
+            .rows
+            .iter()
+            .rev()
+            .find(|r| r.kind == RowKind::Scheduled && r.payment > 0.005)
+            .unwrap();
+        let base_last = base
+            .rows
+            .iter()
+            .rev()
+            .find(|r| r.kind == RowKind::Scheduled && r.payment > 0.005)
+            .unwrap();
+        assert!(last_nonzero.due < base_last.due);
+    }
+
+    #[test]
+    fn extra_with_recast_lowers_future_payments() {
+        let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+        let base = build_schedule(400_000.0, 6.5, 30, start, &[]);
+        let extras = [(
+            "e1".into(),
+            NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            50_000.0,
+            true,
+        )];
+        let built = build_schedule(400_000.0, 6.5, 30, start, &extras);
+        assert!(built.payment < base.payment - 1.0);
+
+        // Full term still has non-zero scheduled payments near the end.
+        let late = built
+            .rows
+            .iter()
+            .filter(|r| r.kind == RowKind::Scheduled)
+            .nth(350)
+            .unwrap();
+        assert!(late.payment > 0.005);
+
+        let recast_row = built.rows.iter().find(|r| r.kind == RowKind::Extra).unwrap();
+        assert!(recast_row.recast);
+        assert_eq!(recast_row.label, "Recast");
+
+        // First scheduled payment (before recast) keeps original amount.
+        let first = built
+            .rows
+            .iter()
+            .find(|r| r.kind == RowKind::Scheduled)
+            .unwrap();
+        assert!((first.payment - base.payment).abs() < 1.0);
+
+        // Payments after the recast use the new lower amount.
+        let after = built
+            .rows
+            .iter()
+            .filter(|r| r.kind == RowKind::Scheduled && r.due > extras[0].1)
+            .find(|r| r.payment > 0.005)
+            .unwrap();
+        assert!((after.payment - built.payment).abs() < 1.0);
     }
 }

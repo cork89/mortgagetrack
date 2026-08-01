@@ -127,6 +127,8 @@ pub struct ExtraForm {
     pub amount: f64,
     pub version: i64,
     pub filter: Option<String>,
+    #[serde(default)]
+    pub recast: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -431,11 +433,11 @@ async fn mark_due_handler(
     let loan = profile
         .loan()
         .ok_or_else(|| AppError::BadRequest("No loan".into()))?;
-    let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
+    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
         .iter()
         .filter_map(|ex| {
             let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount))
+            Some((ex.id.clone(), date, ex.amount, ex.recast))
         })
         .collect();
     let built = crate::models::build_schedule(
@@ -571,7 +573,17 @@ async fn add_extra_handler(
         grain: None,
     };
     let version = parse_version(form.version)?;
-    match add_extra(&state.pool, user.id, &id, date, form.amount, version).await {
+    match add_extra(
+        &state.pool,
+        user.id,
+        &id,
+        date,
+        form.amount,
+        form.recast,
+        version,
+    )
+    .await
+    {
         Ok(_) => {
             let page = load_page(&state, &q, &user).await?;
             let d = page

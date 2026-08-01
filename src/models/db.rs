@@ -64,6 +64,8 @@ pub struct ExtraPayment {
     pub profile_id: String,
     pub date: String,
     pub amount: f64,
+    /// When true, schedule is recast so future monthly payments drop instead of term shortening.
+    pub recast: bool,
 }
 
 pub(crate) fn user_key(user_id: Uuid) -> String {
@@ -301,7 +303,7 @@ pub async fn upsert_payment_note(
 pub async fn list_extras(pool: &SqlitePool, profile_id: &str) -> AppResult<Vec<ExtraPayment>> {
     let rows = sqlx::query_as::<_, ExtraPayment>(
         r#"
-        SELECT id, profile_id, date, amount
+        SELECT id, profile_id, date, amount, recast
         FROM extras
         WHERE profile_id = ?
         ORDER BY date
@@ -370,11 +372,11 @@ pub async fn update_profile_loan(
         .map_err(|_| AppError::Internal("invalid profile owner id".into()))?;
     ensure_unique_name(pool, owner_id, name, Some(id)).await?;
     let extras = list_extras(pool, id).await?;
-    let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
+    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
         .iter()
         .filter_map(|ex| {
             let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount))
+            Some((ex.id.clone(), date, ex.amount, ex.recast))
         })
         .collect();
     let built = build_schedule(principal, rate, term_years, start_date, &extra_tuples);
@@ -548,6 +550,7 @@ pub async fn add_extra(
     profile_id: &str,
     date: NaiveDate,
     amount: f64,
+    recast: bool,
     expected_version: i64,
 ) -> AppResult<ExtraPayment> {
     require_profile_access(pool, user_id, profile_id).await?;
@@ -558,11 +561,12 @@ pub async fn add_extra(
     let date_str = date.format("%Y-%m-%d").to_string();
     let mut tx = pool.begin().await?;
     reserve_profile_version(&mut tx, profile_id, expected_version).await?;
-    sqlx::query("INSERT INTO extras (id, profile_id, date, amount) VALUES (?, ?, ?, ?)")
+    sqlx::query("INSERT INTO extras (id, profile_id, date, amount, recast) VALUES (?, ?, ?, ?, ?)")
         .bind(&id)
         .bind(profile_id)
         .bind(&date_str)
         .bind(amount)
+        .bind(recast)
         .execute(&mut *tx)
         .await?;
 
@@ -581,6 +585,7 @@ pub async fn add_extra(
         profile_id: profile_id.to_string(),
         date: date_str,
         amount,
+        recast,
     })
 }
 
@@ -630,11 +635,11 @@ async fn refresh_loan_totals_tx(
         return Ok(());
     };
     let extras = list_extras_in_tx(tx, profile_id).await?;
-    let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
+    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
         .iter()
         .filter_map(|ex| {
             let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount))
+            Some((ex.id.clone(), date, ex.amount, ex.recast))
         })
         .collect();
     let built = build_schedule(
@@ -687,7 +692,7 @@ async fn list_extras_in_tx(
 ) -> AppResult<Vec<ExtraPayment>> {
     let rows = sqlx::query_as::<_, ExtraPayment>(
         r#"
-        SELECT id, profile_id, date, amount
+        SELECT id, profile_id, date, amount, recast
         FROM extras
         WHERE profile_id = ?
         ORDER BY date

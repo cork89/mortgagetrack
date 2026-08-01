@@ -72,3 +72,23 @@ async fn profiles_have_version(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
             .await?;
     Ok(cols.iter().any(|(_, name)| name == "version"))
 }
+
+/// Add `extras.recast` so lump-sum extras can lower future payments instead of shortening term.
+pub async fn ensure_extra_recast(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if extras_have_recast(pool).await? {
+        return Ok(());
+    }
+    tracing::info!("adding extras.recast column");
+    sqlx::query("ALTER TABLE extras ADD COLUMN recast INTEGER NOT NULL DEFAULT 0")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn extras_have_recast(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let cols: Vec<(i32, String)> =
+        sqlx::query_as("SELECT cid, name FROM pragma_table_info('extras')")
+            .fetch_all(pool)
+            .await?;
+    Ok(cols.iter().any(|(_, name)| name == "recast"))
+}

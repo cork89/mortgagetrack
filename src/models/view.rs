@@ -243,10 +243,11 @@ fn chip_for(row: &ScheduleRow, paid: &HashSet<String>, today: NaiveDate) -> Paym
     let is_paid = paid.contains(&row.pay_key);
     let status = payment_status(row.due, is_paid, today).to_string();
     let status_text = if row.kind == RowKind::Extra {
+        let kind = if row.recast { "Recast" } else { "Extra" };
         if status == "paid" {
-            "Extra · Paid".to_string()
+            format!("{kind} · Paid")
         } else {
-            format!("Extra · {}", status_label(&status))
+            format!("{kind} · {}", status_label(&status))
         }
     } else {
         status_label(&status).to_string()
@@ -279,11 +280,11 @@ pub fn build_dashboard(
 ) -> Option<DashboardView> {
     let loan = profile.loan()?;
     let paid: HashSet<String> = paid_keys.iter().cloned().collect();
-    let extra_tuples: Vec<(String, NaiveDate, f64)> = extras
+    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
         .iter()
         .filter_map(|ex| {
             let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount))
+            Some((ex.id.clone(), date, ex.amount, ex.recast))
         })
         .collect();
 
@@ -574,7 +575,11 @@ fn payments_table(
             for row in group {
                 let is_paid = paid.contains(&row.pay_key);
                 let label_html = if row.kind == RowKind::Extra {
-                    r#"<span class="type-pill">Extra</span>"#.to_string()
+                    if row.recast {
+                        r#"<span class="type-pill">Recast</span>"#.to_string()
+                    } else {
+                        r#"<span class="type-pill">Extra</span>"#.to_string()
+                    }
                 } else {
                     row.label.clone()
                 };

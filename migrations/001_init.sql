@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS extras (
     profile_id TEXT NOT NULL,
     date TEXT NOT NULL,
     amount REAL NOT NULL,
+    recast INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 );
 

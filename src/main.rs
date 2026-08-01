@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_migrations(&pool).await?;
     models::ensure_profiles_belong_to_users(&pool).await?;
     models::ensure_profile_version(&pool).await?;
+    models::ensure_extra_recast(&pool).await?;
     auth::ensure_test_user(&pool).await?;
 
     let session_store = SqliteStore::new(pool.clone());
