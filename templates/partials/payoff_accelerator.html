@@ -1,0 +1,20 @@
+{% macro card(accelerator) %}
+<section class="payoff-accelerator" aria-label="Payoff accelerator">
+  <header>
+    <span class="badge">Payoff Accelerator</span>
+    <span class="val"><strong>{{ accelerator.remaining }}</strong> remaining</span>
+  </header>
+  <div class="bar" role="img" aria-label="{{ accelerator.bar_aria }}">
+    <div class="fill" style="width: {{ accelerator.paid_width }}"></div>
+    <div class="extra" style="width: {{ accelerator.extra_width }}"></div>
+  </div>
+  <div class="stats">
+    <div><span class="dot paid" aria-hidden="true"></span>{{ accelerator.paid_label }}</div>
+    <div><span class="dot extra" aria-hidden="true"></span>{{ accelerator.extra_label }}</div>
+    <div><span class="dot due" aria-hidden="true"></span>{{ accelerator.saved_label }}</div>
+    {% if accelerator.show_interest %}
+    <div><span class="dot interest" aria-hidden="true"></span>{{ accelerator.interest_label }}</div>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}

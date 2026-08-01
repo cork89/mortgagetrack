@@ -1,4 +1,5 @@
 {% import "partials/payment_macros.html" as pays %}
+{% import "partials/payoff_accelerator.html" as accel %}
 {% match dashboard %}
 {% when Some with (d) %}
 <section class="dashboard visible" id="dashboard" aria-live="polite"
@@ -41,6 +42,7 @@
       <div class="panel-head">
         <h2>Summary</h2>
       </div>
+      {% call accel::card(d.accelerator) %}
       <div class="year-strip" id="yearStrip">
         {% for s in d.year_stats %}
         <div class="{{ s.class }}">

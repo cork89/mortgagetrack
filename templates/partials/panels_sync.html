@@ -1,9 +1,11 @@
 {# Sync summary + both panels after paid/extra mutations (HTMX OOB only). #}
+{% import "partials/payoff_accelerator.html" as accel %}
 <div id="panel-summary" hx-swap-oob="innerHTML">
   <div class="panel-surface">
     <div class="panel-head">
       <h2>Summary</h2>
     </div>
+    {% call accel::card(dashboard.accelerator) %}
     <div class="year-strip" id="yearStrip">
       {% for s in dashboard.year_stats %}
       <div class="{{ s.class }}">

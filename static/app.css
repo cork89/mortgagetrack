@@ -243,6 +243,107 @@ button:active,
 
 .dashboard.visible { display: block; }
 
+.payoff-accelerator {
+  margin: 1rem 1.25rem 0;
+  padding: 1.15rem 1.3rem 1.2rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 14px 32px rgba(30, 74, 71, 0.08);
+}
+
+.payoff-accelerator > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.payoff-accelerator .badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sea);
+}
+
+.payoff-accelerator .val {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  font-weight: 400;
+  color: var(--sea-deep);
+  text-align: right;
+}
+
+.payoff-accelerator .val strong {
+  font-weight: 700;
+}
+
+.payoff-accelerator .bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mist);
+  display: flex;
+  overflow: hidden;
+  margin-bottom: 0.85rem;
+}
+
+.payoff-accelerator .fill {
+  height: 100%;
+  background: var(--sea);
+}
+
+.payoff-accelerator .extra {
+  height: 100%;
+  background: var(--sand);
+}
+
+.payoff-accelerator .stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.payoff-accelerator .stats div {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.payoff-accelerator .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.payoff-accelerator .dot.paid { background: var(--sea); }
+.payoff-accelerator .dot.extra { background: var(--sand); }
+.payoff-accelerator .dot.due { background: var(--due); }
+.payoff-accelerator .dot.interest { background: var(--sea-deep); }
+
+@media (max-width: 520px) {
+  .payoff-accelerator > header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .payoff-accelerator .val {
+    text-align: left;
+  }
+
+  .payoff-accelerator .stats {
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+}
+
 .year-strip {
   display: grid;
   grid-template-columns: 1.5fr 1.3fr repeat(2, 1fr);

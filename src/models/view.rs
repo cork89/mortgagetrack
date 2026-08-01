@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Datelike, Month, NaiveDate};
 
 use super::amort::{build_schedule, payment_status, RowKind, ScheduleRow};
-use super::db::{extras_as_inputs, ExtraPayment, Profile};
+use super::db::{extras_as_inputs, ExtraPayment, Loan, Profile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
@@ -138,6 +138,19 @@ pub struct YearSummary {
 }
 
 #[derive(Debug, Clone)]
+pub struct PayoffAccelerator {
+    pub remaining: String,
+    pub paid_label: String,
+    pub extra_label: String,
+    pub saved_label: String,
+    pub interest_label: String,
+    pub show_interest: bool,
+    pub paid_width: String,
+    pub extra_width: String,
+    pub bar_aria: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct ChartBucket {
     pub label: String,
     pub principal: f64,
@@ -169,6 +182,7 @@ pub struct DashboardView {
     pub profile_principal: String,
     pub profile_rate: String,
     pub profile_term: String,
+    pub accelerator: PayoffAccelerator,
     pub year_stats: Vec<YearStat>,
     pub view_year: i32,
     pub months: Vec<MonthCell>,
@@ -292,6 +306,7 @@ pub fn build_dashboard(
     let schedule = &built.rows;
 
     let year_stats = year_strip(schedule, &paid, extras.len(), loan.principal, today);
+    let accelerator = payoff_accelerator(schedule, &paid, extras, &loan);
     let months = calendar_months(schedule, &paid, view_year, today);
     let (payment_rows, summary) = payments_table(
         schedule,
@@ -319,6 +334,7 @@ pub fn build_dashboard(
         profile_principal: money(loan.principal),
         profile_rate: format!("{}%", loan.rate),
         profile_term: format!("{}yr", loan.term_years),
+        accelerator,
         year_stats,
         view_year,
         months,
@@ -352,6 +368,170 @@ pub fn empty_state(profile: Option<&Profile>) -> EmptyState {
             button_label: "New profile".into(),
             action: "create".into(),
         }
+    }
+}
+
+fn money_whole(n: f64) -> String {
+    let neg = n < 0.0;
+    let whole = n.abs().round() as i64;
+    let s = format!("{whole}");
+    let bytes = s.as_bytes();
+    let mut out = String::new();
+    for (i, ch) in bytes.iter().enumerate() {
+        if i > 0 && (bytes.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(*ch as char);
+    }
+    let formatted = format!("${out}");
+    if neg {
+        format!("-{formatted}")
+    } else {
+        formatted
+    }
+}
+
+fn months_between(earlier: NaiveDate, later: NaiveDate) -> i32 {
+    (later.year() - earlier.year()) * 12 + (later.month() as i32 - earlier.month() as i32)
+}
+
+fn last_active_due(schedule: &[ScheduleRow]) -> Option<NaiveDate> {
+    schedule
+        .iter()
+        .rev()
+        .find(|r| r.kind == RowKind::Scheduled && r.payment > 0.005)
+        .map(|r| r.due)
+}
+
+fn format_years_saved(months: i32) -> String {
+    if months <= 0 {
+        return "0 Yrs Saved".into();
+    }
+    if months < 12 {
+        return format!("{months} Mo Saved");
+    }
+    let years = months as f64 / 12.0;
+    if (years - years.round()).abs() < 0.05 {
+        format!("{:.0} Yrs Saved", years.round())
+    } else {
+        format!("{:.1} Yrs Saved", years)
+    }
+}
+
+fn format_extra_label(extras: &[ExtraPayment]) -> String {
+    if extras.is_empty() {
+        return "No extras".into();
+    }
+
+    let regular: Vec<f64> = extras
+        .iter()
+        .filter(|e| !e.recast)
+        .map(|e| e.amount)
+        .collect();
+    let recast_total: f64 = extras.iter().filter(|e| e.recast).map(|e| e.amount).sum();
+    let recast_count = extras.iter().filter(|e| e.recast).count();
+
+    if regular.is_empty() {
+        let label = if recast_count == 1 { "Recast" } else { "Recasts" };
+        return format!("+{} {label}", money_whole(recast_total));
+    }
+
+    let mut freq: HashMap<i64, usize> = HashMap::new();
+    for amount in &regular {
+        *freq.entry(amount.round() as i64).or_default() += 1;
+    }
+    let extra_bit = if let Some((&amt, &count)) = freq.iter().max_by_key(|(_, c)| *c) {
+        if count >= 2 {
+            format!("+{}/mo Extra", money_whole(amt as f64))
+        } else {
+            format!("+{} Extra", money_whole(regular.iter().sum()))
+        }
+    } else {
+        format!("+{} Extra", money_whole(regular.iter().sum()))
+    };
+
+    if recast_count == 0 {
+        extra_bit
+    } else {
+        format!("{extra_bit} · {} Recast", money_whole(recast_total))
+    }
+}
+
+fn payoff_accelerator(
+    schedule: &[ScheduleRow],
+    paid: &HashSet<String>,
+    extras: &[ExtraPayment],
+    loan: &Loan,
+) -> PayoffAccelerator {
+    let mut remaining = loan.principal;
+    for row in schedule {
+        if paid.contains(&row.pay_key) {
+            remaining = row.balance;
+        } else {
+            break;
+        }
+    }
+
+    let paid_count = schedule.iter().filter(|r| paid.contains(&r.pay_key)).count();
+    let scheduled_paid: f64 = schedule
+        .iter()
+        .filter(|r| r.kind == RowKind::Scheduled && paid.contains(&r.pay_key))
+        .map(|r| r.principal)
+        .sum();
+    let extra_paid: f64 = schedule
+        .iter()
+        .filter(|r| r.kind == RowKind::Extra && paid.contains(&r.pay_key))
+        .map(|r| r.principal)
+        .sum();
+
+    let denom = loan.principal.max(1.0);
+    let mut paid_pct = ((scheduled_paid / denom) * 100.0).clamp(0.0, 100.0);
+    let mut extra_pct = ((extra_paid / denom) * 100.0).clamp(0.0, 100.0);
+    if paid_pct + extra_pct > 100.0 {
+        extra_pct = (100.0 - paid_pct).max(0.0);
+    }
+    // Keep a visible sliver once there's any progress.
+    if scheduled_paid > 0.0 && paid_pct < 1.5 {
+        paid_pct = 1.5;
+    }
+    if extra_paid > 0.0 && extra_pct < 1.5 {
+        extra_pct = (100.0 - paid_pct).min(1.5);
+    }
+
+    let baseline = build_schedule(loan.principal, loan.rate, loan.term_years, loan.start_date, &[]);
+    let months_saved = match (last_active_due(&baseline.rows), last_active_due(schedule)) {
+        (Some(base_end), Some(accel_end)) if accel_end < base_end => {
+            months_between(accel_end, base_end).max(0)
+        }
+        _ => 0,
+    };
+    let current_interest: f64 = schedule.iter().map(|r| r.interest).sum();
+    let interest_saved = (baseline.total_interest - current_interest).max(0.0);
+
+    let paid_label = format!("{paid_count} Paid");
+    let extra_label = format_extra_label(extras);
+    let saved_label = format_years_saved(months_saved);
+    let show_interest = interest_saved >= 1.0;
+    let interest_label = if show_interest {
+        format!("{} Interest Saved", money_short(interest_saved))
+    } else {
+        String::new()
+    };
+    let bar_aria = format!(
+        "{:.0}% of principal paid through scheduled payments, {:.0}% through extras",
+        paid_pct, extra_pct
+    );
+
+    PayoffAccelerator {
+        remaining: money_whole(remaining),
+        paid_label,
+        extra_label,
+        saved_label,
+        interest_label,
+        show_interest,
+        paid_width: format!("{paid_pct:.1}%"),
+        extra_width: format!("{extra_pct:.1}%"),
+        bar_aria,
     }
 }
 

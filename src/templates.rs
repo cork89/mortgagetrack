@@ -6,7 +6,7 @@ use axum::{
 
 use crate::models::{
     ChartPair, DashboardView, EmptyState, ExtraPayment, MonthCell, PaymentChip, PaymentRowView,
-    ProfileOption, YearStat, YearSummary,
+    PayoffAccelerator, ProfileOption, YearStat, YearSummary,
 };
 
 /// Wrap any Askama template so Axum handlers can return it as `text/html`.
@@ -147,6 +147,7 @@ pub struct YearStripTemplate {
 #[derive(Template)]
 #[template(path = "partials/summary.html")]
 pub struct SummaryTemplate {
+    pub accelerator: PayoffAccelerator,
     pub year_stats: Vec<YearStat>,
 }
 

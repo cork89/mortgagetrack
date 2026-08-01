@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!(
         secure = session_cfg.secure,
-        "Mortgage Track listening on http://{addr}"
+        "Homeabell listening on http://{addr}"
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

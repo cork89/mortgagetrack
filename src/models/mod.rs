@@ -18,5 +18,5 @@ pub use sharing::{
 };
 pub use view::{
     build_dashboard, empty_state, ChartPair, DashboardView, EmptyState, MonthCell, PaymentChip,
-    PaymentFilter, PaymentRowView, ProfileOption, TabId, YearStat, YearSummary,
+    PaymentFilter, PaymentRowView, PayoffAccelerator, ProfileOption, TabId, YearStat, YearSummary,
 };

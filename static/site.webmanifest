@@ -1,0 +1,21 @@
+{
+  "name": "Homeabell",
+  "short_name": "Homeabell",
+  "icons": [
+    {
+      "src": "/static/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#2f6f6a",
+  "background_color": "#f7faf9",
+  "display": "standalone"
+}

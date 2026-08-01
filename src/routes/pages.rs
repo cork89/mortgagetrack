@@ -189,6 +189,7 @@ async fn summary_partial(
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
     Ok(HtmlTemplate(SummaryTemplate {
+        accelerator: d.accelerator,
         year_stats: d.year_stats,
     }))
 }
