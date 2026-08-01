@@ -37,10 +37,20 @@ struct Event {
     due: NaiveDate,
     order: u8,
     recast: bool,
+    /// When false, extra is listed but does not change balance or monthly payment.
+    applied: bool,
 }
 
-/// Extra payment input: (id, date, amount, recast).
-pub type ExtraInput = (String, NaiveDate, f64, bool);
+/// Extra payment to merge into the amortization schedule.
+#[derive(Debug, Clone)]
+pub struct ExtraInput {
+    pub id: String,
+    pub date: NaiveDate,
+    pub amount: f64,
+    pub recast: bool,
+    /// When false, the row is shown but balance / payment / interest are unchanged.
+    pub applied: bool,
+}
 
 pub fn build_schedule(
     principal: f64,
@@ -66,21 +76,23 @@ pub fn build_schedule(
             due,
             order: 0,
             recast: false,
+            applied: true,
         });
     }
 
-    for (id, date, amount, recast) in extras {
-        if *amount <= 0.0 {
+    for ex in extras {
+        if ex.amount <= 0.0 {
             continue;
         }
         events.push(Event {
             kind: RowKind::Extra,
             n: None,
-            id: Some(id.clone()),
-            amount: Some(*amount),
-            due: *date,
+            id: Some(ex.id.clone()),
+            amount: Some(ex.amount),
+            due: ex.date,
             order: 1,
-            recast: *recast,
+            recast: ex.recast,
+            applied: ex.applied,
         });
     }
 
@@ -129,15 +141,15 @@ pub fn build_schedule(
             RowKind::Extra => {
                 let requested = ev.amount.unwrap_or(0.0);
                 let mut principal_part = 0.0;
-                if balance > 0.005 {
+                if ev.applied && balance > 0.005 {
                     principal_part = requested.min(balance);
-                }
-                balance = (balance - principal_part).max(0.0);
-                if balance < 0.005 {
-                    balance = 0.0;
-                }
-                if ev.recast && remaining > 0 && balance > 0.005 {
-                    payment = amort_payment(balance, r, remaining);
+                    balance = (balance - principal_part).max(0.0);
+                    if balance < 0.005 {
+                        balance = 0.0;
+                    }
+                    if ev.recast && remaining > 0 && balance > 0.005 {
+                        payment = amort_payment(balance, r, remaining);
+                    }
                 }
                 let id = ev.id.clone().unwrap_or_default();
                 let label = if ev.recast {
@@ -145,14 +157,15 @@ pub fn build_schedule(
                 } else {
                     "Extra".to_string()
                 };
+                let shown = if ev.applied { principal_part } else { requested };
                 rows.push(ScheduleRow {
                     kind: RowKind::Extra,
                     label,
                     id: Some(id.clone()),
                     due: ev.due,
                     pay_key: format!("extra:{id}"),
-                    payment: principal_part,
-                    principal: principal_part,
+                    payment: shown,
+                    principal: shown,
                     interest: 0.0,
                     balance,
                     recast: ev.recast,
@@ -236,12 +249,27 @@ mod tests {
         assert!((built.payment - 2528.27).abs() < 1.0);
     }
 
+    fn applied_extra(
+        id: &str,
+        date: NaiveDate,
+        amount: f64,
+        recast: bool,
+    ) -> ExtraInput {
+        ExtraInput {
+            id: id.into(),
+            date,
+            amount,
+            recast,
+            applied: true,
+        }
+    }
+
     #[test]
     fn extra_without_recast_keeps_payment_shortens_term() {
         let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
         let base = build_schedule(400_000.0, 6.5, 30, start, &[]);
-        let extras = [(
-            "e1".into(),
+        let extras = [applied_extra(
+            "e1",
             NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             50_000.0,
             false,
@@ -268,8 +296,8 @@ mod tests {
     fn extra_with_recast_lowers_future_payments() {
         let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
         let base = build_schedule(400_000.0, 6.5, 30, start, &[]);
-        let extras = [(
-            "e1".into(),
+        let extras = [applied_extra(
+            "e1",
             NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
             50_000.0,
             true,
@@ -302,9 +330,38 @@ mod tests {
         let after = built
             .rows
             .iter()
-            .filter(|r| r.kind == RowKind::Scheduled && r.due > extras[0].1)
+            .filter(|r| r.kind == RowKind::Scheduled && r.due > extras[0].date)
             .find(|r| r.payment > 0.005)
             .unwrap();
         assert!((after.payment - built.payment).abs() < 1.0);
+    }
+
+    #[test]
+    fn unpaid_extra_does_not_change_payment_or_interest() {
+        let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+        let base = build_schedule(400_000.0, 6.5, 30, start, &[]);
+        let extras = [ExtraInput {
+            id: "e1".into(),
+            date: NaiveDate::from_ymd_opt(2026, 9, 1).unwrap(),
+            amount: 50_000.0,
+            recast: true,
+            applied: false,
+        }];
+        let built = build_schedule(400_000.0, 6.5, 30, start, &extras);
+        assert!((built.payment - base.payment).abs() < 0.01);
+        assert!((built.total_interest - base.total_interest).abs() < 0.01);
+
+        let row = built.rows.iter().find(|r| r.kind == RowKind::Extra).unwrap();
+        assert!((row.payment - 50_000.0).abs() < 0.01);
+        // Balance unchanged: matches prior scheduled payment balance.
+        let sept = built
+            .rows
+            .iter()
+            .find(|r| {
+                r.kind == RowKind::Scheduled
+                    && r.due == NaiveDate::from_ymd_opt(2026, 9, 1).unwrap()
+            })
+            .unwrap();
+        assert!((row.balance - sept.balance).abs() < 0.01);
     }
 }

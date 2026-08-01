@@ -6,10 +6,10 @@ mod view;
 
 pub use amort::build_schedule;
 pub use db::{
-    add_extra, clear_paid, create_profile, delete_extra, delete_profile, get_active_profile_id,
-    list_extras, list_paid_keys, list_payment_notes, list_profiles, load_profile, mark_due_paid,
-    rename_profile, require_profile_access, set_active_profile, toggle_paid, update_profile_loan,
-    upsert_payment_note, ExtraPayment, ProfileRole,
+    add_extra, clear_paid, create_profile, delete_extra, delete_profile, extras_as_inputs,
+    get_active_profile_id, list_extras, list_paid_keys, list_payment_notes, list_profiles,
+    load_profile, mark_due_paid, rename_profile, require_profile_access, set_active_profile,
+    toggle_paid, update_profile_loan, upsert_payment_note, ExtraPayment, ProfileRole,
 };
 pub use migrate::{ensure_extra_recast, ensure_profile_version, ensure_profiles_belong_to_users};
 pub use sharing::{

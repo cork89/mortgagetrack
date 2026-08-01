@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Datelike, Month, NaiveDate};
 
 use super::amort::{build_schedule, payment_status, RowKind, ScheduleRow};
-use super::db::{ExtraPayment, Loan, Profile};
+use super::db::{extras_as_inputs, ExtraPayment, Profile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
@@ -280,26 +280,29 @@ pub fn build_dashboard(
 ) -> Option<DashboardView> {
     let loan = profile.loan()?;
     let paid: HashSet<String> = paid_keys.iter().cloned().collect();
-    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
-        .iter()
-        .filter_map(|ex| {
-            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount, ex.recast))
-        })
-        .collect();
+    let extra_inputs = extras_as_inputs(extras, &paid);
 
     let built = build_schedule(
         loan.principal,
         loan.rate,
         loan.term_years,
         loan.start_date,
-        &extra_tuples,
+        &extra_inputs,
     );
     let schedule = &built.rows;
 
     let year_stats = year_strip(schedule, &paid, extras.len(), loan.principal, today);
     let months = calendar_months(schedule, &paid, view_year, today);
-    let (payment_rows, summary) = payments_table(schedule, &paid, notes, &loan, filter, today);
+    let (payment_rows, summary) = payments_table(
+        schedule,
+        &paid,
+        notes,
+        loan.principal,
+        built.payment,
+        built.total_interest,
+        filter,
+        today,
+    );
     let chart = ChartPair {
         grain: if chart_grain == "yearly" {
             "yearly".into()
@@ -475,7 +478,9 @@ fn payments_table(
     schedule: &[ScheduleRow],
     paid: &HashSet<String>,
     notes: &HashMap<String, String>,
-    loan: &Loan,
+    principal: f64,
+    monthly_payment: f64,
+    total_interest: f64,
     filter: PaymentFilter,
     today: NaiveDate,
 ) -> (Vec<PaymentRowView>, YearSummary) {
@@ -609,7 +614,7 @@ fn payments_table(
         }
     }
 
-    let mut bal = loan.principal;
+    let mut bal = principal;
     for r in schedule {
         if paid.contains(&r.pay_key) {
             bal = r.balance;
@@ -626,8 +631,8 @@ fn payments_table(
     };
 
     let summary = YearSummary {
-        monthly_payment: money(loan.payment),
-        total_interest: money(loan.total_interest),
+        monthly_payment: money(monthly_payment),
+        total_interest: money(total_interest),
         balance_after: money(bal),
         hint: format!("{scheduled_count} scheduled · {pct_paid}% paid"),
     };

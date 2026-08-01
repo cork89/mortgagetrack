@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -5,7 +7,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-use super::amort::build_schedule;
+use super::amort::{build_schedule, ExtraInput};
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
@@ -32,7 +34,11 @@ pub struct Loan {
     pub rate: f64,
     pub term_years: i32,
     pub start_date: NaiveDate,
+    /// Cached on the profile; refreshed when paid extras/recasts change.
+    #[allow(dead_code)]
     pub payment: f64,
+    /// Cached on the profile; refreshed when paid extras/recasts change.
+    #[allow(dead_code)]
     pub total_interest: f64,
 }
 
@@ -221,6 +227,23 @@ pub async fn list_paid_keys(pool: &SqlitePool, profile_id: &str) -> AppResult<Ve
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
+/// Map extras into schedule inputs. Only paid extras affect balance / payment / interest.
+pub fn extras_as_inputs(extras: &[ExtraPayment], paid: &HashSet<String>) -> Vec<ExtraInput> {
+    extras
+        .iter()
+        .filter_map(|ex| {
+            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
+            Some(ExtraInput {
+                id: ex.id.clone(),
+                date,
+                amount: ex.amount,
+                recast: ex.recast,
+                applied: paid.contains(&format!("extra:{}", ex.id)),
+            })
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PaymentNote {
     pub pay_key: String,
@@ -372,14 +395,9 @@ pub async fn update_profile_loan(
         .map_err(|_| AppError::Internal("invalid profile owner id".into()))?;
     ensure_unique_name(pool, owner_id, name, Some(id)).await?;
     let extras = list_extras(pool, id).await?;
-    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
-        .iter()
-        .filter_map(|ex| {
-            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount, ex.recast))
-        })
-        .collect();
-    let built = build_schedule(principal, rate, term_years, start_date, &extra_tuples);
+    let paid: HashSet<String> = list_paid_keys(pool, id).await?.into_iter().collect();
+    let extra_inputs = extras_as_inputs(&extras, &paid);
+    let built = build_schedule(principal, rate, term_years, start_date, &extra_inputs);
     let start = start_date.format("%Y-%m-%d").to_string();
 
     let mut tx = pool.begin().await?;
@@ -502,6 +520,7 @@ pub async fn toggle_paid(
             .await?;
         true
     };
+    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
     tx.commit().await?;
     Ok(now_paid)
 }
@@ -519,6 +538,7 @@ pub async fn clear_paid(
         .bind(profile_id)
         .execute(&mut *tx)
         .await?;
+    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -540,6 +560,7 @@ pub async fn mark_due_paid(
             .execute(&mut *tx)
             .await?;
     }
+    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -570,14 +591,7 @@ pub async fn add_extra(
         .execute(&mut *tx)
         .await?;
 
-    let pay_key = format!("extra:{id}");
-    sqlx::query("INSERT OR IGNORE INTO paid_keys (profile_id, pay_key) VALUES (?, ?)")
-        .bind(profile_id)
-        .bind(&pay_key)
-        .execute(&mut *tx)
-        .await?;
-
-    refresh_loan_totals_tx(&mut tx, user_id, profile_id).await?;
+    // Extras start unpaid: balance, monthly payment, and total interest update only when marked paid.
     tx.commit().await?;
 
     Ok(ExtraPayment {
@@ -635,19 +649,17 @@ async fn refresh_loan_totals_tx(
         return Ok(());
     };
     let extras = list_extras_in_tx(tx, profile_id).await?;
-    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
-        .iter()
-        .filter_map(|ex| {
-            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount, ex.recast))
-        })
+    let paid: HashSet<String> = list_paid_keys_in_tx(tx, profile_id)
+        .await?
+        .into_iter()
         .collect();
+    let extra_inputs = extras_as_inputs(&extras, &paid);
     let built = build_schedule(
         loan.principal,
         loan.rate,
         loan.term_years,
         loan.start_date,
-        &extra_tuples,
+        &extra_inputs,
     );
     sqlx::query("UPDATE profiles SET monthly_payment = ?, total_interest = ? WHERE id = ?")
         .bind(built.payment)
@@ -702,6 +714,18 @@ async fn list_extras_in_tx(
     .fetch_all(&mut **tx)
     .await?;
     Ok(rows)
+}
+
+async fn list_paid_keys_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    profile_id: &str,
+) -> AppResult<Vec<String>> {
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT pay_key FROM paid_keys WHERE profile_id = ?")
+            .bind(profile_id)
+            .fetch_all(&mut **tx)
+            .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
 async fn ensure_unique_name(

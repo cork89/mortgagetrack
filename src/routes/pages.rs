@@ -428,24 +428,22 @@ async fn mark_due_handler(
         .await?
         .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
     let extras = list_extras(&state.pool, &id).await?;
+    let paid: std::collections::HashSet<String> = list_paid_keys(&state.pool, &id)
+        .await?
+        .into_iter()
+        .collect();
     let today = state.today();
 
     let loan = profile
         .loan()
         .ok_or_else(|| AppError::BadRequest("No loan".into()))?;
-    let extra_tuples: Vec<(String, NaiveDate, f64, bool)> = extras
-        .iter()
-        .filter_map(|ex| {
-            let date = NaiveDate::parse_from_str(&ex.date, "%Y-%m-%d").ok()?;
-            Some((ex.id.clone(), date, ex.amount, ex.recast))
-        })
-        .collect();
+    let extra_inputs = crate::models::extras_as_inputs(&extras, &paid);
     let built = crate::models::build_schedule(
         loan.principal,
         loan.rate,
         loan.term_years,
         loan.start_date,
-        &extra_tuples,
+        &extra_inputs,
     );
     let keys: Vec<String> = built
         .rows
@@ -467,7 +465,7 @@ async fn mark_due_handler(
             Ok(panel_update(
                 payments_from_dashboard(d),
                 "payments",
-                false,
+                true,
                 version,
             ))
         }
@@ -497,18 +495,20 @@ async fn toggle_paid_handler(
                 .dashboard
                 .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
             let version = d.profile_version;
+            // Extra/recast paid status changes amortization, payment, and total interest.
+            let invalidate_chart = form.pay_key.starts_with("extra:");
             if tab == "payments" {
                 Ok(panel_update(
                     payments_from_dashboard(d),
                     "payments",
-                    false,
+                    invalidate_chart,
                     version,
                 ))
             } else {
                 Ok(panel_update(
                     calendar_from_dashboard(d),
                     "calendar",
-                    false,
+                    invalidate_chart,
                     version,
                 ))
             }
@@ -593,7 +593,7 @@ async fn add_extra_handler(
             Ok(panel_update(
                 payments_from_dashboard(d),
                 "payments",
-                true,
+                false,
                 version,
             ))
         }
