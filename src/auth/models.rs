@@ -157,3 +157,53 @@ pub async fn create_user(pool: &SqlitePool, email: &str, password: &str) -> AppR
         .await?
         .ok_or_else(|| AppError::Internal("User vanished after create".into()))
 }
+
+pub async fn password_hash_for_user(pool: &SqlitePool, user_id: Uuid) -> AppResult<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        r#"
+        SELECT password_hash
+        FROM local_credentials
+        WHERE user_id = ?
+        "#,
+    )
+    .bind(user_id.to_string())
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(hash,)| hash))
+}
+
+pub async fn update_password(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    new_password: &str,
+) -> AppResult<()> {
+    let password_hash = hash_password(new_password).await?;
+    let result = sqlx::query(
+        r#"
+        UPDATE local_credentials
+        SET password_hash = ?
+        WHERE user_id = ?
+        "#,
+    )
+    .bind(&password_hash)
+    .bind(user_id.to_string())
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::Internal("No credentials for user".into()));
+    }
+    Ok(())
+}
+
+pub async fn delete_user(pool: &SqlitePool, user_id: Uuid) -> AppResult<()> {
+    let result = sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Account not found.".into()));
+    }
+    Ok(())
+}

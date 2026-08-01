@@ -88,6 +88,7 @@ pub struct IndexTemplate {
     pub dashboard: Option<DashboardView>,
     pub default_start: String,
     pub error: String,
+    pub user_id: String,
     pub user_email: String,
 }
 
@@ -239,4 +240,15 @@ pub struct RegisterTemplate {
 #[template(path = "partials/auth_error.html")]
 pub struct AuthErrorPartial {
     pub message: String,
+}
+
+#[derive(Template)]
+#[template(path = "account.html")]
+pub struct AccountTemplate {
+    pub csrf_token: String,
+    pub user_id: String,
+    pub email: String,
+    pub password_updated: bool,
+    pub password_error: String,
+    pub delete_error: String,
 }

@@ -170,11 +170,28 @@
     }
   }
 
-  function closeProfileMenu() {
-    const menu = document.getElementById("profileMenu");
-    const btn = document.getElementById("profileMenuBtn");
+  function closeMenu(menuId, btnId) {
+    const menu = document.getElementById(menuId);
+    const btn = document.getElementById(btnId);
     if (menu) menu.classList.remove("open");
     if (btn) btn.setAttribute("aria-expanded", "false");
+  }
+
+  function closeProfileMenu() {
+    closeMenu("profileMenu", "profileMenuBtn");
+  }
+
+  function closeAccountMenu() {
+    closeMenu("accountMenu", "accountMenuBtn");
+  }
+
+  function toggleMenu(menuId, btn, { closeOthers } = {}) {
+    const menu = document.getElementById(menuId);
+    if (!menu || !btn) return;
+    const open = !menu.classList.contains("open");
+    if (open && closeOthers) closeOthers();
+    menu.classList.toggle("open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   function popover() {
@@ -584,14 +601,21 @@
     });
     document.getElementById("profileMenuBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      const menu = document.getElementById("profileMenu");
-      const open = !menu.classList.contains("open");
-      menu.classList.toggle("open", open);
-      e.currentTarget.setAttribute("aria-expanded", open ? "true" : "false");
+      toggleMenu("profileMenu", e.currentTarget, {
+        closeOthers: closeAccountMenu,
+      });
+    });
+    document.getElementById("accountMenuBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMenu("accountMenu", e.currentTarget, {
+        closeOthers: closeProfileMenu,
+      });
     });
     document.addEventListener("click", (e) => {
-      const menu = document.getElementById("profileMenu");
-      if (menu && !menu.contains(e.target)) closeProfileMenu();
+      const profileMenu = document.getElementById("profileMenu");
+      if (profileMenu && !profileMenu.contains(e.target)) closeProfileMenu();
+      const accountMenu = document.getElementById("accountMenu");
+      if (accountMenu && !accountMenu.contains(e.target)) closeAccountMenu();
     });
     document.body.addEventListener("click", (e) => {
       const noteBtn = e.target.closest(".note-btn");

@@ -33,7 +33,10 @@
     <ul class="share-collab-list">
       {% for c in collaborators %}
       <li>
-        <span>{{ c.email }}</span>
+        <span class="share-collab-person">
+          <img class="avatar avatar-xs" src="/avatars/{{ c.user_id }}.svg" alt="" width="22" height="22" />
+          <span>{{ c.email }}</span>
+        </span>
         <button type="button"
           class="btn-ghost menu-danger"
           hx-post="/profiles/{{ profile_id }}/collaborators/{{ c.user_id }}/remove"

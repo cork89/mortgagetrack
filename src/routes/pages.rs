@@ -724,6 +724,7 @@ async fn load_page(
         dashboard,
         default_start,
         error: String::new(),
+        user_id: user.id.to_string(),
         user_email: user.email.clone(),
     })
 }

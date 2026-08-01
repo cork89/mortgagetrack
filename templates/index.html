@@ -3,11 +3,24 @@
 {% block body %}
 <header class="top-bar">
   <h1 class="brand">Mortgage Track</h1>
-  <form class="account-chip" method="post" action="/logout">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <span class="account-email" title="{{ user_email }}">{{ user_email }}</span>
-    <button type="submit" class="btn-text">Sign out</button>
-  </form>
+  <div class="menu account-menu" id="accountMenu">
+    <button type="button"
+      class="account-menu-toggle"
+      id="accountMenuBtn"
+      aria-label="Account menu for {{ user_email }}"
+      aria-haspopup="menu"
+      aria-expanded="false"
+      title="{{ user_email }}">
+      <img class="avatar avatar-sm" src="/avatars/{{ user_id }}.svg" alt="" width="32" height="32" />
+    </button>
+    <div class="menu-panel" role="menu" id="accountMenuPanel">
+      <a href="/account" role="menuitem">Account</a>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" role="menuitem">Sign out</button>
+      </form>
+    </div>
+  </div>
 </header>
 
 {% include "partials/profile_bar.html" %}

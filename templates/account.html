@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Account — Homestead{% endblock %}
+
+{% block body %}
+<section class="auth-panel account-panel" aria-labelledby="auth-heading">
+  <header class="brand-block auth-brand">
+    <h1 class="brand" id="auth-heading"><a class="brand-home" href="/">Homestead</a></h1>
+    <span class="brand-rule" aria-hidden="true"></span>
+    <p class="tagline">Manage your account.</p>
+  </header>
+
+  <div class="account-identity-block">
+    <img class="avatar avatar-lg" src="/avatars/{{ user_id }}.svg" alt="" width="64" height="64" />
+    <p class="account-email-line">
+      Signed in as <strong>{{ email }}</strong>
+      · <a href="/">Back to dashboard</a>
+    </p>
+  </div>
+
+  <form class="auth-form"
+    method="post"
+    action="/account/password"
+    hx-post="/account/password"
+    hx-target="#password-status"
+    hx-swap="innerHTML"
+  >
+    <h2 class="account-section-title">Change password</h2>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div id="password-status" aria-live="polite">
+      {% if password_updated %}
+      <p class="success" role="status">Password updated.</p>
+      {% endif %}
+      {% if !password_error.is_empty() %}
+      <p class="error" role="alert">{{ password_error }}</p>
+      {% endif %}
+    </div>
+
+    <label class="field">
+      <span>Current password</span>
+      <input type="password" name="current_password" autocomplete="current-password" required />
+    </label>
+
+    <label class="field">
+      <span>New password</span>
+      <input type="password" name="new_password" autocomplete="new-password" required minlength="8" />
+    </label>
+
+    <label class="field">
+      <span>Confirm new password</span>
+      <input type="password" name="confirm_password" autocomplete="new-password" required minlength="8" />
+    </label>
+
+    <button type="submit" class="btn-primary auth-submit">Update password</button>
+  </form>
+
+  <form class="auth-form account-danger-form"
+    method="post"
+    action="/account/delete"
+    hx-post="/account/delete"
+    hx-target="#delete-status"
+    hx-swap="innerHTML"
+    hx-confirm="Delete your account permanently? Your owned mortgage profiles and data will be removed. This cannot be undone."
+  >
+    <h2 class="account-section-title">Delete account</h2>
+    <p class="account-danger-copy">
+      Permanently delete your account, owned mortgage profiles, and related data.
+      Access to profiles shared with you will also be removed.
+    </p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div id="delete-status" aria-live="polite">
+      {% if !delete_error.is_empty() %}
+      <p class="error" role="alert">{{ delete_error }}</p>
+      {% endif %}
+    </div>
+
+    <label class="field">
+      <span>Password</span>
+      <input type="password" name="password" autocomplete="current-password" required />
+    </label>
+
+    <button type="submit" class="btn-danger auth-submit">Delete account</button>
+  </form>
+</section>
+{% endblock %}
