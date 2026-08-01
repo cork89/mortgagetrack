@@ -80,10 +80,26 @@ body::before {
 }
 
 .top-bar .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: var(--font-display);
   font-size: var(--font-size-header);
   color: var(--sea-deep);
   margin: 0;
+}
+
+.top-bar .brand-mark {
+  width: 1.75em;
+  height: 1.75em;
+  /* object-fit: cover; */
+  transform: rotate(5deg);
+  transition: transform 0.3s ease-in-out;
+  flex-shrink: 0;
+}
+
+.top-bar .brand-mark:hover {
+  transform: rotate(-10deg);
 }
 
 .brand-block {
