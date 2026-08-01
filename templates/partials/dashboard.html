@@ -268,8 +268,8 @@
       <div class="panel-head">
         <div>
           <h2>Principal vs interest</h2>
-          <span class="hint chart-hint{% if d.chart.grain != "monthly" %} hidden{% endif %}" data-grain-hint="monthly">{{ d.chart.monthly.hint }}</span>
-          <span class="hint chart-hint{% if d.chart.grain != "yearly" %} hidden{% endif %}" data-grain-hint="yearly">{{ d.chart.yearly.hint }}</span>
+          <span class="hint{% if d.chart.grain != "monthly" %} hidden{% endif %}" data-grain-hint="monthly">{{ d.chart.monthly.hint }}</span>
+          <span class="hint{% if d.chart.grain != "yearly" %} hidden{% endif %}" data-grain-hint="yearly">{{ d.chart.yearly.hint }}</span>
         </div>
         <div class="seg-toggle" id="chartGrainToggle" role="group" aria-label="Chart period">
           <button type="button" data-grain="monthly"{% if d.chart.grain == "monthly" %} class="active"{% endif %}

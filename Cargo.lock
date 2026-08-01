@@ -676,30 +676,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "homestead"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "askama",
- "axum",
- "chrono",
- "dotenvy",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "thiserror 2.0.19",
- "time",
- "tokio",
- "tower-http",
- "tower-sessions",
- "tower-sessions-sqlx-store",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "http"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1061,6 +1037,30 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mortgagetrack"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "askama",
+ "axum",
+ "chrono",
+ "dotenvy",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror 2.0.19",
+ "time",
+ "tokio",
+ "tower-http",
+ "tower-sessions",
+ "tower-sessions-sqlx-store",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

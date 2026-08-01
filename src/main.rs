@@ -31,13 +31,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "homestead=debug,tower_http=info".into()),
+                .unwrap_or_else(|_| "mortgage=debug,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     let database_url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:homestead.db".into());
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:mortgage.db".into());
     let pool = connect_db(&database_url).await?;
     run_migrations(&pool).await?;
     models::ensure_profiles_belong_to_users(&pool).await?;
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!(
         secure = session_cfg.secure,
-        "Homestead listening on http://{addr}"
+        "Mortgage Track listening on http://{addr}"
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

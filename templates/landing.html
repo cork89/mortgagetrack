@@ -6,49 +6,44 @@
 
 {% block body %}
 <nav class="landing-sticky-nav" id="sticky-nav" aria-label="Main Navigation">
-  <div class="sticky-nav-content">
-    <span class="sticky-brand">Mortgage Track</span>
-    <a href="/register" class="btn-primary sticky-btn">Get started free</a>
+  <div>
+    <span>Mortgage Track</span>
+    <a href="/register" class="btn-primary">Get started free</a>
   </div>
 </nav>
 
-<section class="landing-hero" aria-label="Homestead Landing">
+<section class="landing-hero" aria-label="Mortgage Track Landing">
   <div class="landing-hero-visual" aria-hidden="true">
-    <img src="/static/hero.jpg" alt="" class="landing-scene-photo" />
-    <div class="landing-scene-overlay"></div>
-    <div class="landing-scene-ui-glimpse">
-      <div class="hero-ledger-glimpse">
-        <div class="glimpse-header">
-          <span class="glimpse-badge">Payoff Accelerator</span>
-          <span class="glimpse-val">$384,120 remaining</span>
-        </div>
-        <div class="glimpse-bar-wrap">
-          <div class="glimpse-bar-fill"></div>
-          <div class="glimpse-bar-extra"></div>
-        </div>
-        <div class="glimpse-stats">
-          <div><span class="glimpse-dot paid"></span> 142 Paid</div>
-          <div><span class="glimpse-dot extra"></span> +$500/mo Extra</div>
-          <div><span class="glimpse-dot due"></span> 4.2 Yrs Saved</div>
-        </div>
+    <img src="/static/hero.jpg" alt="" />
+    <div class="overlay"></div>
+    <div class="hero-ledger-glimpse">
+      <header>
+        <span class="badge">Payoff Accelerator</span>
+        <span class="val">$384,120 remaining</span>
+      </header>
+      <div class="bar">
+        <div class="fill"></div>
+        <div class="extra"></div>
+      </div>
+      <div class="stats">
+        <div><span class="dot paid"></span> 142 Paid</div>
+        <div><span class="dot extra"></span> +$500/mo Extra</div>
+        <div><span class="dot due"></span> 4.2 Yrs Saved</div>
       </div>
     </div>
   </div>
 
   <div class="landing-hero-copy">
-    <header class="landing-brand-block">
-      <h1 class="landing-brand">Mortgage Track</h1>
-      <span class="brand-rule landing-rule" aria-hidden="true"></span>
-      <h2 class="landing-headline">Shave years off your mortgage—without the complex spreadsheets.</h2>
-      <p class="landing-lede">A private mortgage ledger to model extra principal payments, track your real schedule, and accelerate your payoff date.</p>
+    <header>
+      <h1>Mortgage Track</h1>
+      <span class="brand-rule" aria-hidden="true"></span>
+      <h2>Shave years off your mortgage, without the complex spreadsheets.</h2>
+      <p>A private mortgage tracker to record extra principal payments, track your schedule, and accelerate your payoff date.</p>
     </header>
 
     <div class="landing-cta">
-      <div class="landing-cta-group">
-        <a class="btn-primary landing-cta-primary" href="/register">Get started free</a>
-        <a class="btn-ghost landing-cta-secondary" href="/login">Sign in</a>
-      </div>
-      <p class="landing-trust-microcopy">100% Free • No bank connection required • Private &amp; secure</p>
+      <a class="btn-primary" href="/register">Get started free</a>
+      <a class="btn-ghost" href="/login">Sign in</a>
     </div>
   </div>
 </section>

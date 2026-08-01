@@ -703,37 +703,37 @@ tbody tr.extra-row:hover {
   letter-spacing: 0.04em;
 }
 
-.share-help,
-.share-meta {
+.share-panel .help,
+.share-panel .meta {
   margin: 0 0 0.65rem;
   font-size: 0.85rem;
   color: var(--ink-soft);
   line-height: 1.4;
 }
 
-.share-invite-fresh {
+.share-panel .invite {
   display: grid;
   gap: 0.5rem;
   margin-bottom: 0.65rem;
 }
 
-.share-link-label {
+.share-panel .invite label {
   display: grid;
   gap: 0.3rem;
   font-size: 0.85rem;
   color: var(--ink-soft);
 }
 
-.share-link-label input {
+.share-panel .invite label input {
   font-size: 0.85rem;
   width: 100%;
 }
 
-.share-generate-btn {
+.share-panel #generateShareLinkBtn {
   width: fit-content;
 }
 
-.share-collab-list {
+.share-panel ul {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -741,7 +741,7 @@ tbody tr.extra-row:hover {
   gap: 0.35rem;
 }
 
-.share-collab-list li {
+.share-panel ul li {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -751,7 +751,14 @@ tbody tr.extra-row:hover {
   border-bottom: 1px solid var(--line);
 }
 
-.share-collab-list li:last-child { border-bottom: none; }
+.share-panel ul li:last-child { border-bottom: none; }
+
+.share-panel .person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
 
 .extras-list {
   list-style: none;
@@ -1759,7 +1766,7 @@ tbody tr.year-summary .year-sub {
   padding: 0.7rem 0.8rem;
 }
 
-.popover-card .share-help {
+.popover-card .share-panel .help {
   margin-bottom: 0.5rem;
 }
 
@@ -1803,8 +1810,8 @@ tbody tr.year-summary .year-sub {
     margin-top: 0.55rem;
   }
 
-  .popover-card .share-help,
-  .popover-card .share-meta,
+  .popover-card .share-panel .help,
+  .popover-card .share-panel .meta,
   .popover-card .extras-empty {
     font-size: 0.8rem;
     margin-bottom: 0.45rem;
@@ -1883,45 +1890,6 @@ tbody tr.year-summary .year-sub {
   height: 40px;
   border-radius: 9px;
   box-shadow: var(--shadow);
-}
-
-.account-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.account-home {
-  flex-shrink: 0;
-  gap: 0.4rem;
-  padding: 0.55rem 0.9rem;
-  font-size: 0.92rem;
-}
-
-.account-title {
-  margin: 0;
-  font-size: var(--font-size-header);
-  font-family: var(--font-display);
-  color: var(--sea-deep);
-  text-align: right;
-}
-
-.account-identity-block {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid var(--line);
-}
-
-.share-collab-person {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
 }
 
 .btn-text {
@@ -2042,7 +2010,39 @@ tbody tr.year-summary .year-sub {
   gap: 1.15rem;
 }
 
-.account-email-line {
+.account-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.account-panel > header .btn-ghost {
+  flex-shrink: 0;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.92rem;
+}
+
+.account-panel > header h1 {
+  margin: 0;
+  font-size: var(--font-size-header);
+  font-family: var(--font-display);
+  color: var(--sea-deep);
+  text-align: right;
+}
+
+.account-panel .identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--line);
+}
+
+.account-panel .email {
   margin: 0;
   display: grid;
   gap: 0.15rem;
@@ -2052,7 +2052,7 @@ tbody tr.year-summary .year-sub {
   word-break: break-word;
 }
 
-.account-user-label {
+.account-panel .user-label {
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -2060,12 +2060,12 @@ tbody tr.year-summary .year-sub {
   color: var(--ink-soft);
 }
 
-.account-actions {
+.account-panel .stack {
   display: grid;
   gap: 0.75rem;
 }
 
-.account-status {
+.account-panel .success {
   margin: 0;
 }
 
@@ -2073,22 +2073,18 @@ tbody tr.year-summary .year-sub {
   width: min(440px, calc(100vw - 2rem));
 }
 
-.account-modal-form {
+.account-popover .auth-form {
   padding: 0;
   background: transparent;
   border: none;
   box-shadow: none;
 }
 
-.account-danger-copy {
+.account-popover .auth-form > p {
   margin: 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
   line-height: 1.45;
-}
-
-.account-danger-form {
-  border-color: transparent;
 }
 
 .account-popover .popover-head h2 {
@@ -2145,7 +2141,7 @@ body.landing .wrap {
   overflow: hidden;
 }
 
-.landing-scene-photo {
+.landing-hero-visual > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -2159,7 +2155,7 @@ body.landing .wrap {
   100% { transform: scale(1.04) translateY(-10px); }
 }
 
-.landing-scene-overlay {
+.landing-hero-visual .overlay {
   position: absolute;
   inset: 0;
   background:
@@ -2178,15 +2174,12 @@ body.landing .wrap {
     );
 }
 
-.landing-scene-ui-glimpse {
+.hero-ledger-glimpse {
   position: absolute;
   right: clamp(2rem, 8vw, 7rem);
   bottom: clamp(3rem, 12vh, 8rem);
   z-index: 2;
   pointer-events: none;
-}
-
-.hero-ledger-glimpse {
   width: min(24rem, calc(100vw - 3rem));
   padding: 1.1rem 1.25rem;
   border-radius: var(--radius);
@@ -2197,14 +2190,14 @@ body.landing .wrap {
   animation: rise 0.85s 0.3s ease both;
 }
 
-.glimpse-header {
+.hero-ledger-glimpse > header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.65rem;
 }
 
-.glimpse-badge {
+.hero-ledger-glimpse .badge {
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -2212,14 +2205,14 @@ body.landing .wrap {
   color: var(--sea);
 }
 
-.glimpse-val {
+.hero-ledger-glimpse .val {
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--sea-deep);
 }
 
-.glimpse-bar-wrap {
+.hero-ledger-glimpse .bar {
   height: 8px;
   border-radius: 4px;
   background: var(--mist);
@@ -2228,17 +2221,17 @@ body.landing .wrap {
   margin-bottom: 0.75rem;
 }
 
-.glimpse-bar-fill {
+.hero-ledger-glimpse .fill {
   width: 42%;
   background: var(--sea);
 }
 
-.glimpse-bar-extra {
+.hero-ledger-glimpse .extra {
   width: 18%;
   background: var(--sand);
 }
 
-.glimpse-stats {
+.hero-ledger-glimpse .stats {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
@@ -2247,21 +2240,21 @@ body.landing .wrap {
   font-weight: 500;
 }
 
-.glimpse-stats div {
+.hero-ledger-glimpse .stats div {
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.glimpse-dot {
+.hero-ledger-glimpse .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
 }
 
-.glimpse-dot.paid { background: var(--sea); }
-.glimpse-dot.extra { background: var(--sand); }
-.glimpse-dot.due { background: var(--due); }
+.hero-ledger-glimpse .dot.paid { background: var(--sea); }
+.hero-ledger-glimpse .dot.extra { background: var(--sand); }
+.hero-ledger-glimpse .dot.due { background: var(--due); }
 
 .landing-hero-copy {
   position: relative;
@@ -2272,11 +2265,11 @@ body.landing .wrap {
   animation: rise 0.75s 0.15s ease both;
 }
 
-.landing-brand-block {
+.landing-hero-copy > header {
   margin-bottom: 1.75rem;
 }
 
-.landing-brand {
+.landing-hero-copy h1 {
   font-family: var(--font-display);
   font-size: clamp(3.4rem, 9.5vw, 5.8rem);
   font-weight: 700;
@@ -2286,13 +2279,13 @@ body.landing .wrap {
   margin: 0;
 }
 
-.landing-rule {
+.landing-hero-copy .brand-rule {
   margin: 1.1rem 0 1.25rem;
   height: 3px;
   width: 5rem;
 }
 
-.landing-headline {
+.landing-hero-copy h2 {
   margin: 0 0 0.85rem;
   font-family: var(--font-display);
   font-size: clamp(1.45rem, 3.2vw, 1.95rem);
@@ -2302,7 +2295,7 @@ body.landing .wrap {
   color: var(--ink);
 }
 
-.landing-lede {
+.landing-hero-copy header > p {
   margin: 0;
   max-width: 29rem;
   font-size: 1.1rem;
@@ -2311,15 +2304,16 @@ body.landing .wrap {
   color: var(--ink-soft);
 }
 
-.landing-cta-group {
+.landing-cta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem;
   align-items: center;
 }
 
-.landing-trust-microcopy {
-  margin: 0.6rem 0 0;
+.landing-cta > p {
+  flex: 1 0 100%;
+  margin: 0;
   font-size: 0.82rem;
   font-weight: 500;
   color: var(--ink-soft);
@@ -2327,11 +2321,11 @@ body.landing .wrap {
 }
 
 @media (max-width: 900px) {
-  .landing-scene-ui-glimpse {
+  .hero-ledger-glimpse {
     display: none;
   }
 
-  .landing-scene-overlay {
+  .landing-hero-visual .overlay {
     background: linear-gradient(
       180deg,
       rgba(247, 250, 249, 0.85) 0%,
@@ -2347,7 +2341,6 @@ body.landing .wrap {
   }
 }
 
-/* Landing sticky nav */
 .landing-sticky-nav {
   position: fixed;
   top: 0;
@@ -2361,10 +2354,12 @@ body.landing .wrap {
   transform: translateY(-100%);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .landing-sticky-nav.visible {
   transform: translateY(0);
 }
-.sticky-nav-content {
+
+.landing-sticky-nav > div {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
   height: 4rem;
@@ -2372,23 +2367,25 @@ body.landing .wrap {
   align-items: center;
   justify-content: space-between;
 }
-.sticky-brand {
+
+.landing-sticky-nav > div > span {
   font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--sea-deep);
 }
-.sticky-btn {
+
+.landing-sticky-nav .btn-primary {
   padding: 0.6rem 1rem;
   font-size: 0.9rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-scene-photo,
+  .landing-hero-visual > img,
   .hero-ledger-glimpse,
   .landing-hero-copy,
   .landing-cta,
-  .landing-rule {
+  .landing-hero-copy .brand-rule {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

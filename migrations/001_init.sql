@@ -1,4 +1,4 @@
--- Homestead mortgage ledger schema
+-- Mortgage track ledger schema
 CREATE TABLE IF NOT EXISTS profiles (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,

@@ -1,23 +1,23 @@
 <div class="share-panel" id="sharePanelInner" data-profile-id="{{ profile_id }}">
   {% if is_owner %}
   <h3>Share</h3>
-  <p class="share-help">One-time link, expires in 24 hours. After they join, they keep edit access until you remove them.</p>
+  <p class="help">One-time link, expires in 24 hours. After they join, they keep edit access until you remove them.</p>
 
   {% if !fresh_invite_url.is_empty() %}
-  <div class="share-invite-fresh">
-    <label class="share-link-label">
+  <div class="invite">
+    <label>
       Invite link
       <input id="shareInviteUrl" type="text" readonly value="" data-path="{{ fresh_invite_url }}" />
     </label>
     <button type="button" class="btn-ghost" id="copyShareLinkBtn">Copy link</button>
-    <p class="share-meta">Expires {{ active_expires_at }} · single use</p>
+    <p class="meta">Expires {{ active_expires_at }} · single use</p>
   </div>
   {% else if has_active_invite %}
-  <p class="share-meta">An unused invite is still valid until {{ active_expires_at }}. Generate a new link to replace it.</p>
+  <p class="meta">An unused invite is still valid until {{ active_expires_at }}. Generate a new link to replace it.</p>
   {% endif %}
 
   <button type="button"
-    class="btn-ghost share-generate-btn"
+    class="btn-ghost"
     id="generateShareLinkBtn"
     hx-post="/profiles/{{ profile_id }}/share"
     hx-target="#sharePanel"
@@ -25,15 +25,15 @@
     Generate invite link
   </button>
 
-  <div class="share-collaborators">
+  <div>
     <h4>People with access</h4>
     {% if collaborators.is_empty() %}
-    <p class="share-meta">No collaborators yet.</p>
+    <p class="meta">No collaborators yet.</p>
     {% else %}
-    <ul class="share-collab-list">
+    <ul>
       {% for c in collaborators %}
       <li>
-        <span class="share-collab-person">
+        <span class="person">
           <img class="avatar avatar-xs" src="/avatars/{{ c.user_id }}.svg" alt="" width="22" height="22" />
           <span>{{ c.email }}</span>
         </span>
@@ -52,7 +52,7 @@
   </div>
   {% else %}
   <h3>Shared with you</h3>
-  <p class="share-help">You can edit this profile. Leaving removes your access.</p>
+  <p class="help">You can edit this profile. Leaving removes your access.</p>
   <button type="button"
     class="btn-ghost menu-danger"
     id="leaveSharedProfileBtn"

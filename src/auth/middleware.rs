@@ -11,7 +11,7 @@ use crate::error::{AppError, AppResult};
 pub const USER_ID_KEY: &str = "user_id";
 pub const PENDING_SHARE_KEY: &str = "pending_share_token";
 
-/// Post-auth landing page (Homestead dashboard lives at `/`).
+/// Post-auth landing page (Mortgage Track dashboard lives at `/`).
 pub const HOME_PATH: &str = "/";
 
 pub fn is_htmx(headers: &HeaderMap) -> bool {
@@ -26,10 +26,9 @@ pub fn hx_redirect(headers: &HeaderMap, location: &str) -> Response {
     if is_htmx(headers) {
         let mut response = StatusCode::OK.into_response();
         if let Ok(value) = HeaderValue::from_str(location) {
-            response.headers_mut().insert(
-                header::HeaderName::from_static("hx-redirect"),
-                value,
-            );
+            response
+                .headers_mut()
+                .insert(header::HeaderName::from_static("hx-redirect"), value);
         }
         response
     } else {

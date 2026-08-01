@@ -408,7 +408,7 @@ fn year_strip(
                 money(total_paid_principal),
                 money(original_principal)
             ),
-            class: "stat highlight next-hero".into(),
+            class: "stat highlight".into(),
         },
         YearStat {
             label: format!("{y} progress"),
