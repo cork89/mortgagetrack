@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer};
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
-use crate::auth::{current_user, hx_redirect, is_htmx, AuthUser};
+use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -22,8 +22,8 @@ use crate::models::{
 };
 use crate::templates::{
     conflict_dashboard, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate,
-    ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate, ItemListTemplate,
-    LandingTemplate, PaymentsTemplate, SummaryTemplate,
+    ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate, LandingTemplate,
+    PaymentsTemplate, SummaryTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -35,7 +35,6 @@ pub fn routes() -> Router<AppState> {
         .route("/partials/payments", get(payments_partial))
         .route("/partials/improvements", get(improvements_partial))
         .route("/partials/chart", get(chart_partial))
-        .route("/partials/items", get(item_list_partial))
         .route("/profiles", post(create_profile_handler))
         .route("/profiles/switch", post(switch_profile))
         .route("/profiles/{id}", post(update_profile_handler))
@@ -196,18 +195,6 @@ async fn dashboard_partial(
         empty: page.empty,
         dashboard: page.dashboard,
     }))
-}
-
-async fn item_list_partial(
-    user: AuthUser,
-    State(state): State<AppState>,
-    Query(q): Query<IndexQuery>,
-) -> AppResult<impl IntoResponse> {
-    let page = load_page(&state, &q, &user).await?;
-    let dashboard = page
-        .dashboard
-        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(ItemListTemplate { dashboard }))
 }
 
 async fn summary_partial(
@@ -898,8 +885,8 @@ async fn load_page(
         dashboard,
         default_start,
         error: String::new(),
-        user_id: user.id.to_string(),
         user_email: user.email.clone(),
+        avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
     })
 }
 

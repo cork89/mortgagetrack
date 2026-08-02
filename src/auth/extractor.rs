@@ -18,6 +18,7 @@ use crate::error::AppResult;
 pub struct AuthUser {
     pub id: Uuid,
     pub email: String,
+    pub avatar: Option<String>,
 }
 
 /// Resolve the signed-in user from the session, if any.
@@ -31,6 +32,7 @@ pub async fn current_user(session: &Session, pool: &SqlitePool) -> AppResult<Opt
     Ok(Some(AuthUser {
         id: user_id,
         email: user.email,
+        avatar: user.avatar,
     }))
 }
 
@@ -64,6 +66,7 @@ impl FromRequestParts<AppState> for AuthUser {
         Ok(AuthUser {
             id: user_id,
             email: user.email,
+            avatar: user.avatar,
         })
     }
 }

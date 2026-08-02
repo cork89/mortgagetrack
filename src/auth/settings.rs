@@ -1,4 +1,4 @@
-//! Settings: change password and delete account.
+//! Settings: change password, avatar, and delete account.
 
 use axum::{
     extract::{Path, Query, State},
@@ -19,19 +19,49 @@ use crate::app_state::AppState;
 use crate::auth::{hx_redirect, is_htmx, purge_session, AuthUser, HOME_PATH};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
-use crate::templates::{AuthErrorPartial, HtmlTemplate, SettingsTemplate};
+use crate::templates::{AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate};
+
+/// Selectable avatar piece ids (`static/pieces/piece_{row}_{col}.webp`).
+pub const AVATAR_OPTIONS: &[&str] = &[
+    "piece_0_0",
+    "piece_0_1",
+    "piece_0_2",
+    "piece_1_0",
+    "piece_1_1",
+    "piece_1_2",
+    "piece_2_0",
+    "piece_2_1",
+    "piece_2_2",
+    "piece_3_0",
+    "piece_3_1",
+    "piece_3_2",
+];
+
+pub fn is_valid_avatar(avatar: &str) -> bool {
+    AVATAR_OPTIONS.contains(&avatar)
+}
+
+/// Image URL for a user: custom piece when set, otherwise the identicon endpoint.
+pub fn avatar_src(user_id: &Uuid, avatar: Option<&str>) -> String {
+    match avatar {
+        Some(piece) if is_valid_avatar(piece) => format!("/static/pieces/{piece}.webp"),
+        _ => format!("/avatars/{user_id}.svg"),
+    }
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/settings", get(settings_page))
         .route("/settings/password", post(change_password))
         .route("/settings/delete", post(delete_account))
+        .route("/settings/avatar", post(update_avatar))
         .route("/avatars/{id}", get(avatar))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SettingsQuery {
     pub password: Option<String>,
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,28 +76,61 @@ pub struct DeleteAccountForm {
     pub password: String,
 }
 
+fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> SettingsTemplate {
+    let current = user
+        .avatar
+        .as_deref()
+        .filter(|a| is_valid_avatar(a))
+        .unwrap_or("");
+    SettingsTemplate {
+        csrf_token,
+        email: user.email.clone(),
+        avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
+        avatar_options: AVATAR_OPTIONS
+            .iter()
+            .map(|id| AvatarOption {
+                id: (*id).to_string(),
+                selected: *id == current,
+            })
+            .collect(),
+        avatar_updated: q.avatar.as_deref() == Some("updated"),
+        avatar_error: q.avatar.as_deref() == Some("error"),
+        password_updated: q.password.as_deref() == Some("updated"),
+        password_error: String::new(),
+        delete_error: String::new(),
+    }
+}
+
 async fn settings_page(
     session: Session,
     user: AuthUser,
     Query(q): Query<SettingsQuery>,
 ) -> AppResult<Response> {
     let csrf_token = csrf::ensure_token(&session).await?;
-    let password_updated = q.password.as_deref() == Some("updated");
-    Ok(HtmlTemplate(SettingsTemplate {
-        csrf_token,
-        user_id: user.id.to_string(),
-        email: user.email,
-        password_updated,
-        password_error: String::new(),
-        delete_error: String::new(),
-    })
-    .into_response())
+    Ok(HtmlTemplate(settings_template(&user, csrf_token, &q)).into_response())
 }
 
-async fn avatar(Path(id): Path<String>) -> AppResult<Response> {
-    let id = id.strip_suffix(".svg").unwrap_or(&id);
-    let user_id = Uuid::parse_str(id)
+async fn avatar(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Response> {
+    let id_str = id.strip_suffix(".svg").unwrap_or(&id);
+    let user_id = Uuid::parse_str(id_str)
         .map_err(|_| AppError::NotFound("Avatar not found.".into()))?;
+
+    if let Ok(Some(user)) = crate::auth::models::find_user_by_id(&state.pool, user_id).await {
+        if let Some(avatar) = user.avatar.as_deref().filter(|a| is_valid_avatar(a)) {
+            let redirect_url = format!("/static/pieces/{avatar}.webp");
+            let mut response =
+                (StatusCode::FOUND, [(header::LOCATION, redirect_url)]).into_response();
+            // Avatars can change; never mark this URL immutable.
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("private, no-cache"),
+            );
+            return Ok(response);
+        }
+    }
 
     let svg = identicon::svg_for_seed(&user_id.to_string());
     let mut response = (
@@ -78,9 +141,36 @@ async fn avatar(Path(id): Path<String>) -> AppResult<Response> {
         .into_response();
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=604800, immutable"),
+        HeaderValue::from_static("private, no-cache"),
     );
     Ok(response)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAvatarForm {
+    pub avatar: String,
+}
+
+async fn update_avatar(
+    State(state): State<AppState>,
+    _session: Session,
+    user: AuthUser,
+    headers: HeaderMap,
+    Form(form): Form<UpdateAvatarForm>,
+) -> Response {
+    if !is_valid_avatar(&form.avatar) {
+        return hx_redirect(&headers, "/settings?avatar=error");
+    }
+    if let Err(err) = sqlx::query("UPDATE users SET avatar = ? WHERE id = ?")
+        .bind(&form.avatar)
+        .bind(user.id.to_string())
+        .execute(&state.pool)
+        .await
+    {
+        tracing::error!("Failed to update avatar: {}", err);
+        return hx_redirect(&headers, "/settings?avatar=error");
+    }
+    hx_redirect(&headers, "/settings?avatar=updated")
 }
 
 async fn change_password(
@@ -102,18 +192,16 @@ async fn change_password(
                     .into_response()
             } else {
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
-                (
-                    StatusCode::BAD_REQUEST,
-                    HtmlTemplate(SettingsTemplate {
-                        csrf_token,
-                        user_id: user.id.to_string(),
-                        email: user.email,
-                        password_updated: false,
-                        password_error: message,
-                        delete_error: String::new(),
-                    }),
-                )
-                    .into_response()
+                let mut page = settings_template(
+                    &user,
+                    csrf_token,
+                    &SettingsQuery {
+                        password: None,
+                        avatar: None,
+                    },
+                );
+                page.password_error = message;
+                (StatusCode::BAD_REQUEST, HtmlTemplate(page)).into_response()
             }
         }
     }
@@ -172,18 +260,16 @@ async fn delete_account(
                     .into_response()
             } else {
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
-                (
-                    StatusCode::BAD_REQUEST,
-                    HtmlTemplate(SettingsTemplate {
-                        csrf_token,
-                        user_id: user.id.to_string(),
-                        email: user.email,
-                        password_updated: false,
-                        password_error: String::new(),
-                        delete_error: message,
-                    }),
-                )
-                    .into_response()
+                let mut page = settings_template(
+                    &user,
+                    csrf_token,
+                    &SettingsQuery {
+                        password: None,
+                        avatar: None,
+                    },
+                );
+                page.delete_error = message;
+                (StatusCode::BAD_REQUEST, HtmlTemplate(page)).into_response()
             }
         }
     }

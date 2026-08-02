@@ -113,7 +113,6 @@ pub struct MonthCell {
 pub struct PaymentRowView {
     pub is_year_header: bool,
     pub year_label: String,
-    pub year_sub: String,
     pub is_current_year: bool,
     pub is_current_month: bool,
     pub label_html: String,
@@ -150,6 +149,7 @@ pub struct ImprovementRowView {
     pub note: String,
     pub has_note: bool,
     pub note_json: String,
+    pub has_detail: bool,
     pub detail_json: String,
 }
 
@@ -367,6 +367,7 @@ pub fn build_dashboard(
                 has_note: !note.is_empty(),
                 note,
                 note_json,
+                has_detail: !detail.is_empty(),
                 detail_json,
             }
         })
@@ -744,7 +745,6 @@ fn payments_table(
         out.push(PaymentRowView {
             is_year_header: false,
             year_label: String::new(),
-            year_sub: String::new(),
             is_current_year: false,
             is_current_month: false,
             label_html: String::new(),
@@ -776,15 +776,9 @@ fn payments_table(
             let payment_total: f64 = group.iter().map(|r| r.payment).sum();
             let principal_total: f64 = group.iter().map(|r| r.principal).sum();
             let interest_total: f64 = group.iter().map(|r| r.interest).sum();
-            let count = group.len();
             out.push(PaymentRowView {
                 is_year_header: true,
                 year_label: year.to_string(),
-                year_sub: format!(
-                    "{count} payment{} · {} total",
-                    if count == 1 { "" } else { "s" },
-                    money(payment_total)
-                ),
                 is_current_year: year == y,
                 is_current_month: false,
                 label_html: String::new(),
@@ -818,7 +812,6 @@ fn payments_table(
                 out.push(PaymentRowView {
                     is_year_header: false,
                     year_label: String::new(),
-                    year_sub: String::new(),
                     is_current_year: row.due.year() == y,
                     is_current_month: current_month_key == Some(row.pay_key.as_str()),
                     label_html,

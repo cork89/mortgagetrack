@@ -1,0 +1,8 @@
+{% import "partials/payoff_accelerator.html" as accel %}
+<div class="panel-surface">
+  <div class="panel-head">
+    <h2>Summary</h2>
+  </div>
+  {% call accel::card(accelerator) %}
+  {% include "partials/year_strip.html" %}
+</div>

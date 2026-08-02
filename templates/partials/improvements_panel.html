@@ -1,0 +1,38 @@
+{% import "partials/improvement_macros.html" as improv %}
+<div class="panel-surface improvements-panel">
+  <div class="panel-head payments-head">
+    <div class="payments-head-copy">
+      <h2>Home improvements</h2>
+    </div>
+    <div class="payments-toolbar">
+      {% call improv::add_improvement_disclosure(profile_id, extra_date_default, "#panel-improvements", hx_swap) %}
+    </div>
+  </div>
+  <section class="improvements-section improvements-section-tab" aria-label="Home improvements">
+    <div class="improvements-head">
+      <h3>Spending</h3>
+      <div class="improvements-total">
+        <span class="k">Total spent</span>
+        <span class="v">{{ improvements_total }}</span>
+      </div>
+    </div>
+    {% if improvements.is_empty() %}
+    <p class="improvements-empty">No home improvements tracked yet.</p>
+    {% else %}
+    <ul class="improvements-list">
+      {% for item in improvements %}
+      <li>
+        <div class="improvement-main">
+          <span class="improvement-amount">{{ item.amount }}</span>
+          <span class="improvement-date">{{ item.date }}</span>
+          {% if item.has_note %}
+          <span class="improvement-note">{{ item.note }}</span>
+          {% endif %}
+        </div>
+        {% call improv::improvement_actions(profile_id, item) %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</div>

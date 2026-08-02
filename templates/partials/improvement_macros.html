@@ -27,16 +27,29 @@
 
 {%- macro improvement_actions(profile_id, item) -%}
 <div class="improvement-actions">
-  <button type="button" class="btn-text improvement-edit-btn"
+  <button type="button"
+    class="status-btn improvement-edit-btn{% if item.has_detail %} paid{% endif %}"
     data-id="{{ item.id }}"
     data-date="{{ item.date_raw }}"
     data-amount="{{ item.amount_raw }}"
     data-note-json="{{ item.note_json }}"
-    data-detail-json="{{ item.detail_json }}">Edit</button>
-  <button type="button" class="btn-text danger"
+    data-detail-json="{{ item.detail_json }}"
+    aria-label="{% if item.has_detail %}Edit details{% else %}Add details{% endif %}"
+    title="{% if item.has_detail %}Edit details{% else %}Add details{% endif %}">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+    </svg>
+  </button>
+  <button type="button" class="status-btn status-btn-remove"
     hx-post="/profiles/{{ profile_id }}/improvements/{{ item.id }}"
     hx-target="#panel-improvements"
     hx-swap="innerHTML show:none"
-    hx-confirm="Remove this home improvement?">Remove</button>
+    hx-confirm="Remove this home improvement?"
+    aria-label="Remove"
+    title="Remove">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+    </svg>
+  </button>
 </div>
 {%- endmacro -%}

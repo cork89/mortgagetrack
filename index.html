@@ -796,15 +796,6 @@
       letter-spacing: -0.01em;
     }
 
-    tbody tr.year-summary .year-sub {
-      display: block;
-      font-family: var(--font-body);
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: var(--ink-soft);
-      margin-top: 0.15rem;
-    }
-
     .status-actions {
       display: inline-flex;
       align-items: center;
@@ -2295,11 +2286,9 @@
           const paymentTotal = group.reduce((s, r) => s + r.payment, 0);
           const principalTotal = group.reduce((s, r) => s + r.principal, 0);
           const interestTotal = group.reduce((s, r) => s + r.interest, 0);
-          const count = group.length;
           return `<tr class="year-summary${year === y ? " current-year" : ""}">
             <td class="cell-text" colspan="2">
               <span class="year-label">${year}</span>
-              <span class="year-sub">${count} payment${count === 1 ? "" : "s"} · ${money(paymentTotal)} total</span>
             </td>
             <td>${money(paymentTotal)}</td>
             <td>${money(principalTotal)}</td>

@@ -1,0 +1,153 @@
+{% import "partials/payment_macros.html" as pays %}
+<div class="panel-surface payments-panel">
+  <div class="panel-head payments-head">
+    <div class="payments-head-copy">
+      <h2>Payments</h2>
+      <span class="hint" id="paymentHint">{{ summary.hint }}</span>
+    </div>
+    <div class="payments-toolbar">
+      <label class="filter-label">
+        <span>Filter</span>
+        <select id="trackFilter" name="filter"
+          hx-get="/partials/payments"
+          hx-target="#panel-payments"
+          hx-swap="innerHTML show:none"
+          hx-trigger="change"
+          hx-vals='{"tab":"payments","year":"{{ view_year }}","grain":"{{ grain }}"}'>
+          <option value="all"{% if payment_filter == "all" %} selected{% endif %}>All</option>
+          <option value="unpaid"{% if payment_filter == "unpaid" %} selected{% endif %}>Unpaid</option>
+          <option value="paid"{% if payment_filter == "paid" %} selected{% endif %}>Paid</option>
+          <option value="year"{% if payment_filter == "year" %} selected{% endif %}>Current year</option>
+          <option value="extra"{% if payment_filter == "extra" %} selected{% endif %}>Extra only</option>
+        </select>
+      </label>
+      <button type="button" class="btn-ghost btn-compact" id="markThroughBtn"
+        hx-post="/profiles/{{ profile_id }}/mark-due?tab=payments&filter={{ payment_filter }}&year={{ view_year }}&grain={{ grain }}"
+        hx-target="#panel-payments"
+        hx-swap="innerHTML show:none">
+        <span class="btn-label-full">Mark all due as paid</span>
+        <span class="btn-label-short">Mark all paid</span>
+      </button>
+      <details class="extra-disclosure">
+        <summary class="btn-primary btn-compact">Add Extra</summary>
+        <form class="extra-form" id="extraForm"
+          hx-post="/profiles/{{ profile_id }}/extras"
+          hx-target="#panel-payments"
+          hx-swap="innerHTML show:none">
+          <input type="hidden" name="filter" value="{{ payment_filter }}" />
+          <label>
+            Extra payment date
+            <input id="extraDate" name="date" type="date" value="{{ extra_date_default }}" required />
+          </label>
+          <label class="amount">
+            Amount
+            <input id="extraAmount" name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
+          </label>
+          <button type="submit" class="btn-primary">Add payment</button>
+          <label class="recast-check" title="Lower future monthly payments instead of paying off the loan sooner">
+            <input type="checkbox" name="recast" value="true" />
+            Recast
+          </label>
+        </form>
+      </details>
+    </div>
+  </div>
+  <div class="table-wrap payments-desktop" id="paymentsTableWrap">
+    <table class="payments-table">
+      <colgroup>
+        <col class="col-num" />
+        <col class="col-date" />
+        <col class="col-money" />
+        <col class="col-money" />
+        <col class="col-money" />
+        <col class="col-money" />
+        <col class="col-status" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="cell-text">#</th>
+          <th class="cell-text">Due date</th>
+          <th>Payment</th>
+          <th>Principal</th>
+          <th>Interest</th>
+          <th>Balance</th>
+          <th class="cell-status">Status</th>
+        </tr>
+      </thead>
+      <tbody id="paymentsBody">
+        {% if payment_rows.is_empty() %}
+        <tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>
+        {% else %}
+          {% for row in payment_rows %}
+            {% if row.is_year_header %}
+            <tr class="year-summary{% if row.is_current_year %} current-year{% endif %}">
+              <td class="cell-text" colspan="2">
+                <span class="year-label">{{ row.year_label }}</span>
+              </td>
+              <td>{{ row.payment }}</td>
+              <td>{{ row.principal }}</td>
+              <td>{{ row.interest }}</td>
+              <td></td>
+              <td class="cell-status"></td>
+            </tr>
+            {% else %}
+            <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.is_current_month %}payment-current-month {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
+              <td class="cell-text">{{ row.label_html|safe }}</td>
+              <td class="cell-text">{{ row.due }}</td>
+              <td>{{ row.payment }}</td>
+              <td>{{ row.principal }}</td>
+              <td>{{ row.interest }}</td>
+              <td>{{ row.balance }}</td>
+              <td class="cell-status">
+                {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pay-cards">
+    {% if payment_rows.is_empty() %}
+    <p class="empty-state">No payments match this filter.</p>
+    {% else %}
+      {% for row in payment_rows %}
+        {% if row.is_year_header %}
+        <div class="pay-year{% if row.is_current_year %} current-year{% endif %}">{{ row.year_label }}</div>
+        {% else %}
+        <article class="pay-card{% if row.paid %} paid{% endif %}{% if row.is_extra %} extra{% endif %}{% if row.is_current_month %} payment-current-month{% endif %}{% if row.zeroed %} zeroed{% endif %}">
+          <div class="pay-card-main">
+            <div class="pay-card-lead">
+              {% if row.is_extra %}
+              {{ row.label_html|safe }}
+              {% else %}
+              <span class="pay-date">{{ row.due }}</span>
+              {% endif %}
+            </div>
+            <div class="pay-card-amt">
+              <span class="pay-amount">{{ row.payment }}</span>
+              <span class="pay-amount-label">Payment</span>
+            </div>
+          </div>
+          <div class="pay-card-foot">
+            <div class="pay-card-meta">
+              <span>P: {{ row.principal }}</span>
+              <span class="pay-sep" aria-hidden="true">|</span>
+              <span>I: {{ row.interest }}</span>
+              <span class="pay-sep" aria-hidden="true">|</span>
+              <span>B: {{ row.balance_short }}</span>
+            </div>
+            {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
+          </div>
+        </article>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </div>
+  <div class="summary-bar" id="amortSummary">
+    <div><div class="k">Monthly payment</div><div class="v">{{ summary.monthly_payment }}</div></div>
+    <div><div class="k">Total interest (full term)</div><div class="v">{{ summary.total_interest }}</div></div>
+    <div><div class="k">Balance after tracked pays</div><div class="v">{{ summary.balance_after }}</div></div>
+  </div>
+</div>

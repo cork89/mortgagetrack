@@ -1,0 +1,34 @@
+<div class="panel-surface">
+  <div class="panel-head">
+    <div>
+      <h2>Principal vs interest</h2>
+      <span class="hint{% if chart.grain != "monthly" %} hidden{% endif %}" data-grain-hint="monthly">{{ chart.monthly.hint }}</span>
+      <span class="hint{% if chart.grain != "yearly" %} hidden{% endif %}" data-grain-hint="yearly">{{ chart.yearly.hint }}</span>
+    </div>
+    <div class="seg-toggle" id="chartGrainToggle" role="group" aria-label="Chart period">
+      <button type="button" data-grain="monthly"{% if chart.grain == "monthly" %} class="active"{% endif %}
+        aria-pressed="{% if chart.grain == "monthly" %}true{% else %}false{% endif %}">Monthly</button>
+      <button type="button" data-grain="yearly"{% if chart.grain == "yearly" %} class="active"{% endif %}
+        aria-pressed="{% if chart.grain == "yearly" %}true{% else %}false{% endif %}">Yearly</button>
+    </div>
+  </div>
+  <div class="chart-wrap" id="chartWrap">
+    <div class="chart-legend">
+      <span class="l-principal">Principal</span>
+      <span class="l-interest">Interest</span>
+    </div>
+    <div class="chart-tooltip" id="chartTooltip" role="tooltip"></div>
+    <svg class="chart-svg{% if chart.grain != "monthly" %} hidden{% endif %}" data-grain-svg="monthly"
+      viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
+      aria-label="Principal versus interest by month"
+      data-buckets="{{ chart.monthly.buckets_json }}">
+      {{ chart.monthly.svg|safe }}
+    </svg>
+    <svg class="chart-svg{% if chart.grain != "yearly" %} hidden{% endif %}" data-grain-svg="yearly"
+      viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
+      aria-label="Principal versus interest by year"
+      data-buckets="{{ chart.yearly.buckets_json }}">
+      {{ chart.yearly.svg|safe }}
+    </svg>
+  </div>
+</div>

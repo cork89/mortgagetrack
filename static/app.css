@@ -1022,15 +1022,6 @@ tbody tr.year-summary .year-label {
   letter-spacing: -0.01em;
 }
 
-tbody tr.year-summary .year-sub {
-  display: block;
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--ink-soft);
-  margin-top: 0.15rem;
-}
-
 .status-actions {
   display: inline-flex;
   align-items: center;
@@ -1289,7 +1280,6 @@ tbody tr.year-summary .year-sub {
 
   .pay-card .status-btn-remove {
     order: 3;
-    font-size: 0.72rem;
   }
 
   .pay-cards .empty-state {
@@ -1488,9 +1478,9 @@ tbody tr.year-summary .year-sub {
 }
 
 .status-btn.paid {
-  background: rgba(47, 111, 106, 0.12);
+  background: color-mix(in srgb, var(--paid) 12%, transparent);
   color: var(--paid);
-  border-color: rgba(47, 111, 106, 0.25);
+  border-color: color-mix(in srgb, var(--paid) 25%, transparent);
 }
 
 .track-filters,
@@ -1614,6 +1604,18 @@ tbody tr.year-summary .year-sub {
   align-items: center;
   gap: 0.55rem;
   flex-shrink: 0;
+}
+
+.improvement-actions .status-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+}
+
+.improvement-actions .status-btn svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .improvement-edit-grid {
@@ -1908,9 +1910,10 @@ tbody tr.year-summary .year-sub {
   font-size: 0.85rem;
 }
 
-.status-btn-remove {
-  padding: 0.2rem 0.4rem;
-  font-size: 0.8rem;
+.status-btn-remove:hover {
+  color: var(--coral);
+  border-color: color-mix(in srgb, var(--coral) 35%, transparent);
+  background: color-mix(in srgb, var(--coral) 8%, transparent);
 }
 
 .empty-dash {
@@ -2163,6 +2166,12 @@ tbody tr.year-summary .year-sub {
   image-rendering: pixelated;
 }
 
+.avatar[src*="/pieces/"] {
+  image-rendering: auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .avatar-xs {
   width: 22px;
   height: 22px;
@@ -2360,6 +2369,45 @@ tbody tr.year-summary .year-sub {
 
 .account-popover {
   width: min(440px, calc(100vw - 2rem));
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+  margin-block: 0.35rem 1rem;
+}
+
+.avatar-option {
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  margin: 0;
+}
+
+.avatar-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatar-option img {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: block;
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 0.15s ease;
+}
+
+.avatar-option:hover img,
+.avatar-option:has(input:focus-visible) img {
+  outline-color: color-mix(in srgb, var(--sea) 45%, transparent);
+}
+
+.avatar-option:has(input:checked) img {
+  outline-color: var(--sea);
 }
 
 .account-popover .auth-form {

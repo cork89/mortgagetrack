@@ -5,7 +5,7 @@ use axum::{
 };
 
 use crate::models::{
-    ChartPair, DashboardView, EmptyState, ExtraPayment, ImprovementRowView, MonthCell, PaymentChip,
+    ChartPair, DashboardView, EmptyState, ExtraPayment, ImprovementRowView, MonthCell,
     PaymentRowView, PayoffAccelerator, ProfileOption, YearStat, YearSummary,
 };
 
@@ -88,26 +88,8 @@ pub struct IndexTemplate {
     pub dashboard: Option<DashboardView>,
     pub default_start: String,
     pub error: String,
-    pub user_id: String,
     pub user_email: String,
-}
-
-#[derive(Template)]
-#[template(path = "partials/item_list.html")]
-pub struct ItemListTemplate {
-    pub dashboard: DashboardView,
-}
-
-#[derive(Template)]
-#[template(path = "partials/item_card.html")]
-#[allow(dead_code)]
-pub struct ItemCardTemplate {
-    pub chip: PaymentChip,
-    pub profile_id: String,
-    pub tab: String,
-    pub year: i32,
-    pub filter: String,
-    pub grain: String,
+    pub avatar_src: String,
 }
 
 #[derive(Template)]
@@ -135,13 +117,6 @@ pub struct SharePanelTemplate {
     pub active_expires_at: String,
     pub fresh_invite_url: String,
     pub collaborators: Vec<CollaboratorView>,
-}
-
-#[derive(Template)]
-#[template(path = "partials/year_strip.html")]
-#[allow(dead_code)]
-pub struct YearStripTemplate {
-    pub year_stats: Vec<YearStat>,
 }
 
 #[derive(Template)]
@@ -206,13 +181,6 @@ pub struct ExtrasListTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "partials/panels_sync.html")]
-#[allow(dead_code)]
-pub struct PanelsSyncTemplate {
-    pub dashboard: DashboardView,
-}
-
-#[derive(Template)]
 #[template(path = "partials/error.html")]
 pub struct ErrorPartial {
     pub message: String,
@@ -252,12 +220,21 @@ pub struct AuthErrorPartial {
     pub message: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct AvatarOption {
+    pub id: String,
+    pub selected: bool,
+}
+
 #[derive(Template)]
 #[template(path = "settings.html")]
 pub struct SettingsTemplate {
     pub csrf_token: String,
-    pub user_id: String,
     pub email: String,
+    pub avatar_src: String,
+    pub avatar_options: Vec<AvatarOption>,
+    pub avatar_updated: bool,
+    pub avatar_error: bool,
     pub password_updated: bool,
     pub password_error: String,
     pub delete_error: String,

@@ -124,3 +124,22 @@ async fn improvements_have_detail(pool: &SqlitePool) -> Result<bool, sqlx::Error
             .await?;
     Ok(cols.iter().any(|(_, name)| name == "detail"))
 }
+
+pub async fn ensure_user_avatar(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if users_have_avatar(pool).await? {
+        return Ok(());
+    }
+    tracing::info!("adding users.avatar column");
+    sqlx::query("ALTER TABLE users ADD COLUMN avatar TEXT")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn users_have_avatar(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let cols: Vec<(i32, String)> =
+        sqlx::query_as("SELECT cid, name FROM pragma_table_info('users')")
+            .fetch_all(pool)
+            .await?;
+    Ok(cols.iter().any(|(_, name)| name == "avatar"))
+}
