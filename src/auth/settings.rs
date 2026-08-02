@@ -1,4 +1,4 @@
-//! Settings: change password, avatar, and delete account.
+//! Settings: change password, avatar, default tab, and delete account.
 
 use axum::{
     extract::{Path, Query, State},
@@ -13,38 +13,38 @@ use uuid::Uuid;
 
 use super::identicon;
 use super::models::{
-    delete_user, password_hash_for_user, update_password, validate_password, verify_password,
+    delete_user, password_hash_for_user, update_default_tab, update_password, validate_password,
+    verify_password,
 };
 use crate::app_state::AppState;
 use crate::auth::{hx_redirect, is_htmx, purge_session, AuthUser, HOME_PATH};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
-use crate::templates::{AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate};
+use crate::models::TabId;
+use crate::templates::{
+    AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate, TabOption,
+};
 
-/// Selectable avatar piece ids (`static/pieces/piece_{row}_{col}.webp`).
+/// Selectable avatar ids (`static/avatars/{id}.webp`).
 pub const AVATAR_OPTIONS: &[&str] = &[
-    "piece_0_0",
-    "piece_0_1",
-    "piece_0_2",
-    "piece_1_0",
-    "piece_1_1",
-    "piece_1_2",
-    "piece_2_0",
-    "piece_2_1",
-    "piece_2_2",
-    "piece_3_0",
-    "piece_3_1",
-    "piece_3_2",
+    "barrow",
+    "boat",
+    "boot",
+    "car",
+    "dog",
+    "hat",
+    "iron",
+    "thimble",
 ];
 
 pub fn is_valid_avatar(avatar: &str) -> bool {
     AVATAR_OPTIONS.contains(&avatar)
 }
 
-/// Image URL for a user: custom piece when set, otherwise the identicon endpoint.
+/// Image URL for a user: custom avatar when set, otherwise the identicon endpoint.
 pub fn avatar_src(user_id: &Uuid, avatar: Option<&str>) -> String {
     match avatar {
-        Some(piece) if is_valid_avatar(piece) => format!("/static/pieces/{piece}.webp"),
+        Some(id) if is_valid_avatar(id) => format!("/static/avatars/{id}.webp"),
         _ => format!("/avatars/{user_id}.svg"),
     }
 }
@@ -55,6 +55,7 @@ pub fn routes() -> Router<AppState> {
         .route("/settings/password", post(change_password))
         .route("/settings/delete", post(delete_account))
         .route("/settings/avatar", post(update_avatar))
+        .route("/settings/default-tab", post(update_default_tab_handler))
         .route("/avatars/{id}", get(avatar))
 }
 
@@ -62,6 +63,7 @@ pub fn routes() -> Router<AppState> {
 pub struct SettingsQuery {
     pub password: Option<String>,
     pub avatar: Option<String>,
+    pub tab: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +84,7 @@ fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> 
         .as_deref()
         .filter(|a| is_valid_avatar(a))
         .unwrap_or("");
+    let current_tab = TabId::parse(&user.default_tab);
     SettingsTemplate {
         csrf_token,
         email: user.email.clone(),
@@ -93,8 +96,18 @@ fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> 
                 selected: *id == current,
             })
             .collect(),
+        tab_options: TabId::ALL
+            .iter()
+            .map(|tab| TabOption {
+                id: tab.as_str().to_string(),
+                label: tab.label().to_string(),
+                selected: *tab == current_tab,
+            })
+            .collect(),
         avatar_updated: q.avatar.as_deref() == Some("updated"),
         avatar_error: q.avatar.as_deref() == Some("error"),
+        default_tab_updated: q.tab.as_deref() == Some("updated"),
+        default_tab_error: q.tab.as_deref() == Some("error"),
         password_updated: q.password.as_deref() == Some("updated"),
         password_error: String::new(),
         delete_error: String::new(),
@@ -120,7 +133,7 @@ async fn avatar(
 
     if let Ok(Some(user)) = crate::auth::models::find_user_by_id(&state.pool, user_id).await {
         if let Some(avatar) = user.avatar.as_deref().filter(|a| is_valid_avatar(a)) {
-            let redirect_url = format!("/static/pieces/{avatar}.webp");
+            let redirect_url = format!("/static/avatars/{avatar}.webp");
             let mut response =
                 (StatusCode::FOUND, [(header::LOCATION, redirect_url)]).into_response();
             // Avatars can change; never mark this URL immutable.
@@ -173,6 +186,28 @@ async fn update_avatar(
     hx_redirect(&headers, "/settings?avatar=updated")
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateDefaultTabForm {
+    pub default_tab: String,
+}
+
+async fn update_default_tab_handler(
+    State(state): State<AppState>,
+    _session: Session,
+    user: AuthUser,
+    headers: HeaderMap,
+    Form(form): Form<UpdateDefaultTabForm>,
+) -> Response {
+    let Some(tab) = TabId::try_parse(&form.default_tab) else {
+        return hx_redirect(&headers, "/settings?tab=error");
+    };
+    if let Err(err) = update_default_tab(&state.pool, user.id, tab.as_str()).await {
+        tracing::error!("Failed to update default tab: {}", err);
+        return hx_redirect(&headers, "/settings?tab=error");
+    }
+    hx_redirect(&headers, "/settings?tab=updated")
+}
+
 async fn change_password(
     State(state): State<AppState>,
     session: Session,
@@ -198,6 +233,7 @@ async fn change_password(
                     &SettingsQuery {
                         password: None,
                         avatar: None,
+                        tab: None,
                     },
                 );
                 page.password_error = message;
@@ -266,6 +302,7 @@ async fn delete_account(
                     &SettingsQuery {
                         password: None,
                         avatar: None,
+                        tab: None,
                     },
                 );
                 page.delete_error = message;

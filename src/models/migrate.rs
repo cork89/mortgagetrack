@@ -126,7 +126,7 @@ async fn improvements_have_detail(pool: &SqlitePool) -> Result<bool, sqlx::Error
 }
 
 pub async fn ensure_user_avatar(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    if users_have_avatar(pool).await? {
+    if users_have_column(pool, "avatar").await? {
         return Ok(());
     }
     tracing::info!("adding users.avatar column");
@@ -136,10 +136,23 @@ pub async fn ensure_user_avatar(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-async fn users_have_avatar(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+pub async fn ensure_user_default_tab(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if users_have_column(pool, "default_tab").await? {
+        return Ok(());
+    }
+    tracing::info!("adding users.default_tab column");
+    sqlx::query(
+        "ALTER TABLE users ADD COLUMN default_tab TEXT NOT NULL DEFAULT 'calendar'",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn users_have_column(pool: &SqlitePool, column: &str) -> Result<bool, sqlx::Error> {
     let cols: Vec<(i32, String)> =
         sqlx::query_as("SELECT cid, name FROM pragma_table_info('users')")
             .fetch_all(pool)
             .await?;
-    Ok(cols.iter().any(|(_, name)| name == "avatar"))
+    Ok(cols.iter().any(|(_, name)| name == column))
 }

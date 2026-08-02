@@ -14,7 +14,7 @@ pub use db::{
 };
 pub use migrate::{
     ensure_extra_recast, ensure_improvement_detail, ensure_profile_version,
-    ensure_profiles_belong_to_users, ensure_user_avatar,
+    ensure_profiles_belong_to_users, ensure_user_avatar, ensure_user_default_tab,
 };
 pub use sharing::{
     accept_share_link, active_share_link, create_share_link, leave_profile, list_collaborators,

@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_extra_recast(&pool).await?;
     models::ensure_improvement_detail(&pool).await?;
     models::ensure_user_avatar(&pool).await?;
+    models::ensure_user_default_tab(&pool).await?;
     auth::ensure_test_user(&pool).await?;
 
     let session_store = SqliteStore::new(pool.clone());

@@ -1,8 +1,9 @@
 {%- macro add_improvement_disclosure(profile_id, extra_date_default, hx_target, hx_swap) -%}
 <details class="extra-disclosure improvement-disclosure">
-  <summary class="btn-primary btn-compact">
-    <span class="btn-label-full">Add Improvement</span>
-    <span class="btn-label-short">Add</span>
+  <summary class="btn-primary btn-compact btn-icon" aria-label="Add Improvement" title="Add Improvement">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
   </summary>
   <form class="extra-form improvement-form"
     hx-post="/profiles/{{ profile_id }}/improvements"

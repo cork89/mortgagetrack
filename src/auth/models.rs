@@ -15,6 +15,7 @@ pub struct User {
     pub email: String,
     pub created_at: String,
     pub avatar: Option<String>,
+    pub default_tab: String,
 }
 
 impl User {
@@ -82,7 +83,7 @@ pub fn validate_password(password: &str) -> AppResult<()> {
 pub async fn find_user_by_id(pool: &SqlitePool, id: Uuid) -> AppResult<Option<User>> {
     let row = sqlx::query_as::<_, User>(
         r#"
-        SELECT id, email, created_at, avatar
+        SELECT id, email, created_at, avatar, default_tab
         FROM users
         WHERE id = ?
         "#,
@@ -94,9 +95,9 @@ pub async fn find_user_by_id(pool: &SqlitePool, id: Uuid) -> AppResult<Option<Us
 }
 
 pub async fn find_user_by_email(pool: &SqlitePool, email: &str) -> AppResult<Option<(User, String)>> {
-    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String)>(
+    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String, String)>(
         r#"
-        SELECT u.id, u.email, u.created_at, u.avatar, c.password_hash
+        SELECT u.id, u.email, u.created_at, u.avatar, u.default_tab, c.password_hash
         FROM users u
         INNER JOIN local_credentials c ON c.user_id = u.id
         WHERE u.email = ? COLLATE NOCASE
@@ -106,17 +107,34 @@ pub async fn find_user_by_email(pool: &SqlitePool, email: &str) -> AppResult<Opt
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|(id, email, created_at, avatar, password_hash)| {
+    Ok(row.map(|(id, email, created_at, avatar, default_tab, password_hash)| {
         (
             User {
                 id,
                 email,
                 created_at,
                 avatar,
+                default_tab,
             },
             password_hash,
         )
     }))
+}
+
+pub async fn update_default_tab(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    default_tab: &str,
+) -> AppResult<()> {
+    let result = sqlx::query("UPDATE users SET default_tab = ? WHERE id = ?")
+        .bind(default_tab)
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Account not found.".into()));
+    }
+    Ok(())
 }
 
 pub async fn create_user(pool: &SqlitePool, email: &str, password: &str) -> AppResult<User> {

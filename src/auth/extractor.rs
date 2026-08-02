@@ -19,6 +19,7 @@ pub struct AuthUser {
     pub id: Uuid,
     pub email: String,
     pub avatar: Option<String>,
+    pub default_tab: String,
 }
 
 /// Resolve the signed-in user from the session, if any.
@@ -33,6 +34,7 @@ pub async fn current_user(session: &Session, pool: &SqlitePool) -> AppResult<Opt
         id: user_id,
         email: user.email,
         avatar: user.avatar,
+        default_tab: user.default_tab,
     }))
 }
 
@@ -67,6 +69,7 @@ impl FromRequestParts<AppState> for AuthUser {
             id: user_id,
             email: user.email,
             avatar: user.avatar,
+            default_tab: user.default_tab,
         })
     }
 }

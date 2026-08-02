@@ -811,7 +811,11 @@ async fn load_page(
     let view_year = q.year.unwrap_or_else(|| today.year());
     let filter = PaymentFilter::parse(q.filter.as_deref().unwrap_or("all"));
     let grain = q.grain.as_deref().unwrap_or("monthly");
-    let tab = TabId::parse(q.tab.as_deref().unwrap_or("calendar"));
+    let tab = TabId::parse(
+        q.tab
+            .as_deref()
+            .unwrap_or_else(|| user.default_tab.as_str()),
+    );
 
     let dashboard = if let Some(profile) = &active {
         if profile.has_loan() {

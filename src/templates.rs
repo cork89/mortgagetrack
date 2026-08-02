@@ -226,6 +226,13 @@ pub struct AvatarOption {
     pub selected: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct TabOption {
+    pub id: String,
+    pub label: String,
+    pub selected: bool,
+}
+
 #[derive(Template)]
 #[template(path = "settings.html")]
 pub struct SettingsTemplate {
@@ -233,8 +240,11 @@ pub struct SettingsTemplate {
     pub email: String,
     pub avatar_src: String,
     pub avatar_options: Vec<AvatarOption>,
+    pub tab_options: Vec<TabOption>,
     pub avatar_updated: bool,
     pub avatar_error: bool,
+    pub default_tab_updated: bool,
+    pub default_tab_error: bool,
     pub password_updated: bool,
     pub password_error: String,
     pub delete_error: String,

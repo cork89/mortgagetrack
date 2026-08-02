@@ -1830,7 +1830,7 @@
       if (!profile) return;
       closeProfileMenu();
       popoverMode = "edit";
-      els.popoverTitle.textContent = `Edit ${profile.name}`;
+      els.popoverTitle.textContent = `Edit profile`;
       els.buildBtn.textContent = "Save changes";
       els.nameFieldWrap.classList.remove("hidden");
       els.loanFields.classList.remove("hidden");
@@ -2489,8 +2489,8 @@
       const totalInterest = buckets.reduce((s, b) => s + b.interest, 0);
       els.chartHint.textContent =
         chartGrain === "yearly"
-          ? `Yearly totals over ${buckets.length} years · ${money(totalPrincipal)} principal · ${money(totalInterest)} interest`
-          : `Monthly split over ${buckets.length} payments · ${money(totalPrincipal)} principal · ${money(totalInterest)} interest`;
+          ? `${buckets.length} years · ${money(totalPrincipal)} principal · ${money(totalInterest)} interest`
+          : `${buckets.length} payments · ${money(totalPrincipal)} principal · ${money(totalInterest)} interest`;
 
       els.chartSvg._chartBuckets = buckets;
     }

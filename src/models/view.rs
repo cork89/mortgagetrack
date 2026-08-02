@@ -15,6 +15,14 @@ pub enum TabId {
 }
 
 impl TabId {
+    pub const ALL: [TabId; 5] = [
+        TabId::Summary,
+        TabId::Calendar,
+        TabId::Payments,
+        TabId::Improvements,
+        TabId::Chart,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             TabId::Summary => "summary",
@@ -25,14 +33,29 @@ impl TabId {
         }
     }
 
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "summary" => TabId::Summary,
-            "payments" => TabId::Payments,
-            "improvements" => TabId::Improvements,
-            "chart" => TabId::Chart,
-            _ => TabId::Calendar,
+    pub fn label(self) -> &'static str {
+        match self {
+            TabId::Summary => "Summary",
+            TabId::Calendar => "Calendar",
+            TabId::Payments => "Payments",
+            TabId::Improvements => "Improvements",
+            TabId::Chart => "Breakdown",
         }
+    }
+
+    pub fn try_parse(s: &str) -> Option<Self> {
+        match s {
+            "summary" => Some(TabId::Summary),
+            "calendar" => Some(TabId::Calendar),
+            "payments" => Some(TabId::Payments),
+            "improvements" => Some(TabId::Improvements),
+            "chart" => Some(TabId::Chart),
+            _ => None,
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        Self::try_parse(s).unwrap_or(TabId::Calendar)
     }
 }
 
@@ -479,7 +502,11 @@ fn format_extra_label(extras: &[ExtraPayment]) -> String {
     let recast_count = extras.iter().filter(|e| e.recast).count();
 
     if regular.is_empty() {
-        let label = if recast_count == 1 { "Recast" } else { "Recasts" };
+        let label = if recast_count == 1 {
+            "Recast"
+        } else {
+            "Recasts"
+        };
         return format!("+{} {label}", money_whole(recast_total));
     }
 
@@ -519,7 +546,10 @@ fn payoff_accelerator(
         }
     }
 
-    let paid_count = schedule.iter().filter(|r| paid.contains(&r.pay_key)).count();
+    let paid_count = schedule
+        .iter()
+        .filter(|r| paid.contains(&r.pay_key))
+        .count();
     let scheduled_paid: f64 = schedule
         .iter()
         .filter(|r| r.kind == RowKind::Scheduled && paid.contains(&r.pay_key))
@@ -545,7 +575,13 @@ fn payoff_accelerator(
         extra_pct = (100.0 - paid_pct).min(1.5);
     }
 
-    let baseline = build_schedule(loan.principal, loan.rate, loan.term_years, loan.start_date, &[]);
+    let baseline = build_schedule(
+        loan.principal,
+        loan.rate,
+        loan.term_years,
+        loan.start_date,
+        &[],
+    );
     let months_saved = match (last_active_due(&baseline.rows), last_active_due(schedule)) {
         (Some(base_end), Some(accel_end)) if accel_end < base_end => {
             months_between(accel_end, base_end).max(0)
@@ -590,10 +626,7 @@ fn year_strip(
     today: NaiveDate,
 ) -> Vec<YearStat> {
     let y = today.year();
-    let year_rows: Vec<_> = schedule
-        .iter()
-        .filter(|r| r.due.year() == y)
-        .collect();
+    let year_rows: Vec<_> = schedule.iter().filter(|r| r.due.year() == y).collect();
     let paid_rows: Vec<_> = year_rows
         .iter()
         .filter(|r| paid.contains(&r.pay_key))
@@ -734,9 +767,8 @@ fn payments_table(
                 && r.due.month() == today.month()
         })
         .or_else(|| {
-            rows.iter().find(|r| {
-                r.due.year() == today.year() && r.due.month() == today.month()
-            })
+            rows.iter()
+                .find(|r| r.due.year() == today.year() && r.due.month() == today.month())
         })
         .map(|r| r.pay_key.as_str());
 
@@ -841,8 +873,14 @@ fn payments_table(
             break;
         }
     }
-    let scheduled_count = schedule.iter().filter(|r| r.kind == RowKind::Scheduled).count();
-    let paid_count = schedule.iter().filter(|r| paid.contains(&r.pay_key)).count();
+    let scheduled_count = schedule
+        .iter()
+        .filter(|r| r.kind == RowKind::Scheduled)
+        .count();
+    let paid_count = schedule
+        .iter()
+        .filter(|r| paid.contains(&r.pay_key))
+        .count();
     let pct_paid = if schedule.is_empty() {
         0
     } else {
@@ -917,14 +955,14 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
     let total_interest: f64 = buckets.iter().map(|b| b.interest).sum();
     let hint = if grain == "yearly" {
         format!(
-            "Yearly totals over {} years · {} principal · {} interest",
+            "{} years · {} principal · {} interest",
             buckets.len(),
             money(total_principal),
             money(total_interest)
         )
     } else {
         format!(
-            "Monthly split over {} payments · {} principal · {} interest",
+            "{} payments · {} principal · {} interest",
             buckets.len(),
             money(total_principal),
             money(total_interest)
