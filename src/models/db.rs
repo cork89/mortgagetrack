@@ -74,6 +74,17 @@ pub struct ExtraPayment {
     pub recast: bool,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct HomeImprovement {
+    pub id: String,
+    #[allow(dead_code)] // selected by sqlx::FromRow
+    pub profile_id: String,
+    pub date: String,
+    pub amount: f64,
+    pub note: String,
+    pub detail: String,
+}
+
 pub(crate) fn user_key(user_id: Uuid) -> String {
     user_id.to_string()
 }
@@ -338,6 +349,128 @@ pub async fn list_extras(pool: &SqlitePool, profile_id: &str) -> AppResult<Vec<E
     Ok(rows)
 }
 
+pub async fn list_improvements(
+    pool: &SqlitePool,
+    profile_id: &str,
+) -> AppResult<Vec<HomeImprovement>> {
+    let rows = sqlx::query_as::<_, HomeImprovement>(
+        r#"
+        SELECT id, profile_id, date, amount, note, detail
+        FROM home_improvements
+        WHERE profile_id = ?
+        ORDER BY date, id
+        "#,
+    )
+    .bind(profile_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn add_improvement(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+    date: NaiveDate,
+    amount: f64,
+    note: &str,
+    expected_version: i64,
+) -> AppResult<HomeImprovement> {
+    require_profile_access(pool, user_id, profile_id).await?;
+    if amount <= 0.0 {
+        return Err(AppError::BadRequest("Amount must be positive".into()));
+    }
+    let id = Uuid::new_v4().to_string();
+    let date_str = date.format("%Y-%m-%d").to_string();
+    let note = note.trim().to_string();
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
+    sqlx::query(
+        "INSERT INTO home_improvements (id, profile_id, date, amount, note, detail) VALUES (?, ?, ?, ?, ?, '')",
+    )
+    .bind(&id)
+    .bind(profile_id)
+    .bind(&date_str)
+    .bind(amount)
+    .bind(&note)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    Ok(HomeImprovement {
+        id,
+        profile_id: profile_id.to_string(),
+        date: date_str,
+        amount,
+        note,
+        detail: String::new(),
+    })
+}
+
+pub async fn update_improvement(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+    improvement_id: &str,
+    date: NaiveDate,
+    amount: f64,
+    note: &str,
+    detail: &str,
+    expected_version: i64,
+) -> AppResult<()> {
+    require_profile_access(pool, user_id, profile_id).await?;
+    if amount <= 0.0 {
+        return Err(AppError::BadRequest("Amount must be positive".into()));
+    }
+    let date_str = date.format("%Y-%m-%d").to_string();
+    let note = note.trim().to_string();
+    let detail = detail.trim().to_string();
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
+    let result = sqlx::query(
+        r#"
+        UPDATE home_improvements
+        SET date = ?, amount = ?, note = ?, detail = ?
+        WHERE id = ? AND profile_id = ?
+        "#,
+    )
+    .bind(&date_str)
+    .bind(amount)
+    .bind(&note)
+    .bind(&detail)
+    .bind(improvement_id)
+    .bind(profile_id)
+    .execute(&mut *tx)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Home improvement not found".into()));
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn delete_improvement(
+    pool: &SqlitePool,
+    user_id: Uuid,
+    profile_id: &str,
+    improvement_id: &str,
+    expected_version: i64,
+) -> AppResult<()> {
+    require_profile_access(pool, user_id, profile_id).await?;
+    let mut tx = pool.begin().await?;
+    reserve_profile_version(&mut tx, profile_id, expected_version).await?;
+    let result = sqlx::query("DELETE FROM home_improvements WHERE id = ? AND profile_id = ?")
+        .bind(improvement_id)
+        .bind(profile_id)
+        .execute(&mut *tx)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Home improvement not found".into()));
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn create_profile(
     pool: &SqlitePool,
     user_id: Uuid,
@@ -467,6 +600,10 @@ pub async fn delete_profile(pool: &SqlitePool, user_id: Uuid, id: &str) -> AppRe
         .execute(pool)
         .await?;
     sqlx::query("DELETE FROM extras WHERE profile_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM home_improvements WHERE profile_id = ?")
         .bind(id)
         .execute(pool)
         .await?;

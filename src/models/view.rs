@@ -3,13 +3,14 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Datelike, Month, NaiveDate};
 
 use super::amort::{build_schedule, payment_status, RowKind, ScheduleRow};
-use super::db::{extras_as_inputs, ExtraPayment, Loan, Profile};
+use super::db::{extras_as_inputs, ExtraPayment, HomeImprovement, Loan, Profile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabId {
     Summary,
     Calendar,
     Payments,
+    Improvements,
     Chart,
 }
 
@@ -19,6 +20,7 @@ impl TabId {
             TabId::Summary => "summary",
             TabId::Calendar => "calendar",
             TabId::Payments => "payments",
+            TabId::Improvements => "improvements",
             TabId::Chart => "chart",
         }
     }
@@ -27,6 +29,7 @@ impl TabId {
         match s {
             "summary" => TabId::Summary,
             "payments" => TabId::Payments,
+            "improvements" => TabId::Improvements,
             "chart" => TabId::Chart,
             _ => TabId::Calendar,
         }
@@ -138,6 +141,19 @@ pub struct YearSummary {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImprovementRowView {
+    pub id: String,
+    pub date: String,
+    pub date_raw: String,
+    pub amount: String,
+    pub amount_raw: String,
+    pub note: String,
+    pub has_note: bool,
+    pub note_json: String,
+    pub detail_json: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct PayoffAccelerator {
     pub remaining: String,
     pub paid_label: String,
@@ -197,6 +213,8 @@ pub struct DashboardView {
     pub loan_start: String,
     pub profile_name: String,
     pub extra_date_default: String,
+    pub improvements: Vec<ImprovementRowView>,
+    pub improvements_total: String,
 }
 
 pub fn money(n: f64) -> String {
@@ -286,6 +304,7 @@ pub fn build_dashboard(
     paid_keys: &[String],
     extras: &[ExtraPayment],
     notes: &HashMap<String, String>,
+    improvements: &[HomeImprovement],
     view_year: i32,
     filter: PaymentFilter,
     chart_grain: &str,
@@ -328,6 +347,31 @@ pub fn build_dashboard(
         yearly: build_chart(schedule, "yearly"),
     };
 
+    let improvements_total: f64 = improvements.iter().map(|i| i.amount).sum();
+    let improvement_rows: Vec<ImprovementRowView> = improvements
+        .iter()
+        .map(|i| {
+            let date = NaiveDate::parse_from_str(&i.date, "%Y-%m-%d")
+                .map(fmt_date)
+                .unwrap_or_else(|_| i.date.clone());
+            let note = i.note.trim().to_string();
+            let detail = i.detail.trim().to_string();
+            let note_json = serde_json::to_string(&note).unwrap_or_else(|_| "\"\"".into());
+            let detail_json = serde_json::to_string(&detail).unwrap_or_else(|_| "\"\"".into());
+            ImprovementRowView {
+                id: i.id.clone(),
+                date,
+                date_raw: i.date.clone(),
+                amount: money(i.amount),
+                amount_raw: format!("{:.2}", i.amount),
+                has_note: !note.is_empty(),
+                note,
+                note_json,
+                detail_json,
+            }
+        })
+        .collect();
+
     Some(DashboardView {
         profile_id: profile.id.clone(),
         profile_version: profile.version,
@@ -349,6 +393,8 @@ pub fn build_dashboard(
         loan_start: loan.start_date.format("%Y-%m-%d").to_string(),
         profile_name: profile.name.clone(),
         extra_date_default: today.format("%Y-%m-%d").to_string(),
+        improvements: improvement_rows,
+        improvements_total: money(improvements_total),
     })
 }
 

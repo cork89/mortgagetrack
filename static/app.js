@@ -1,6 +1,6 @@
 // Client helpers: popover, tabs, chart tooltip, profile menu, panel cache
 (() => {
-  const TAB_IDS = ["summary", "calendar", "payments", "chart"];
+  const TAB_IDS = ["summary", "calendar", "payments", "improvements", "chart"];
 
   function csrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || "";
@@ -92,6 +92,7 @@
       summary: `/partials/summary?tab=summary&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       calendar: `/partials/calendar?year=${encodeURIComponent(year)}&tab=calendar&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       payments: `/partials/payments?tab=payments&filter=${encodeURIComponent(filter)}&year=${encodeURIComponent(year)}&grain=${encodeURIComponent(grain)}`,
+      improvements: `/partials/improvements?tab=improvements&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       chart: `/partials/chart?tab=chart&grain=${encodeURIComponent(grain)}&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}`,
     };
     return urls[id];
@@ -215,6 +216,8 @@
     if (profileVersion) profileVersion.value = next;
     const noteVersion = document.getElementById("noteVersion");
     if (noteVersion) noteVersion.value = next;
+    const improvementVersion = document.getElementById("improvementVersion");
+    if (improvementVersion) improvementVersion.value = next;
   }
 
   function isProfileWritePath(path) {
@@ -280,6 +283,46 @@
 
   function closeNotePopover() {
     notePopover()?.hidePopover();
+  }
+
+  function improvementPopover() {
+    return document.getElementById("improvementPopover");
+  }
+
+  function parseJsonAttr(el, name) {
+    try {
+      return JSON.parse(el.getAttribute(name) || '""');
+    } catch {
+      return "";
+    }
+  }
+
+  function openImprovementPopover(btn) {
+    const dash = dashboard();
+    const profileId = dash?.dataset.profileId;
+    const improvementId = btn.dataset.id;
+    if (!profileId || !improvementId) return;
+
+    const form = document.getElementById("improvementForm");
+    const action = `/profiles/${profileId}/improvements/${improvementId}/update`;
+    form.action = action;
+    form.setAttribute("hx-post", action);
+    form.setAttribute("hx-target", "#panel-improvements");
+    form.setAttribute("hx-swap", "innerHTML show:none");
+
+    document.getElementById("improvementVersion").value = dash.dataset.version || "";
+    document.getElementById("improvementDate").value = btn.dataset.date || "";
+    document.getElementById("improvementAmount").value = btn.dataset.amount || "";
+    document.getElementById("improvementNote").value = parseJsonAttr(btn, "data-note-json");
+    document.getElementById("improvementDetail").value = parseJsonAttr(btn, "data-detail-json");
+
+    if (typeof htmx !== "undefined") htmx.process(form);
+    improvementPopover()?.showPopover();
+    document.getElementById("improvementNote")?.focus();
+  }
+
+  function closeImprovementPopover() {
+    improvementPopover()?.hidePopover();
   }
 
   function loanFormAction(mode, profileId) {
@@ -532,6 +575,7 @@
       showConflictToast(message);
       popover()?.hidePopover();
       closeNotePopover();
+      closeImprovementPopover();
     });
     document.getElementById("loanForm")?.addEventListener("submit", (e) => {
       const form = e.currentTarget;
@@ -566,6 +610,11 @@
     });
     document.getElementById("noteForm")?.addEventListener("htmx:afterRequest", (e) => {
       if (e.detail.successful) closeNotePopover();
+    });
+    document.getElementById("closeImprovementPopoverBtn")?.addEventListener("click", closeImprovementPopover);
+    document.getElementById("cancelImprovementBtn")?.addEventListener("click", closeImprovementPopover);
+    document.getElementById("improvementForm")?.addEventListener("htmx:afterRequest", (e) => {
+      if (e.detail.successful) closeImprovementPopover();
     });
     document.getElementById("deleteProfileBtn")?.addEventListener("click", () => {
       closeProfileMenu();
@@ -624,6 +673,12 @@
         openNotePopover(noteBtn);
         return;
       }
+      const improvementEditBtn = e.target.closest(".improvement-edit-btn");
+      if (improvementEditBtn) {
+        e.preventDefault();
+        openImprovementPopover(improvementEditBtn);
+        return;
+      }
       const grainBtn = e.target.closest("#panel-chart .seg-toggle [data-grain]");
       if (grainBtn) {
         e.preventDefault();
@@ -673,6 +728,16 @@
     if (targetId === "panel-payments") {
       e.detail.target.dataset.stale = "false";
       syncDashboardMetaFromDom();
+      return;
+    }
+    if (targetId === "panel-improvements") {
+      e.detail.target.dataset.stale = "false";
+      const path = e.detail.pathInfo?.requestPath || e.detail.elt?.getAttribute?.("hx-post") || "";
+      if (/\/improvements\/?$/.test(path)) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+        });
+      }
       return;
     }
     if (targetId === "panel-calendar") {

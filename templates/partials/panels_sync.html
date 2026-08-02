@@ -1,5 +1,6 @@
-{# Sync summary + both panels after paid/extra mutations (HTMX OOB only). #}
+{# Sync summary + panels after paid/extra mutations (HTMX OOB only). #}
 {% import "partials/payoff_accelerator.html" as accel %}
+{% import "partials/improvement_macros.html" as improv %}
 <div id="panel-summary" hx-swap-oob="innerHTML">
   <div class="panel-surface">
     <div class="panel-head">
@@ -217,5 +218,46 @@
       <div><div class="k">Total interest (full term)</div><div class="v">{{ dashboard.summary.total_interest }}</div></div>
       <div><div class="k">Balance after tracked pays</div><div class="v">{{ dashboard.summary.balance_after }}</div></div>
     </div>
+  </div>
+</div>
+
+<div id="panel-improvements" hx-swap-oob="innerHTML">
+  <div class="panel-surface improvements-panel">
+    <div class="panel-head payments-head">
+      <div class="payments-head-copy">
+        <h2>Home improvements</h2>
+        <!-- <span class="hint">Track spending separately from your mortgage.</span> -->
+      </div>
+      <div class="payments-toolbar">
+        {% call improv::add_improvement_disclosure(dashboard.profile_id, dashboard.extra_date_default, "#panel-improvements", "none") %}
+      </div>
+    </div>
+    <section class="improvements-section improvements-section-tab" aria-label="Home improvements">
+      <div class="improvements-head">
+        <h3>Spending</h3>
+        <div class="improvements-total">
+          <span class="k">Total spent</span>
+          <span class="v">{{ dashboard.improvements_total }}</span>
+        </div>
+      </div>
+      {% if dashboard.improvements.is_empty() %}
+      <p class="improvements-empty">No home improvements tracked yet.</p>
+      {% else %}
+      <ul class="improvements-list">
+        {% for item in dashboard.improvements %}
+        <li>
+          <div class="improvement-main">
+            <span class="improvement-amount">{{ item.amount }}</span>
+            <span class="improvement-date">{{ item.date }}</span>
+            {% if item.has_note %}
+            <span class="improvement-note">{{ item.note }}</span>
+            {% endif %}
+          </div>
+          {% call improv::improvement_actions(dashboard.profile_id, item) %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
   </div>
 </div>

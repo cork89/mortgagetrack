@@ -4,11 +4,11 @@
 //! - [`models`] — users, credentials, password hashing
 //! - [`extractor`] — [`AuthUser`] + HTMX-aware rejection
 //! - [`handlers`] — register / login / logout routes
-//! - [`account`] — change password / delete account
+//! - [`settings`] — change password / delete account
 //! - [`identicon`] — GitHub-style account avatars
 //! - [`middleware`] — session helpers and HTMX redirect utilities
 
-mod account;
+mod settings;
 mod extractor;
 mod handlers;
 mod identicon;
@@ -32,5 +32,5 @@ pub use seed::ensure_test_user;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .merge(handlers::routes())
-        .merge(account::routes())
+        .merge(settings::routes())
 }

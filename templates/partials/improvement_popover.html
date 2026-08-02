@@ -1,0 +1,35 @@
+<div id="improvementPopover" class="loan-popover note-popover" popover>
+  <div class="popover-card note-popover-card improvement-popover-card">
+    <div class="popover-head">
+      <div>
+        <h2 id="improvementPopoverTitle">Edit</h2>
+      </div>
+      <button type="button" class="popover-close" id="closeImprovementPopoverBtn" aria-label="Close">×</button>
+    </div>
+    <form id="improvementForm" method="post" action="/profiles/improvements/update">
+      <input type="hidden" name="version" id="improvementVersion" value="" />
+      <div class="improvement-edit-grid">
+        <label>
+          Date
+          <input id="improvementDate" name="date" type="date" required />
+        </label>
+        <label class="amount">
+          Amount
+          <input id="improvementAmount" name="amount" type="number" min="0.01" step="0.01" required />
+        </label>
+      </div>
+      <label class="note-field">
+        Note
+        <input id="improvementNote" name="note" type="text" maxlength="200" placeholder="Kitchen remodel" />
+      </label>
+      <label class="note-field">
+        Detail <span class="optional">(optional)</span>
+        <textarea id="improvementDetail" name="detail" rows="5" maxlength="4000" placeholder="Contractors, materials, receipts, or other notes…"></textarea>
+      </label>
+      <div class="actions note-actions">
+        <button type="submit" class="btn-primary" id="saveImprovementBtn">Save</button>
+        <button type="button" class="btn-ghost" id="cancelImprovementBtn">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>

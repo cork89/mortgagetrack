@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_profiles_belong_to_users(&pool).await?;
     models::ensure_profile_version(&pool).await?;
     models::ensure_extra_recast(&pool).await?;
+    models::ensure_improvement_detail(&pool).await?;
     auth::ensure_test_user(&pool).await?;
 
     let session_store = SqliteStore::new(pool.clone());
@@ -129,6 +130,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         include_str!("../migrations/003_profiles_user.sql"),
         include_str!("../migrations/004_payment_notes.sql"),
         include_str!("../migrations/005_profile_sharing.sql"),
+        include_str!("../migrations/006_home_improvements.sql"),
     ] {
         for stmt in sql.split(';') {
             let stmt = stmt.trim();

@@ -1,0 +1,42 @@
+{%- macro add_improvement_disclosure(profile_id, extra_date_default, hx_target, hx_swap) -%}
+<details class="extra-disclosure improvement-disclosure">
+  <summary class="btn-primary btn-compact">
+    <span class="btn-label-full">Add Improvement</span>
+    <span class="btn-label-short">Add</span>
+  </summary>
+  <form class="extra-form improvement-form"
+    hx-post="/profiles/{{ profile_id }}/improvements"
+    hx-target="{{ hx_target }}"
+    hx-swap="{{ hx_swap }}">
+    <label>
+      Date
+      <input name="date" type="date" value="{{ extra_date_default }}" required />
+    </label>
+    <label class="amount">
+      Amount
+      <input name="amount" type="number" min="0.01" step="0.01" placeholder="2500" required />
+    </label>
+    <label class="note">
+      Note <span class="optional">(optional)</span>
+      <input name="note" type="text" maxlength="200" placeholder="Kitchen remodel" />
+    </label>
+    <button type="submit" class="btn-primary">Add</button>
+  </form>
+</details>
+{%- endmacro -%}
+
+{%- macro improvement_actions(profile_id, item) -%}
+<div class="improvement-actions">
+  <button type="button" class="btn-text improvement-edit-btn"
+    data-id="{{ item.id }}"
+    data-date="{{ item.date_raw }}"
+    data-amount="{{ item.amount_raw }}"
+    data-note-json="{{ item.note_json }}"
+    data-detail-json="{{ item.detail_json }}">Edit</button>
+  <button type="button" class="btn-text danger"
+    hx-post="/profiles/{{ profile_id }}/improvements/{{ item.id }}"
+    hx-target="#panel-improvements"
+    hx-swap="innerHTML show:none"
+    hx-confirm="Remove this home improvement?">Remove</button>
+</div>
+{%- endmacro -%}

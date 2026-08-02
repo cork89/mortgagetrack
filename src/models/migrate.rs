@@ -92,3 +92,35 @@ async fn extras_have_recast(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
             .await?;
     Ok(cols.iter().any(|(_, name)| name == "recast"))
 }
+
+/// Add `home_improvements.detail` for longer notes shown only in the edit modal.
+pub async fn ensure_improvement_detail(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    if !table_exists(pool, "home_improvements").await? {
+        return Ok(());
+    }
+    if improvements_have_detail(pool).await? {
+        return Ok(());
+    }
+    tracing::info!("adding home_improvements.detail column");
+    sqlx::query("ALTER TABLE home_improvements ADD COLUMN detail TEXT NOT NULL DEFAULT ''")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+async fn table_exists(pool: &SqlitePool, name: &str) -> Result<bool, sqlx::Error> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .bind(name)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.is_some())
+}
+
+async fn improvements_have_detail(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
+    let cols: Vec<(i32, String)> =
+        sqlx::query_as("SELECT cid, name FROM pragma_table_info('home_improvements')")
+            .fetch_all(pool)
+            .await?;
+    Ok(cols.iter().any(|(_, name)| name == "detail"))
+}

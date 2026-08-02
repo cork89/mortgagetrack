@@ -5,8 +5,8 @@ use axum::{
 };
 
 use crate::models::{
-    ChartPair, DashboardView, EmptyState, ExtraPayment, MonthCell, PaymentChip, PaymentRowView,
-    PayoffAccelerator, ProfileOption, YearStat, YearSummary,
+    ChartPair, DashboardView, EmptyState, ExtraPayment, ImprovementRowView, MonthCell, PaymentChip,
+    PaymentRowView, PayoffAccelerator, ProfileOption, YearStat, YearSummary,
 };
 
 /// Wrap any Askama template so Axum handlers can return it as `text/html`.
@@ -174,6 +174,15 @@ pub struct PaymentsTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "partials/improvements.html")]
+pub struct ImprovementsTemplate {
+    pub profile_id: String,
+    pub extra_date_default: String,
+    pub improvements: Vec<ImprovementRowView>,
+    pub improvements_total: String,
+}
+
+#[derive(Template)]
 #[template(path = "partials/chart.html")]
 pub struct ChartTemplate {
     #[allow(dead_code)]
@@ -244,8 +253,8 @@ pub struct AuthErrorPartial {
 }
 
 #[derive(Template)]
-#[template(path = "account.html")]
-pub struct AccountTemplate {
+#[template(path = "settings.html")]
+pub struct SettingsTemplate {
     pub csrf_token: String,
     pub user_id: String,
     pub email: String,

@@ -1,4 +1,4 @@
-//! Account settings: change password and delete account.
+//! Settings: change password and delete account.
 
 use axum::{
     extract::{Path, Query, State},
@@ -19,18 +19,18 @@ use crate::app_state::AppState;
 use crate::auth::{hx_redirect, is_htmx, purge_session, AuthUser, HOME_PATH};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
-use crate::templates::{AccountTemplate, AuthErrorPartial, HtmlTemplate};
+use crate::templates::{AuthErrorPartial, HtmlTemplate, SettingsTemplate};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/account", get(account_page))
-        .route("/account/password", post(change_password))
-        .route("/account/delete", post(delete_account))
+        .route("/settings", get(settings_page))
+        .route("/settings/password", post(change_password))
+        .route("/settings/delete", post(delete_account))
         .route("/avatars/{id}", get(avatar))
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AccountQuery {
+pub struct SettingsQuery {
     pub password: Option<String>,
 }
 
@@ -46,14 +46,14 @@ pub struct DeleteAccountForm {
     pub password: String,
 }
 
-async fn account_page(
+async fn settings_page(
     session: Session,
     user: AuthUser,
-    Query(q): Query<AccountQuery>,
+    Query(q): Query<SettingsQuery>,
 ) -> AppResult<Response> {
     let csrf_token = csrf::ensure_token(&session).await?;
     let password_updated = q.password.as_deref() == Some("updated");
-    Ok(HtmlTemplate(AccountTemplate {
+    Ok(HtmlTemplate(SettingsTemplate {
         csrf_token,
         user_id: user.id.to_string(),
         email: user.email,
@@ -91,7 +91,7 @@ async fn change_password(
     Form(form): Form<ChangePasswordForm>,
 ) -> Response {
     match change_password_inner(&state, &session, &user, &form).await {
-        Ok(()) => hx_redirect(&headers, "/account?password=updated"),
+        Ok(()) => hx_redirect(&headers, "/settings?password=updated"),
         Err(err) => {
             let message = err.to_string();
             if is_htmx(&headers) {
@@ -104,7 +104,7 @@ async fn change_password(
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
                 (
                     StatusCode::BAD_REQUEST,
-                    HtmlTemplate(AccountTemplate {
+                    HtmlTemplate(SettingsTemplate {
                         csrf_token,
                         user_id: user.id.to_string(),
                         email: user.email,
@@ -174,7 +174,7 @@ async fn delete_account(
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
                 (
                     StatusCode::BAD_REQUEST,
-                    HtmlTemplate(AccountTemplate {
+                    HtmlTemplate(SettingsTemplate {
                         csrf_token,
                         user_id: user.id.to_string(),
                         email: user.email,

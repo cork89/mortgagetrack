@@ -14,15 +14,16 @@ use crate::auth::{current_user, hx_redirect, is_htmx, AuthUser};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    add_extra, build_dashboard, clear_paid, create_profile, delete_extra, delete_profile,
-    empty_state, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
-    list_profiles, load_profile, mark_due_paid, rename_profile, set_active_profile, toggle_paid,
+    add_extra, add_improvement, build_dashboard, clear_paid, create_profile, delete_extra,
+    delete_improvement, delete_profile, empty_state, get_active_profile_id, list_extras,
+    list_improvements, list_paid_keys, list_payment_notes, list_profiles, load_profile,
+    mark_due_paid, rename_profile, set_active_profile, toggle_paid, update_improvement,
     update_profile_loan, upsert_payment_note, PaymentFilter, ProfileOption, TabId,
 };
 use crate::templates::{
     conflict_dashboard, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate,
-    ErrorPartial, HtmlTemplate, IndexTemplate, ItemListTemplate, LandingTemplate, PaymentsTemplate,
-    SummaryTemplate,
+    ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate, ItemListTemplate,
+    LandingTemplate, PaymentsTemplate, SummaryTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -32,6 +33,7 @@ pub fn routes() -> Router<AppState> {
         .route("/partials/summary", get(summary_partial))
         .route("/partials/calendar", get(calendar_partial))
         .route("/partials/payments", get(payments_partial))
+        .route("/partials/improvements", get(improvements_partial))
         .route("/partials/chart", get(chart_partial))
         .route("/partials/items", get(item_list_partial))
         .route("/profiles", post(create_profile_handler))
@@ -47,6 +49,15 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/profiles/{id}/extras/{extra_id}",
             delete(delete_extra_handler).post(delete_extra_handler),
+        )
+        .route("/profiles/{id}/improvements", post(add_improvement_handler))
+        .route(
+            "/profiles/{id}/improvements/{improvement_id}",
+            delete(delete_improvement_handler).post(delete_improvement_handler),
+        )
+        .route(
+            "/profiles/{id}/improvements/{improvement_id}/update",
+            post(update_improvement_handler),
         )
 }
 
@@ -129,6 +140,26 @@ pub struct ExtraForm {
     pub filter: Option<String>,
     #[serde(default)]
     pub recast: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImprovementForm {
+    pub date: String,
+    pub amount: f64,
+    pub version: i64,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateImprovementForm {
+    pub date: String,
+    pub amount: f64,
+    pub version: i64,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub detail: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +247,18 @@ async fn payments_partial(
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
     Ok(HtmlTemplate(payments_from_dashboard(d)))
+}
+
+async fn improvements_partial(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Query(q): Query<IndexQuery>,
+) -> AppResult<impl IntoResponse> {
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(HtmlTemplate(improvements_from_dashboard(d)))
 }
 
 async fn chart_partial(
@@ -635,6 +678,126 @@ async fn delete_extra_handler(
     }
 }
 
+async fn add_improvement_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Form(form): Form<ImprovementForm>,
+) -> AppResult<Response> {
+    let date = parse_date(&form.date)?;
+    let q = IndexQuery {
+        tab: Some("improvements".into()),
+        year: None,
+        filter: None,
+        grain: None,
+    };
+    let version = parse_version(form.version)?;
+    match add_improvement(
+        &state.pool,
+        user.id,
+        &id,
+        date,
+        form.amount,
+        &form.note,
+        version,
+    )
+    .await
+    {
+        Ok(_) => {
+            let page = load_page(&state, &q, &user).await?;
+            let d = page
+                .dashboard
+                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+            let version = d.profile_version;
+            Ok(panel_update(
+                improvements_from_dashboard(d),
+                "improvements",
+                false,
+                version,
+            ))
+        }
+        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
+        Err(err) => Err(err),
+    }
+}
+
+async fn delete_improvement_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path((id, improvement_id)): Path<(String, String)>,
+    Form(form): Form<VersionOnlyForm>,
+) -> AppResult<Response> {
+    let q = IndexQuery {
+        tab: Some("improvements".into()),
+        year: None,
+        filter: None,
+        grain: None,
+    };
+    let version = parse_version(form.version)?;
+    match delete_improvement(&state.pool, user.id, &id, &improvement_id, version).await {
+        Ok(_) => {
+            let page = load_page(&state, &q, &user).await?;
+            let d = page
+                .dashboard
+                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+            let version = d.profile_version;
+            Ok(panel_update(
+                improvements_from_dashboard(d),
+                "improvements",
+                false,
+                version,
+            ))
+        }
+        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
+        Err(err) => Err(err),
+    }
+}
+
+async fn update_improvement_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path((id, improvement_id)): Path<(String, String)>,
+    Form(form): Form<UpdateImprovementForm>,
+) -> AppResult<Response> {
+    let date = parse_date(&form.date)?;
+    let q = IndexQuery {
+        tab: Some("improvements".into()),
+        year: None,
+        filter: None,
+        grain: None,
+    };
+    let version = parse_version(form.version)?;
+    match update_improvement(
+        &state.pool,
+        user.id,
+        &id,
+        &improvement_id,
+        date,
+        form.amount,
+        &form.note,
+        &form.detail,
+        version,
+    )
+    .await
+    {
+        Ok(_) => {
+            let page = load_page(&state, &q, &user).await?;
+            let d = page
+                .dashboard
+                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+            let version = d.profile_version;
+            Ok(panel_update(
+                improvements_from_dashboard(d),
+                "improvements",
+                false,
+                version,
+            ))
+        }
+        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
+        Err(err) => Err(err),
+    }
+}
+
 async fn load_page(
     state: &AppState,
     q: &IndexQuery,
@@ -667,13 +830,23 @@ async fn load_page(
         if profile.has_loan() {
             let paid = list_paid_keys(&state.pool, &profile.id).await?;
             let extras = list_extras(&state.pool, &profile.id).await?;
+            let improvements = list_improvements(&state.pool, &profile.id).await?;
             let notes = list_payment_notes(&state.pool, &profile.id)
                 .await?
                 .into_iter()
                 .map(|n| (n.pay_key, n.note))
                 .collect();
             build_dashboard(
-                profile, &paid, &extras, &notes, view_year, filter, grain, tab, today,
+                profile,
+                &paid,
+                &extras,
+                &notes,
+                &improvements,
+                view_year,
+                filter,
+                grain,
+                tab,
+                today,
             )
         } else {
             None
@@ -788,5 +961,14 @@ fn payments_from_dashboard(d: crate::models::DashboardView) -> PaymentsTemplate 
         extra_date_default: d.extra_date_default,
         view_year: d.view_year,
         grain: d.chart.grain,
+    }
+}
+
+fn improvements_from_dashboard(d: crate::models::DashboardView) -> ImprovementsTemplate {
+    ImprovementsTemplate {
+        profile_id: d.profile_id,
+        extra_date_default: d.extra_date_default,
+        improvements: d.improvements,
+        improvements_total: d.improvements_total,
     }
 }

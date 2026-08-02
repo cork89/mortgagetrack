@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Account — Homeabell{% endblock %}
+{% block title %}Settings — Homeabell{% endblock %}
 
 {% block body %}
 <section class="auth-panel account-panel" aria-labelledby="auth-heading">
@@ -8,7 +8,7 @@
     <a class="btn-ghost" href="/">
       <span aria-hidden="true">←</span> Home
     </a>
-    <h1 id="auth-heading">Account</h1>
+    <h1 id="auth-heading">Settings</h1>
   </header>
 
   <div class="identity">
@@ -43,8 +43,8 @@
     </div>
     <form class="auth-form"
       method="post"
-      action="/account/password"
-      hx-post="/account/password"
+      action="/settings/password"
+      hx-post="/settings/password"
       hx-target="#password-status"
       hx-swap="innerHTML"
     >
@@ -85,8 +85,8 @@
     </div>
     <form class="auth-form"
       method="post"
-      action="/account/delete"
-      hx-post="/account/delete"
+      action="/settings/delete"
+      hx-post="/settings/delete"
       hx-target="#delete-status"
       hx-swap="innerHTML"
       hx-confirm="Delete your account permanently? Your owned mortgage profiles and data will be removed. This cannot be undone."

@@ -752,6 +752,18 @@ tbody tr.extra-row:hover {
   flex: 0 1 8rem;
 }
 
+.extra-form label.note {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.extra-form label.note .optional {
+  font-weight: 400;
+  color: var(--ink-soft);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .extra-form label.recast-check {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1119,6 +1131,25 @@ tbody tr.year-summary .year-sub {
     grid-row: 2;
   }
 
+  .improvements-panel .payments-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .improvements-panel .payments-toolbar > .improvement-disclosure {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+  }
+
+  .improvements-panel .improvement-disclosure[open] > summary {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .improvements-panel .extra-disclosure .extra-form {
+    grid-row: 2;
+  }
+
   .payments-panel .payments-desktop {
     display: none;
   }
@@ -1288,10 +1319,9 @@ tbody tr.year-summary .year-sub {
   color: var(--ink-soft);
 }
 
-.note-field textarea {
+.note-field textarea,
+.note-field input[type="text"] {
   width: 100%;
-  min-height: 7.5rem;
-  resize: vertical;
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1303,7 +1333,13 @@ tbody tr.year-summary .year-sub {
   line-height: 1.45;
 }
 
-.note-field textarea:focus {
+.note-field textarea {
+  min-height: 7.5rem;
+  resize: vertical;
+}
+
+.note-field textarea:focus,
+.note-field input[type="text"]:focus {
   outline: 2px solid rgba(47, 111, 106, 0.35);
   outline-offset: 1px;
   border-color: rgba(47, 111, 106, 0.45);
@@ -1476,6 +1512,142 @@ tbody tr.year-summary .year-sub {
   padding: 2.5rem 1.5rem;
   text-align: center;
   color: var(--ink-soft);
+}
+
+.improvements-section {
+  border-top: 1px solid var(--line);
+  padding: 1rem 1.1rem 1.15rem;
+  background: rgba(247, 250, 249, 0.55);
+}
+
+.improvements-section-tab {
+  border-top: none;
+  background: transparent;
+  padding: 0.25rem 1.1rem 1.25rem;
+}
+
+.improvements-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.improvements-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.improvements-total {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.improvements-total .k {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.improvements-total .v {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.improvements-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.improvements-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.improvements-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+
+.improvements-list li:last-child {
+  border-bottom: none;
+}
+
+.improvement-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.7rem;
+  min-width: 0;
+}
+
+.improvement-amount {
+  font-weight: 700;
+}
+
+.improvement-date {
+  color: var(--ink-soft);
+}
+
+.improvement-note {
+  color: var(--ink);
+  min-width: 0;
+}
+
+.improvement-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+
+.improvement-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.improvement-edit-grid label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.improvement-edit-grid input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.95rem;
+}
+
+.improvement-popover-card .note-field .optional {
+  font-weight: 400;
+  color: var(--ink-soft);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+@media (max-width: 520px) {
+  .improvement-edit-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .summary-bar {

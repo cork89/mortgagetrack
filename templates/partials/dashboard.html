@@ -1,4 +1,5 @@
 {% import "partials/payment_macros.html" as pays %}
+{% import "partials/improvement_macros.html" as improv %}
 {% import "partials/payoff_accelerator.html" as accel %}
 {% match dashboard %}
 {% when Some with (d) %}
@@ -31,6 +32,10 @@
       id="tab-payments" aria-controls="panel-payments"
       aria-selected="{% if d.active_tab == "payments" %}true{% else %}false{% endif %}"
       tabindex="{% if d.active_tab == "payments" %}0{% else %}-1{% endif %}">Payments</button>
+    <button type="button" class="tab{% if d.active_tab == "improvements" %} active{% endif %}" data-tab="improvements" role="tab"
+      id="tab-improvements" aria-controls="panel-improvements"
+      aria-selected="{% if d.active_tab == "improvements" %}true{% else %}false{% endif %}"
+      tabindex="{% if d.active_tab == "improvements" %}0{% else %}-1{% endif %}">Improvements</button>
     <button type="button" class="tab{% if d.active_tab == "chart" %} active{% endif %}" data-tab="chart" role="tab"
       id="tab-chart" aria-controls="panel-chart"
       aria-selected="{% if d.active_tab == "chart" %}true{% else %}false{% endif %}"
@@ -262,6 +267,47 @@
         <div><div class="k">Total interest (full term)</div><div class="v">{{ d.summary.total_interest }}</div></div>
         <div><div class="k">Balance after tracked pays</div><div class="v">{{ d.summary.balance_after }}</div></div>
       </div>
+    </div>
+  </div>
+
+  <div class="panel{% if d.active_tab == "improvements" %} active{% endif %}" id="panel-improvements" role="tabpanel" aria-labelledby="tab-improvements">
+    <div class="panel-surface improvements-panel">
+      <div class="panel-head payments-head">
+        <div class="payments-head-copy">
+          <h2>Home improvements</h2>
+          <!-- <span class="hint">Track spending separately from your mortgage.</span> -->
+        </div>
+        <div class="payments-toolbar">
+          {% call improv::add_improvement_disclosure(d.profile_id, d.extra_date_default, "#panel-improvements", "innerHTML show:none") %}
+        </div>
+      </div>
+      <section class="improvements-section improvements-section-tab" aria-label="Home improvements">
+        <div class="improvements-head">
+          <h3>Spending</h3>
+          <div class="improvements-total">
+            <span class="k">Total spent</span>
+            <span class="v">{{ d.improvements_total }}</span>
+          </div>
+        </div>
+        {% if d.improvements.is_empty() %}
+        <p class="improvements-empty">No home improvements tracked yet.</p>
+        {% else %}
+        <ul class="improvements-list">
+          {% for item in d.improvements %}
+          <li>
+            <div class="improvement-main">
+              <span class="improvement-amount">{{ item.amount }}</span>
+              <span class="improvement-date">{{ item.date }}</span>
+              {% if item.has_note %}
+              <span class="improvement-note">{{ item.note }}</span>
+              {% endif %}
+            </div>
+            {% call improv::improvement_actions(d.profile_id, item) %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </section>
     </div>
   </div>
 
