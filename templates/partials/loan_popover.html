@@ -32,11 +32,6 @@
             <input id="startDate" name="start_date" type="date" value="{{ default_start }}" data-default="{{ default_start }}" />
           </label>
         </div>
-        <div class="extras-editor hidden" id="extrasEditor">
-          <h3>Additional payments</h3>
-          <p class="extras-empty" id="extrasEmpty">None yet — add them from the Payments tab.</p>
-          <ul class="extras-list" id="extrasList"></ul>
-        </div>
         <div class="share-editor hidden" id="shareEditor">
           <div id="sharePanel"></div>
         </div>
@@ -46,6 +41,9 @@
           <button type="submit" class="btn-primary" id="buildBtn">Create profile</button>
           <span class="reset-wrap hidden" id="resetWrap">
             <button type="button" class="btn-ghost" id="resetPaidBtn">Clear tracked payments</button>
+          </span>
+          <span class="delete-wrap hidden" id="deleteWrap">
+            <button type="button" class="btn-ghost menu-danger" id="deleteProfileBtn">Delete profile</button>
           </span>
         </div>
         <p class="error" id="error" role="alert">{{ error }}</p>

@@ -201,7 +201,6 @@ pub struct ChartBucket {
 
 #[derive(Debug, Clone)]
 pub struct ChartView {
-    pub svg: String,
     pub hint: String,
     pub buckets_json: String,
 }
@@ -950,7 +949,6 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
             .collect()
     };
 
-    let svg = render_chart_svg(&buckets, grain);
     let total_principal: f64 = buckets.iter().map(|b| b.principal).sum();
     let total_interest: f64 = buckets.iter().map(|b| b.interest).sum();
     let hint = if grain == "yearly" {
@@ -975,6 +973,7 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
             .map(|b| {
                 serde_json::json!({
                     "label": b.label,
+                    "year": b.year,
                     "principal": b.principal,
                     "interest": b.interest,
                     "payment": b.payment,
@@ -986,132 +985,7 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
     .unwrap_or_else(|_| "[]".into());
 
     ChartView {
-        svg,
         hint,
         buckets_json,
     }
-}
-
-fn render_chart_svg(buckets: &[ChartBucket], grain: &str) -> String {
-    if buckets.is_empty() {
-        return String::new();
-    }
-    let width = 800.0;
-    let height = 300.0;
-    let pad_top = 16.0;
-    let pad_right = 12.0;
-    let pad_bottom = 36.0;
-    let pad_left = 56.0;
-    let plot_w = width - pad_left - pad_right;
-    let plot_h = height - pad_top - pad_bottom;
-    let max_pay = buckets.iter().map(|b| b.payment).fold(1.0_f64, f64::max);
-    let bar_gap = if grain == "yearly" {
-        if buckets.len() > 20 {
-            0.12
-        } else {
-            0.22
-        }
-    } else if buckets.len() > 180 {
-        0.0
-    } else if buckets.len() > 90 {
-        0.15
-    } else {
-        0.25
-    };
-    let slot = plot_w / buckets.len() as f64;
-    let bar_w = (slot * (1.0 - bar_gap)).max(0.5);
-
-    let mut out = String::new();
-    let y_ticks = 4;
-    for i in 0..=y_ticks {
-        let value = (max_pay * i as f64) / y_ticks as f64;
-        let y = pad_top + plot_h - (plot_h * i as f64) / y_ticks as f64;
-        out.push_str(&format!(
-            r#"<line class="grid-line" x1="{pad_left}" y1="{y}" x2="{}" y2="{y}" />"#,
-            width - pad_right
-        ));
-        out.push_str(&format!(
-            r#"<text class="axis-label" x="{}" y="{}" text-anchor="end">{}</text>"#,
-            pad_left - 8.0,
-            y + 4.0,
-            money(value)
-        ));
-    }
-
-    // Year labels are ~28px wide at 11px; keep ~56px gaps so they don't collide.
-    let min_label_gap = 56.0;
-    let max_labels = ((plot_w / min_label_gap).floor() as usize).max(2);
-
-    let year_marks: Vec<(usize, i32)> = if grain == "yearly" {
-        buckets
-            .iter()
-            .enumerate()
-            .map(|(i, b)| (i, b.year))
-            .collect()
-    } else {
-        let mut marks = Vec::new();
-        let mut last_year = None;
-        for (i, bucket) in buckets.iter().enumerate() {
-            if Some(bucket.year) != last_year {
-                marks.push((i, bucket.year));
-                last_year = Some(bucket.year);
-            }
-        }
-        marks
-    };
-
-    let step = year_marks.len().div_ceil(max_labels).max(1);
-    let mut labeled: Vec<(usize, i32)> = year_marks
-        .iter()
-        .enumerate()
-        .filter(|(k, _)| k % step == 0)
-        .map(|(_, mark)| *mark)
-        .collect();
-    if let Some(&last) = year_marks.last() {
-        let far_enough = labeled.last().is_none_or(|(i, _)| {
-            let prev_x = pad_left + *i as f64 * slot + slot / 2.0;
-            let last_x = pad_left + last.0 as f64 * slot + slot / 2.0;
-            last_x - prev_x >= min_label_gap
-        });
-        if far_enough && labeled.last().map(|m| m.1) != Some(last.1) {
-            labeled.push(last);
-        }
-    }
-    for (i, year) in labeled {
-        let x = pad_left + i as f64 * slot + slot / 2.0;
-        out.push_str(&format!(
-            r#"<text class="axis-label" x="{x}" y="{}" text-anchor="middle">{year}</text>"#,
-            height - 10.0,
-        ));
-    }
-
-    for (i, bucket) in buckets.iter().enumerate() {
-        let x = pad_left + i as f64 * slot + (slot - bar_w) / 2.0;
-        let principal_h = (bucket.principal / max_pay) * plot_h;
-        let interest_h = (bucket.interest / max_pay) * plot_h;
-        let principal_y = pad_top + plot_h - principal_h;
-        let interest_y = principal_y - interest_h;
-        out.push_str(&format!(
-            concat!(
-                r##"<g class="bar-group" data-idx="{i}">"##,
-                r##"<rect class="bar-interest" x="{x}" y="{interest_y}" width="{bar_w}" height="{ih}" fill="#c4a574" />"##,
-                r##"<rect class="bar-principal" x="{x}" y="{principal_y}" width="{bar_w}" height="{ph}" fill="#2f6f6a" />"##,
-                r##"<rect class="bar-hit" x="{hx}" y="{pad_top}" width="{slot}" height="{plot_h}" data-idx="{i}" />"##,
-                r##"</g>"##,
-            ),
-            i = i,
-            x = x,
-            interest_y = interest_y,
-            bar_w = bar_w,
-            ih = interest_h.max(0.0),
-            principal_y = principal_y,
-            ph = principal_h.max(0.0),
-            hx = pad_left + i as f64 * slot,
-            pad_top = pad_top,
-            slot = slot,
-            plot_h = plot_h,
-        ));
-    }
-
-    out
 }

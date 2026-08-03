@@ -12,23 +12,11 @@
         aria-pressed="{% if chart.grain == "yearly" %}true{% else %}false{% endif %}">Yearly</button>
     </div>
   </div>
-  <div class="chart-wrap" id="chartWrap">
-    <div class="chart-legend">
-      <span class="l-principal">Principal</span>
-      <span class="l-interest">Interest</span>
-    </div>
-    <div class="chart-tooltip" id="chartTooltip" role="tooltip"></div>
-    <svg class="chart-svg{% if chart.grain != "monthly" %} hidden{% endif %}" data-grain-svg="monthly"
-      viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
-      aria-label="Principal versus interest by month"
-      data-buckets="{{ chart.monthly.buckets_json }}">
-      {{ chart.monthly.svg|safe }}
-    </svg>
-    <svg class="chart-svg{% if chart.grain != "yearly" %} hidden{% endif %}" data-grain-svg="yearly"
-      viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"
-      aria-label="Principal versus interest by year"
-      data-buckets="{{ chart.yearly.buckets_json }}">
-      {{ chart.yearly.svg|safe }}
-    </svg>
+  <div class="chart-wrap" id="chartWrap"
+    data-monthly-buckets="{{ chart.monthly.buckets_json }}"
+    data-yearly-buckets="{{ chart.yearly.buckets_json }}">
+    <div class="breakdown-chart" id="breakdownChart"
+      role="img"
+      aria-label="Principal versus interest breakdown"></div>
   </div>
 </div>

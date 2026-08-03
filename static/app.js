@@ -1,6 +1,7 @@
-// Client helpers: popover, tabs, chart tooltip, profile menu, panel cache
+// Client helpers: popover, tabs, breakdown chart, profile actions, panel cache
 (() => {
   const TAB_IDS = ["summary", "calendar", "payments", "improvements", "chart"];
+  let breakdownChart = null;
 
   function csrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.content || "";
@@ -121,7 +122,7 @@
     if (!url || typeof htmx === "undefined") return;
     await htmx.ajax("GET", url, { target: panel, swap: "innerHTML" });
     panel.dataset.stale = "false";
-    if (id === "chart") wireChartTooltip();
+    if (id === "chart") renderBreakdownChart();
   }
 
   let scrolledToCurrentPayment = false;
@@ -169,6 +170,9 @@
     if (id === "payments") {
       Promise.resolve(refresh).finally(() => maybeScrollToCurrentMonthPayment());
     }
+    if (id === "chart") {
+      Promise.resolve(refresh).finally(() => renderBreakdownChart());
+    }
   }
 
   function closeMenu(menuId, btnId) {
@@ -178,19 +182,14 @@
     if (btn) btn.setAttribute("aria-expanded", "false");
   }
 
-  function closeProfileMenu() {
-    closeMenu("profileMenu", "profileMenuBtn");
-  }
-
   function closeAccountMenu() {
     closeMenu("accountMenu", "accountMenuBtn");
   }
 
-  function toggleMenu(menuId, btn, { closeOthers } = {}) {
+  function toggleMenu(menuId, btn) {
     const menu = document.getElementById(menuId);
     if (!menu || !btn) return;
     const open = !menu.classList.contains("open");
-    if (open && closeOthers) closeOthers();
     menu.classList.toggle("open", open);
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
@@ -327,7 +326,6 @@
 
   function loanFormAction(mode, profileId) {
     if (mode === "edit" && profileId) return `/profiles/${profileId}`;
-    if (mode === "rename" && profileId) return `/profiles/${profileId}/rename`;
     return "/profiles";
   }
 
@@ -366,16 +364,10 @@
     return bar?.dataset.isOwner !== "false";
   }
 
-  function syncOwnerMenu() {
+  function syncOwnerState() {
     const owner = isActiveOwner();
     const bar = document.getElementById("profileBar");
     if (bar) bar.dataset.isOwner = owner ? "true" : "false";
-    ["renameProfileBtn", "deleteProfileBtn"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.hidden = !owner;
-      el.disabled = !owner || !document.getElementById("profileSelect")?.value;
-    });
   }
 
   function hideShareEditor() {
@@ -405,14 +397,13 @@
   }
 
   function openCreate() {
-    closeProfileMenu();
     setLoanFormMode("create");
     document.getElementById("popoverTitle").textContent = "New profile";
     document.getElementById("buildBtn").textContent = "Create profile";
     document.getElementById("nameFieldWrap").classList.remove("hidden");
     document.getElementById("loanFields").classList.remove("hidden");
     document.getElementById("resetWrap").classList.add("hidden");
-    document.getElementById("extrasEditor").classList.add("hidden");
+    document.getElementById("deleteWrap")?.classList.add("hidden");
     hideShareEditor();
     document.getElementById("profileName").value = nextProfileName();
     document.getElementById("principal").value = "400000";
@@ -428,7 +419,6 @@
   }
 
   function openEdit() {
-    closeProfileMenu();
     const dash = dashboard();
     if (!dash) {
       openCreate();
@@ -436,12 +426,12 @@
     }
     const id = dash.dataset.profileId;
     setLoanFormMode("edit", id);
-    document.getElementById("popoverTitle").textContent = `Edit ${dash.dataset.name || "profile"}`;
+    document.getElementById("popoverTitle").textContent = "Edit profile";
     document.getElementById("buildBtn").textContent = "Save changes";
     document.getElementById("nameFieldWrap").classList.remove("hidden");
     document.getElementById("loanFields").classList.remove("hidden");
     document.getElementById("resetWrap").classList.remove("hidden");
-    document.getElementById("extrasEditor").classList.remove("hidden");
+    document.getElementById("deleteWrap")?.classList.toggle("hidden", !isActiveOwner());
     document.getElementById("profileName").value = dash.dataset.name || "";
     document.getElementById("principal").value = dash.dataset.principal || "400000";
     document.getElementById("rate").value = dash.dataset.rate || "6.5";
@@ -463,29 +453,174 @@
     popover()?.showPopover();
   }
 
-  function openRename() {
-    closeProfileMenu();
-    if (!isActiveOwner()) return;
-    const dash = dashboard();
-    const select = document.getElementById("profileSelect");
-    const id = dash?.dataset.profileId || select?.value;
-    if (!id) return;
-    setLoanFormMode("rename", id);
-    document.getElementById("popoverTitle").textContent = "Rename profile";
-    document.getElementById("buildBtn").textContent = "Save name";
-    document.getElementById("nameFieldWrap").classList.remove("hidden");
-    document.getElementById("loanFields").classList.add("hidden");
-    document.getElementById("resetWrap").classList.add("hidden");
-    document.getElementById("extrasEditor").classList.add("hidden");
-    hideShareEditor();
-    const label = select?.selectedOptions?.[0]?.textContent || "";
-    document.getElementById("profileName").value =
-      dash?.dataset.name || label.replace(/\s*\(shared\)\s*$/, "") || "";
-    const versionInput = document.getElementById("profileVersion");
-    if (versionInput) versionInput.value = dash?.dataset.version || "";
-    document.getElementById("error").textContent = "";
-    popover()?.showPopover();
-    document.getElementById("profileName").focus();
+  function chartGrain() {
+    return dashboard()?.dataset.grain === "yearly" ? "yearly" : "monthly";
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function parseBuckets(raw) {
+    try {
+      const data = JSON.parse(raw || "[]");
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function destroyBreakdownChart() {
+    if (!breakdownChart) return;
+    try {
+      breakdownChart.destroy();
+    } catch {
+      /* already gone with the DOM */
+    }
+    breakdownChart = null;
+  }
+
+  function breakdownTooltipHtml(params) {
+    const datum = params?.datum ?? params?.[0]?.datum;
+    if (!datum) return "";
+    const countRow =
+      datum.count != null
+        ? `<div class="row"><span>Payments</span><span>${datum.count}</span></div>`
+        : "";
+    return `
+      <div class="chart-tooltip-card">
+        <strong>${datum.label}</strong>
+        <div class="row"><span>Principal</span><span>${money(datum.principal)}</span></div>
+        <div class="row"><span>Interest</span><span>${money(datum.interest)}</span></div>
+        <div class="row"><span>Payment</span><span>${money(datum.payment)}</span></div>
+        ${countRow}
+      </div>`;
+  }
+
+  // Category keys for x labels every 2 years (first bucket of that year).
+  function yearAxisTickValues(data) {
+    const firstLabelByYear = new Map();
+    for (const row of data) {
+      if (row?.year == null || firstLabelByYear.has(row.year)) continue;
+      firstLabelByYear.set(row.year, row.label);
+    }
+    const years = [...firstLabelByYear.keys()].sort((a, b) => a - b);
+    const ticks = [];
+    for (let i = 0; i < years.length; i += 2) {
+      ticks.push(firstLabelByYear.get(years[i]));
+    }
+    return ticks;
+  }
+
+  function breakdownChartOptions(container, data) {
+    const sea = cssVar("--sea") || "#2f6f6a";
+    const sand = cssVar("--sand") || "#d4c4a8";
+    const inkSoft = cssVar("--ink-soft") || "#3d4f55";
+    const fontBody = cssVar("--font-body") || "Outfit, sans-serif";
+    const yearByLabel = new Map(data.map((row) => [row.label, row.year]));
+    const yearTicks = yearAxisTickValues(data);
+    return {
+      container,
+      data,
+      padding: { top: 8, right: 12, bottom: 8, left: 8 },
+      series: [
+        {
+          type: "bar",
+          xKey: "label",
+          yKey: "principal",
+          yName: "Principal",
+          stacked: true,
+          fill: sea,
+          strokeWidth: 0,
+          cornerRadius: 0,
+          tooltip: { renderer: breakdownTooltipHtml },
+        },
+        {
+          type: "bar",
+          xKey: "label",
+          yKey: "interest",
+          yName: "Interest",
+          stacked: true,
+          fill: sand,
+          strokeWidth: 0,
+          cornerRadius: 0,
+          tooltip: { renderer: breakdownTooltipHtml },
+        },
+      ],
+      axes: {
+        x: {
+          type: "category",
+          paddingInner: data.length > 90 ? 0.05 : 0.2,
+          paddingOuter: 0.05,
+          interval: yearTicks.length ? { values: yearTicks } : undefined,
+          label: {
+            color: inkSoft,
+            fontFamily: fontBody,
+            fontSize: 11,
+            avoidCollisions: false,
+            formatter: ({ value }) => {
+              const year = yearByLabel.get(value);
+              if (year != null) return String(year);
+              const match = String(value).match(/(\d{4})\s*$/);
+              return match ? match[1] : String(value);
+            },
+          },
+          line: { enabled: false },
+          tick: { enabled: false },
+        },
+        y: {
+          type: "number",
+          label: {
+            color: inkSoft,
+            fontFamily: fontBody,
+            fontSize: 11,
+            formatter: ({ value }) => money(value),
+          },
+          gridLine: {
+            style: [{ stroke: cssVar("--line") || "rgba(28, 42, 46, 0.12)" }],
+          },
+          line: { enabled: false },
+          tick: { enabled: false },
+        },
+      },
+      legend: {
+        position: "top",
+        spacing: 12,
+        item: {
+          marker: { shape: "square", size: 10 },
+          label: {
+            color: inkSoft,
+            fontFamily: fontBody,
+            fontSize: 12,
+          },
+        },
+      },
+      // Avoid shared mode: each series renderer already returns the full bucket card,
+      // and shared would concatenate both copies.
+      tooltip: {
+        mode: "single",
+      },
+    };
+  }
+
+  function renderBreakdownChart() {
+    const panel = panelEl("chart");
+    const wrap = document.getElementById("chartWrap");
+    const container = document.getElementById("breakdownChart");
+    if (!panel?.classList.contains("active") || !wrap || !container) return;
+    if (typeof agCharts === "undefined" || !agCharts.AgCharts) return;
+
+    const grain = chartGrain();
+    const data = parseBuckets(
+      grain === "yearly" ? wrap.dataset.yearlyBuckets : wrap.dataset.monthlyBuckets,
+    );
+    const options = breakdownChartOptions(container, data);
+
+    if (breakdownChart) {
+      breakdownChart.update(options);
+      return;
+    }
+    breakdownChart = agCharts.AgCharts.create(options);
   }
 
   function setChartGrain(grain) {
@@ -500,62 +635,9 @@
     panel.querySelectorAll("[data-grain-hint]").forEach((el) => {
       el.classList.toggle("hidden", el.dataset.grainHint !== next);
     });
-    panel.querySelectorAll("[data-grain-svg]").forEach((el) => {
-      el.classList.toggle("hidden", el.dataset.grainSvg !== next);
-    });
     const dash = dashboard();
     if (dash) dash.dataset.grain = next;
-    const tip = document.getElementById("chartTooltip");
-    tip?.classList.remove("visible");
-    wireChartTooltip();
-  }
-
-  function wireChartTooltip() {
-    const wrap = document.getElementById("chartWrap");
-    const tip = document.getElementById("chartTooltip");
-    const svg = document.querySelector("#panel-chart [data-grain-svg]:not(.hidden)");
-    if (!wrap || !tip || !svg) return;
-    let buckets = [];
-    try {
-      buckets = JSON.parse(svg.dataset.buckets || "[]");
-    } catch {
-      buckets = [];
-    }
-    wrap.onmousemove = (e) => {
-      const activeSvg = document.querySelector("#panel-chart [data-grain-svg]:not(.hidden)");
-      if (!activeSvg || !activeSvg.contains(e.target)) {
-        tip.classList.remove("visible");
-        return;
-      }
-      const hit = e.target.closest("[data-idx]");
-      if (!hit) {
-        tip.classList.remove("visible");
-        return;
-      }
-      let activeBuckets = buckets;
-      try {
-        activeBuckets = JSON.parse(activeSvg.dataset.buckets || "[]");
-      } catch {
-        activeBuckets = buckets;
-      }
-      const bucket = activeBuckets[Number(hit.dataset.idx)];
-      if (!bucket) return;
-      const countLine =
-        bucket.count != null
-          ? `<div class="row"><span>Payments</span><span>${bucket.count}</span></div>`
-          : "";
-      tip.innerHTML = `
-        <strong>${bucket.label}</strong>
-        <div class="row"><span>Principal</span><span>${money(bucket.principal)}</span></div>
-        <div class="row"><span>Interest</span><span>${money(bucket.interest)}</span></div>
-        <div class="row"><span>Payment</span><span>${money(bucket.payment)}</span></div>
-        ${countLine}`;
-      const rect = wrap.getBoundingClientRect();
-      tip.style.left = `${e.clientX - rect.left}px`;
-      tip.style.top = `${e.clientY - rect.top}px`;
-      tip.classList.add("visible");
-    };
-    wrap.onmouseleave = () => tip.classList.remove("visible");
+    renderBreakdownChart();
   }
 
   function bindUi() {
@@ -581,20 +663,19 @@
       const form = e.currentTarget;
       const mode = form.dataset.mode || "create";
       const profileId = form.dataset.profileId;
-      if ((mode === "edit" || mode === "rename") && !profileId) {
+      if (mode === "edit" && !profileId) {
         e.preventDefault();
         document.getElementById("error").textContent = "No profile selected.";
         return;
       }
-      // Re-assert destination so a stale action from a prior edit/rename
+      // Re-assert destination so a stale action from a prior edit
       // cannot turn "Create profile" into an update of the active profile.
       setLoanFormMode(mode, profileId);
     });
     document.getElementById("newProfileBtn")?.addEventListener("click", openCreate);
     document.getElementById("editProfileBtn")?.addEventListener("click", openEdit);
-    document.getElementById("renameProfileBtn")?.addEventListener("click", openRename);
-    document.getElementById("profileSelect")?.addEventListener("change", syncOwnerMenu);
-    syncOwnerMenu();
+    document.getElementById("profileSelect")?.addEventListener("change", syncOwnerState);
+    syncOwnerState();
     document.getElementById("emptyNewBtn")?.addEventListener("click", (e) => {
       if (e.currentTarget.dataset.emptyAction === "edit") openEdit();
       else openCreate();
@@ -617,14 +698,15 @@
       if (e.detail.successful) closeImprovementPopover();
     });
     document.getElementById("deleteProfileBtn")?.addEventListener("click", () => {
-      closeProfileMenu();
       if (!isActiveOwner()) return;
       const select = document.getElementById("profileSelect");
-      const id = select?.value;
-      const name = select?.selectedOptions?.[0]?.textContent || "this profile";
+      const dash = dashboard();
+      const id = dash?.dataset.profileId || select?.value;
+      const name = dash?.dataset.name || select?.selectedOptions?.[0]?.textContent || "this profile";
       if (!id) return;
       if (!confirm(`Delete profile “${name}”? This cannot be undone.`)) return;
       if (typeof htmx === "undefined") return;
+      popover()?.hidePopover();
       htmx.ajax("POST", `/profiles/${id}/delete`, {
         headers: { "HX-Request": "true" },
       });
@@ -648,21 +730,11 @@
         fillShareInviteUrl();
       }
     });
-    document.getElementById("profileMenuBtn")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleMenu("profileMenu", e.currentTarget, {
-        closeOthers: closeAccountMenu,
-      });
-    });
     document.getElementById("accountMenuBtn")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      toggleMenu("accountMenu", e.currentTarget, {
-        closeOthers: closeProfileMenu,
-      });
+      toggleMenu("accountMenu", e.currentTarget);
     });
     document.addEventListener("click", (e) => {
-      const profileMenu = document.getElementById("profileMenu");
-      if (profileMenu && !profileMenu.contains(e.target)) closeProfileMenu();
       const accountMenu = document.getElementById("accountMenu");
       if (accountMenu && !accountMenu.contains(e.target)) closeAccountMenu();
     });
@@ -691,7 +763,6 @@
         activateTab(tab.dataset.tab);
       }
     });
-    wireChartTooltip();
     const queryTab = new URLSearchParams(location.search).get("tab");
     // One-time migrate old #tab bookmarks to ?tab=.
     const legacyHashTab = location.hash.replace(/^#/, "");
@@ -713,11 +784,18 @@
     markPanelsStale(detail);
   });
 
+  document.body.addEventListener("htmx:beforeSwap", (e) => {
+    const targetId = e.detail.target?.id;
+    if (targetId === "panel-chart" || targetId === "main-panel") {
+      destroyBreakdownChart();
+    }
+  });
+
   document.body.addEventListener("htmx:afterSwap", (e) => {
     const targetId = e.detail.target.id;
     if (targetId === "panel-chart") {
       e.detail.target.dataset.stale = "false";
-      wireChartTooltip();
+      renderBreakdownChart();
       syncDashboardMetaFromDom();
       return;
     }
@@ -746,7 +824,6 @@
       return;
     }
     if (targetId === "main-panel") {
-      wireChartTooltip();
       syncProfileBarFromDashboard();
       TAB_IDS.forEach((id) => {
         const panel = panelEl(id);
