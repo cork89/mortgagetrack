@@ -8,11 +8,12 @@ use axum::{
     Router,
 };
 use tower_sessions::Session;
+use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::{
-    encode_query_value, get_user_id, hx_redirect, set_pending_share, take_pending_share, AuthUser,
-    HOME_PATH,
+    avatar_src, encode_query_value, get_user_id, hx_redirect, set_pending_share, take_pending_share,
+    AuthUser, HOME_PATH,
 };
 use crate::error::AppResult;
 use crate::models::{
@@ -153,9 +154,13 @@ fn share_panel_template(
         fresh_invite_url: fresh_path.unwrap_or_default(),
         collaborators: collaborators
             .iter()
-            .map(|c| crate::templates::CollaboratorView {
-                user_id: c.user_id.clone(),
-                email: c.email.clone(),
+            .map(|c| {
+                let user_id = Uuid::parse_str(&c.user_id).unwrap_or_else(|_| Uuid::nil());
+                crate::templates::CollaboratorView {
+                    user_id: c.user_id.clone(),
+                    email: c.email.clone(),
+                    avatar_src: avatar_src(&user_id, c.avatar.as_deref()),
+                }
             })
             .collect(),
     }

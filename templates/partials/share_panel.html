@@ -34,7 +34,7 @@
       {% for c in collaborators %}
       <li>
         <span class="person">
-          <img class="avatar avatar-xs" src="/avatars/{{ c.user_id }}.svg" alt="" width="22" height="22" />
+          <img class="avatar avatar-xs" src="{{ c.avatar_src }}" alt="" width="22" height="22" />
           <span>{{ c.email }}</span>
         </span>
         <button type="button"

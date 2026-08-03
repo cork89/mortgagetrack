@@ -20,6 +20,7 @@ pub struct ShareLinkStatus {
 pub struct CollaboratorRow {
     pub user_id: String,
     pub email: String,
+    pub avatar: Option<String>,
     #[allow(dead_code)]
     pub created_at: String,
 }
@@ -124,7 +125,7 @@ pub async fn list_collaborators(
     require_owned_profile(pool, owner_id, profile_id).await?;
     let rows = sqlx::query_as::<_, CollaboratorRow>(
         r#"
-        SELECT c.user_id, u.email, c.created_at
+        SELECT c.user_id, u.email, u.avatar, c.created_at
         FROM profile_collaborators c
         INNER JOIN users u ON u.id = c.user_id
         WHERE c.profile_id = ?

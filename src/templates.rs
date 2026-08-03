@@ -106,6 +106,7 @@ pub struct ProfileBarTemplate {
 pub struct CollaboratorView {
     pub user_id: String,
     pub email: String,
+    pub avatar_src: String,
 }
 
 #[derive(Template)]

@@ -11,7 +11,6 @@ use serde::Deserialize;
 use tower_sessions::Session;
 use uuid::Uuid;
 
-use super::identicon;
 use super::models::{
     delete_user, password_hash_for_user, update_default_tab, update_password, validate_password,
     verify_password,
@@ -41,12 +40,23 @@ pub fn is_valid_avatar(avatar: &str) -> bool {
     AVATAR_OPTIONS.contains(&avatar)
 }
 
-/// Image URL for a user: custom avatar when set, otherwise the identicon endpoint.
+/// Stable pick from the selector when the user has not chosen one yet.
+pub fn default_avatar_id(user_id: &Uuid) -> &'static str {
+    let bytes = user_id.as_bytes();
+    let idx = u16::from_le_bytes([bytes[0], bytes[1]]) as usize % AVATAR_OPTIONS.len();
+    AVATAR_OPTIONS[idx]
+}
+
+fn resolved_avatar_id(user_id: &Uuid, avatar: Option<&str>) -> &'static str {
+    avatar
+        .filter(|a| is_valid_avatar(a))
+        .and_then(|id| AVATAR_OPTIONS.iter().copied().find(|&opt| opt == id))
+        .unwrap_or_else(|| default_avatar_id(user_id))
+}
+
+/// Image URL for a user: chosen avatar, or a stable pick from the selector.
 pub fn avatar_src(user_id: &Uuid, avatar: Option<&str>) -> String {
-    match avatar {
-        Some(id) if is_valid_avatar(id) => format!("/static/avatars/{id}.webp"),
-        _ => format!("/avatars/{user_id}.svg"),
-    }
+    format!("/static/avatars/{}.webp", resolved_avatar_id(user_id, avatar))
 }
 
 pub fn routes() -> Router<AppState> {
@@ -79,11 +89,7 @@ pub struct DeleteAccountForm {
 }
 
 fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> SettingsTemplate {
-    let current = user
-        .avatar
-        .as_deref()
-        .filter(|a| is_valid_avatar(a))
-        .unwrap_or("");
+    let current = resolved_avatar_id(&user.id, user.avatar.as_deref());
     let current_tab = TabId::parse(&user.default_tab);
     SettingsTemplate {
         csrf_token,
@@ -131,27 +137,13 @@ async fn avatar(
     let user_id = Uuid::parse_str(id_str)
         .map_err(|_| AppError::NotFound("Avatar not found.".into()))?;
 
-    if let Ok(Some(user)) = crate::auth::models::find_user_by_id(&state.pool, user_id).await {
-        if let Some(avatar) = user.avatar.as_deref().filter(|a| is_valid_avatar(a)) {
-            let redirect_url = format!("/static/avatars/{avatar}.webp");
-            let mut response =
-                (StatusCode::FOUND, [(header::LOCATION, redirect_url)]).into_response();
-            // Avatars can change; never mark this URL immutable.
-            response.headers_mut().insert(
-                header::CACHE_CONTROL,
-                HeaderValue::from_static("private, no-cache"),
-            );
-            return Ok(response);
-        }
-    }
-
-    let svg = identicon::svg_for_seed(&user_id.to_string());
-    let mut response = (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
-        svg,
-    )
-        .into_response();
+    let stored = match crate::auth::models::find_user_by_id(&state.pool, user_id).await {
+        Ok(Some(user)) => user.avatar,
+        _ => None,
+    };
+    let redirect_url = avatar_src(&user_id, stored.as_deref());
+    let mut response = (StatusCode::FOUND, [(header::LOCATION, redirect_url)]).into_response();
+    // Avatars can change; never mark this URL immutable.
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, no-cache"),

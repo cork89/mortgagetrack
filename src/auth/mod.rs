@@ -5,13 +5,11 @@
 //! - [`extractor`] — [`AuthUser`] + HTMX-aware rejection
 //! - [`handlers`] — register / login / logout routes
 //! - [`settings`] — change password / delete account
-//! - [`identicon`] — GitHub-style account avatars
 //! - [`middleware`] — session helpers and HTMX redirect utilities
 
 mod settings;
 mod extractor;
 mod handlers;
-mod identicon;
 mod middleware;
 mod models;
 mod next;
