@@ -13,6 +13,7 @@ mod handlers;
 mod middleware;
 mod models;
 mod next;
+mod rate_limit;
 mod seed;
 
 use axum::Router;

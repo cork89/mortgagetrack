@@ -4,6 +4,7 @@ mod config;
 mod csrf;
 mod error;
 mod models;
+mod redis;
 mod routes;
 mod templates;
 
@@ -18,7 +19,7 @@ use sqlx::SqlitePool;
 use time::Duration;
 use tower_http::services::ServeDir;
 use tower_sessions::{Expiry, SessionManagerLayer};
-use tower_sessions_sqlx_store::SqliteStore;
+use tower_sessions_redis_store::RedisStore;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
@@ -48,9 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_user_default_tab(&pool).await?;
     auth::ensure_test_user(&pool).await?;
 
-    let session_store = SqliteStore::new(pool.clone());
-    session_store.migrate().await?;
+    let redis_url = std::env::var("REDIS_URL").map_err(|_| {
+        "REDIS_URL is required (Upstash TCP URL, e.g. rediss://default:...@....upstash.io:6379)"
+    })?;
+    let redis = redis::connect(&redis_url).await?;
+    tracing::info!("connected to Redis");
 
+    let session_store = RedisStore::new(redis.clone());
     let session_cfg = SessionConfig::from_env();
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(session_cfg.secure)
@@ -61,6 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let today_override = parse_current_date_override()?;
     let state = AppState {
         pool,
+        redis,
         today_override,
     };
 
@@ -96,7 +102,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Homeabell listening on http://{addr}"
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 

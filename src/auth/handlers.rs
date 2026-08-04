@@ -1,7 +1,9 @@
 //! Registration, login, and logout handlers.
 
+use std::net::SocketAddr;
+
 use axum::{
-    extract::{Query, State},
+    extract::{ConnectInfo, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -14,6 +16,7 @@ use uuid::Uuid;
 use super::models::{
     create_user, find_user_by_email, validate_email, validate_password, verify_password,
 };
+use super::rate_limit::{self, client_ip};
 use crate::app_state::AppState;
 use crate::auth::{
     encode_query_value, get_user_id, hx_redirect, is_htmx, is_share_invite_next, purge_session,
@@ -101,6 +104,7 @@ async fn login_submit(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(form): Form<LoginForm>,
 ) -> Response {
     remember_share_invite(&session, form.next.as_deref())
@@ -109,12 +113,15 @@ async fn login_submit(
     let next = safe_next(form.next.as_deref())
         .unwrap_or(HOME_PATH)
         .to_string();
-    match login_inner(&state, &session, &form).await {
+    let ip = client_ip(&headers, Some(peer));
+    match login_inner(&state, &session, &form, &ip).await {
         Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
         Err(err) => {
+            let status = auth_error_status(&err);
             let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
             auth_error_response(
                 &headers,
+                status,
                 csrf_token,
                 err.to_string(),
                 &form.email,
@@ -129,11 +136,14 @@ async fn login_inner(
     state: &AppState,
     session: &Session,
     form: &LoginForm,
+    ip: &str,
 ) -> AppResult<Uuid> {
     let email = validate_email(&form.email)?;
     if form.password.is_empty() {
         return Err(AppError::BadRequest("Enter your password.".into()));
     }
+
+    rate_limit::check_login(&state.redis, ip, email).await?;
 
     let Some((user, password_hash)) = find_user_by_email(&state.pool, email).await? else {
         return Err(AppError::BadRequest("Invalid email or password.".into()));
@@ -142,6 +152,8 @@ async fn login_inner(
     if !verify_password(&form.password, &password_hash).await? {
         return Err(AppError::BadRequest("Invalid email or password.".into()));
     }
+
+    rate_limit::clear_login_email(&state.redis, email).await?;
 
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
@@ -156,6 +168,7 @@ async fn register_submit(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(form): Form<RegisterForm>,
 ) -> Response {
     remember_share_invite(&session, form.next.as_deref())
@@ -164,12 +177,15 @@ async fn register_submit(
     let next = safe_next(form.next.as_deref())
         .unwrap_or(HOME_PATH)
         .to_string();
-    match register_inner(&state, &session, &form).await {
+    let ip = client_ip(&headers, Some(peer));
+    match register_inner(&state, &session, &form, &ip).await {
         Ok(user_id) => auth_success_redirect(&state, &session, user_id, &headers, &next).await,
         Err(err) => {
+            let status = auth_error_status(&err);
             let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
             auth_error_response(
                 &headers,
+                status,
                 csrf_token,
                 err.to_string(),
                 &form.email,
@@ -184,12 +200,15 @@ async fn register_inner(
     state: &AppState,
     session: &Session,
     form: &RegisterForm,
+    ip: &str,
 ) -> AppResult<Uuid> {
     let email = validate_email(&form.email)?;
     validate_password(&form.password)?;
     if form.password != form.confirm_password {
         return Err(AppError::BadRequest("Passwords do not match.".into()));
     }
+
+    rate_limit::check_register(&state.redis, ip, email).await?;
 
     let user = create_user(&state.pool, email, &form.password).await?;
     session.cycle_id().await.map_err(|err| {
@@ -252,8 +271,16 @@ async fn auth_success_redirect(
     hx_redirect(headers, dest)
 }
 
+fn auth_error_status(err: &AppError) -> StatusCode {
+    match err {
+        AppError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
+        _ => StatusCode::BAD_REQUEST,
+    }
+}
+
 fn auth_error_response(
     headers: &HeaderMap,
+    status: StatusCode,
     csrf_token: String,
     message: String,
     email: &str,
@@ -262,14 +289,10 @@ fn auth_error_response(
 ) -> Response {
     let fields = auth_next_fields(Some(next));
     if is_htmx(headers) {
-        (
-            StatusCode::BAD_REQUEST,
-            HtmlTemplate(AuthErrorPartial { message }),
-        )
-            .into_response()
+        (status, HtmlTemplate(AuthErrorPartial { message })).into_response()
     } else if is_login {
         (
-            StatusCode::BAD_REQUEST,
+            status,
             HtmlTemplate(LoginTemplate {
                 csrf_token,
                 error: message,
@@ -282,7 +305,7 @@ fn auth_error_response(
             .into_response()
     } else {
         (
-            StatusCode::BAD_REQUEST,
+            status,
             HtmlTemplate(RegisterTemplate {
                 csrf_token,
                 error: message,
