@@ -1,29 +1,13 @@
-{%- macro add_improvement_disclosure(profile_id, extra_date_default, hx_target, hx_swap) -%}
-<details class="extra-disclosure improvement-disclosure">
-  <summary class="btn-primary btn-compact btn-icon" aria-label="Add Improvement" title="Add Improvement">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-  </summary>
-  <form class="extra-form improvement-form"
-    hx-post="/profiles/{{ profile_id }}/improvements"
-    hx-target="{{ hx_target }}"
-    hx-swap="{{ hx_swap }}">
-    <label>
-      Date
-      <input name="date" type="date" value="{{ extra_date_default }}" required />
-    </label>
-    <label class="amount">
-      Amount
-      <input name="amount" type="number" min="0.01" step="0.01" placeholder="2500" required />
-    </label>
-    <label class="note">
-      Note <span class="optional">(optional)</span>
-      <input name="note" type="text" maxlength="200" placeholder="Kitchen remodel" />
-    </label>
-    <button type="submit" class="btn-primary">Add</button>
-  </form>
-</details>
+{%- macro add_improvement_button(extra_date_default) -%}
+<button type="button"
+  class="btn-primary btn-compact btn-icon improvement-add-btn"
+  data-date="{{ extra_date_default }}"
+  aria-label="Add Improvement"
+  title="Add Improvement">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+</button>
 {%- endmacro -%}
 
 {%- macro improvement_actions(profile_id, item) -%}

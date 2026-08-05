@@ -5,12 +5,12 @@
       <h2>Home improvements</h2>
     </div>
     <div class="payments-toolbar">
-      {% call improv::add_improvement_disclosure(profile_id, extra_date_default, "#panel-improvements", hx_swap) %}
+      {% call improv::add_improvement_button(extra_date_default) %}
     </div>
   </div>
   <section class="improvements-section improvements-section-tab" aria-label="Home improvements">
     <div class="improvements-head">
-      <h3>Spending</h3>
+      <!-- <h3>Spending</h3> -->
       <div class="improvements-total">
         <span class="k">Total spent</span>
         <span class="v">{{ improvements_total }}</span>

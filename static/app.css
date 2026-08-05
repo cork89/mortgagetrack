@@ -1215,25 +1215,6 @@ details.pay-year-group[open] > summary .year-chevron {
     justify-items: end;
   }
 
-  .improvements-panel .payments-toolbar > .improvement-disclosure {
-    grid-column: 1;
-    grid-row: 1;
-    width: auto;
-  }
-
-  .improvements-panel .improvement-disclosure[open] > summary {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .improvements-panel .extra-disclosure > summary.btn-icon {
-    width: auto;
-  }
-
-  .improvements-panel .extra-disclosure .extra-form {
-    grid-row: 2;
-  }
-
   .payments-panel .payments-desktop {
     display: none;
   }

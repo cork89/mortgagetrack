@@ -148,6 +148,8 @@ pub struct ImprovementForm {
     pub version: i64,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub detail: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -668,6 +670,7 @@ async fn add_improvement_handler(
         date,
         form.amount,
         &form.note,
+        &form.detail,
         version,
     )
     .await

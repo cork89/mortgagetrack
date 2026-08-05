@@ -512,7 +512,13 @@
     document.getElementById("noteYear").value = dash.dataset.year || String(new Date().getFullYear());
     document.getElementById("noteGrain").value = dash.dataset.grain || "monthly";
     document.getElementById("noteVersion").value = dash.dataset.version || "";
-    document.getElementById("noteText").value = note;
+    const noteText = document.getElementById("noteText");
+    if (noteText) {
+      noteText.value = note;
+      noteText.setCustomValidity(
+        note.length > 500 ? "Notes are limited to 500 characters." : ""
+      );
+    }
     document.getElementById("notePopoverDue").textContent = btn.dataset.due
       ? `Due ${btn.dataset.due}`
       : "";
@@ -522,7 +528,7 @@
 
     if (typeof htmx !== "undefined") htmx.process(form);
     notePopover()?.showPopover();
-    document.getElementById("noteText")?.focus();
+    noteText?.focus();
   }
 
   function closeNotePopover() {
@@ -541,28 +547,53 @@
     }
   }
 
-  function openImprovementPopover(btn) {
+  function openImprovementPopover(btn, mode = "edit") {
     const dash = dashboard();
     const profileId = dash?.dataset.profileId;
-    const improvementId = btn.dataset.id;
-    if (!profileId || !improvementId) return;
+    if (!profileId) return;
 
     const form = document.getElementById("improvementForm");
-    const action = `/profiles/${profileId}/improvements/${improvementId}/update`;
+    const title = document.getElementById("improvementPopoverTitle");
+    const isAdd = mode === "add";
+    let action;
+    if (isAdd) {
+      action = `/profiles/${profileId}/improvements`;
+    } else {
+      const improvementId = btn.dataset.id;
+      if (!improvementId) return;
+      action = `/profiles/${profileId}/improvements/${improvementId}/update`;
+    }
+
     form.action = action;
     form.setAttribute("hx-post", action);
     form.setAttribute("hx-target", "#panel-improvements");
     form.setAttribute("hx-swap", "innerHTML show:none");
 
+    if (title) title.textContent = isAdd ? "Add" : "Edit";
     document.getElementById("improvementVersion").value = dash.dataset.version || "";
     document.getElementById("improvementDate").value = btn.dataset.date || "";
-    document.getElementById("improvementAmount").value = btn.dataset.amount || "";
-    document.getElementById("improvementNote").value = parseJsonAttr(btn, "data-note-json");
-    document.getElementById("improvementDetail").value = parseJsonAttr(btn, "data-detail-json");
+    document.getElementById("improvementAmount").value = isAdd ? "" : (btn.dataset.amount || "");
+
+    const noteEl = document.getElementById("improvementNote");
+    const detailEl = document.getElementById("improvementDetail");
+    const note = isAdd ? "" : parseJsonAttr(btn, "data-note-json");
+    const detail = isAdd ? "" : parseJsonAttr(btn, "data-detail-json");
+    if (noteEl) {
+      noteEl.value = note;
+      noteEl.setCustomValidity(
+        note.length > 200 ? "Improvement notes are limited to 200 characters." : ""
+      );
+    }
+    if (detailEl) {
+      detailEl.value = detail;
+      detailEl.setCustomValidity(
+        detail.length > 1000 ? "Improvement details are limited to 1000 characters." : ""
+      );
+    }
 
     if (typeof htmx !== "undefined") htmx.process(form);
     improvementPopover()?.showPopover();
-    document.getElementById("improvementNote")?.focus();
+    document.getElementById(isAdd ? "improvementDate" : "improvementNote")?.focus();
   }
 
   function closeImprovementPopover() {
@@ -931,14 +962,73 @@
     document.getElementById("closeNotePopoverBtn")?.addEventListener("click", closeNotePopover);
     document.getElementById("clearNoteBtn")?.addEventListener("click", () => {
       const text = document.getElementById("noteText");
-      if (text) text.value = "";
+      if (text) {
+        text.value = "";
+        text.setCustomValidity("");
+      }
       text?.focus();
+    });
+    document.getElementById("noteText")?.addEventListener("input", (e) => {
+      const text = e.currentTarget;
+      if (text.value.length > 500) {
+        text.setCustomValidity("Notes are limited to 500 characters.");
+      } else {
+        text.setCustomValidity("");
+      }
+    });
+    document.getElementById("noteForm")?.addEventListener("submit", (e) => {
+      const text = document.getElementById("noteText");
+      if (!text) return;
+      if (text.value.length > 500) {
+        text.setCustomValidity("Notes are limited to 500 characters.");
+        text.reportValidity();
+        e.preventDefault();
+      } else {
+        text.setCustomValidity("");
+      }
     });
     document.getElementById("noteForm")?.addEventListener("htmx:afterRequest", (e) => {
       if (e.detail.successful) closeNotePopover();
     });
     document.getElementById("closeImprovementPopoverBtn")?.addEventListener("click", closeImprovementPopover);
     document.getElementById("cancelImprovementBtn")?.addEventListener("click", closeImprovementPopover);
+    document.getElementById("improvementNote")?.addEventListener("input", (e) => {
+      const el = e.currentTarget;
+      el.setCustomValidity(
+        el.value.length > 200 ? "Improvement notes are limited to 200 characters." : ""
+      );
+    });
+    document.getElementById("improvementDetail")?.addEventListener("input", (e) => {
+      const el = e.currentTarget;
+      el.setCustomValidity(
+        el.value.length > 1000 ? "Improvement details are limited to 1000 characters." : ""
+      );
+    });
+    document.getElementById("improvementForm")?.addEventListener("submit", (e) => {
+      const noteEl = document.getElementById("improvementNote");
+      const detailEl = document.getElementById("improvementDetail");
+      let invalid = null;
+      if (noteEl) {
+        if (noteEl.value.length > 200) {
+          noteEl.setCustomValidity("Improvement notes are limited to 200 characters.");
+          invalid = noteEl;
+        } else {
+          noteEl.setCustomValidity("");
+        }
+      }
+      if (detailEl) {
+        if (detailEl.value.length > 1000) {
+          detailEl.setCustomValidity("Improvement details are limited to 1000 characters.");
+          invalid = invalid || detailEl;
+        } else {
+          detailEl.setCustomValidity("");
+        }
+      }
+      if (invalid) {
+        invalid.reportValidity();
+        e.preventDefault();
+      }
+    });
     document.getElementById("improvementForm")?.addEventListener("htmx:afterRequest", (e) => {
       if (e.detail.successful) closeImprovementPopover();
     });
@@ -1000,10 +1090,16 @@
         openNotePopover(noteBtn);
         return;
       }
+      const improvementAddBtn = e.target.closest(".improvement-add-btn");
+      if (improvementAddBtn) {
+        e.preventDefault();
+        openImprovementPopover(improvementAddBtn, "add");
+        return;
+      }
       const improvementEditBtn = e.target.closest(".improvement-edit-btn");
       if (improvementEditBtn) {
         e.preventDefault();
-        openImprovementPopover(improvementEditBtn);
+        openImprovementPopover(improvementEditBtn, "edit");
         return;
       }
       const grainBtn = e.target.closest("#panel-chart .seg-toggle [data-grain]");

@@ -469,6 +469,11 @@ pub async fn upsert_payment_note(
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let trimmed = note.trim();
+    if trimmed.chars().count() > 500 {
+        return Err(AppError::BadRequest(
+            "Notes are limited to 500 characters.".into(),
+        ));
+    }
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
     reserve_profile_version(&tx, profile_id, expected_version).await?;
@@ -538,6 +543,22 @@ async fn list_improvements_conn(
     .await
 }
 
+fn validate_improvement_text(note: &str, detail: &str) -> AppResult<(String, String)> {
+    let note = note.trim().to_string();
+    let detail = detail.trim().to_string();
+    if note.chars().count() > 200 {
+        return Err(AppError::BadRequest(
+            "Improvement notes are limited to 200 characters.".into(),
+        ));
+    }
+    if detail.chars().count() > 1000 {
+        return Err(AppError::BadRequest(
+            "Improvement details are limited to 1000 characters.".into(),
+        ));
+    }
+    Ok((note, detail))
+}
+
 pub async fn add_improvement(
     pool: &DbPool,
     user_id: Uuid,
@@ -545,6 +566,7 @@ pub async fn add_improvement(
     date: NaiveDate,
     amount: f64,
     note: &str,
+    detail: &str,
     expected_version: i64,
 ) -> AppResult<HomeImprovement> {
     require_profile_access(pool, user_id, profile_id).await?;
@@ -553,14 +575,21 @@ pub async fn add_improvement(
     }
     let id = Uuid::new_v4().to_string();
     let date_str = date.format("%Y-%m-%d").to_string();
-    let note = note.trim().to_string();
+    let (note, detail) = validate_improvement_text(note, detail)?;
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
     reserve_profile_version(&tx, profile_id, expected_version).await?;
     execute(
         &tx,
-        "INSERT INTO home_improvements (id, profile_id, date, amount, note, detail) VALUES (?, ?, ?, ?, ?, '')",
-        params![id.as_str(), profile_id, date_str.as_str(), amount, note.as_str()],
+        "INSERT INTO home_improvements (id, profile_id, date, amount, note, detail) VALUES (?, ?, ?, ?, ?, ?)",
+        params![
+            id.as_str(),
+            profile_id,
+            date_str.as_str(),
+            amount,
+            note.as_str(),
+            detail.as_str()
+        ],
     )
     .await?;
     tx.commit().await?;
@@ -571,7 +600,7 @@ pub async fn add_improvement(
         date: date_str,
         amount,
         note,
-        detail: String::new(),
+        detail,
     })
 }
 
@@ -591,8 +620,7 @@ pub async fn update_improvement(
         return Err(AppError::BadRequest("Amount must be positive".into()));
     }
     let date_str = date.format("%Y-%m-%d").to_string();
-    let note = note.trim().to_string();
-    let detail = detail.trim().to_string();
+    let (note, detail) = validate_improvement_text(note, detail)?;
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
     reserve_profile_version(&tx, profile_id, expected_version).await?;

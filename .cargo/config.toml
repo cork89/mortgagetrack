@@ -1,0 +1,7 @@
+# libsql's SQL parser uses a large stack in debug builds; Windows defaults to ~1MB.
+# https://github.com/tursodatabase/libsql/issues/1051
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8000000"]
+
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--stack,8000000"]
