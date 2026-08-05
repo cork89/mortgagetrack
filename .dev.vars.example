@@ -1,0 +1,13 @@
+# Copy to `.dev.vars` for local `wrangler dev` (gitignored).
+# Leave INTERNAL_DB_SECRET unset to use SQLite inside the container (simplest).
+
+# INTERNAL_DB_SECRET=local-dev-secret-change-me
+# When testing D1 RPC from the container (Docker → host Wrangler on WSL/Desktop):
+# DB_RPC_URL=http://host.docker.internal:8787
+
+# Seed login accounts (created on container boot if missing)
+ALLOW_DEV_SEED_USERS=true
+TEST_USER_EMAIL=test@example.com
+TEST_USER_PASSWORD=choose-a-strong-local-password
+# TEST_USER_2_EMAIL=demo@example.com
+# TEST_USER_2_PASSWORD=choose-a-strong-local-password
