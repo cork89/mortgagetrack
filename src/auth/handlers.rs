@@ -143,7 +143,7 @@ async fn login_inner(
         return Err(AppError::BadRequest("Enter your password.".into()));
     }
 
-    rate_limit::check_login(&state.redis, ip, email).await?;
+    rate_limit::check_login(&state.pool, ip, email).await?;
 
     let Some((user, password_hash)) = find_user_by_email(&state.pool, email).await? else {
         return Err(AppError::BadRequest("Invalid email or password.".into()));
@@ -153,7 +153,7 @@ async fn login_inner(
         return Err(AppError::BadRequest("Invalid email or password.".into()));
     }
 
-    rate_limit::clear_login_email(&state.redis, email).await?;
+    rate_limit::clear_login_email(&state.pool, email).await?;
 
     session.cycle_id().await.map_err(|err| {
         AppError::Internal(format!("failed to renew session: {err}"))
@@ -208,7 +208,7 @@ async fn register_inner(
         return Err(AppError::BadRequest("Passwords do not match.".into()));
     }
 
-    rate_limit::check_register(&state.redis, ip, email).await?;
+    rate_limit::check_register(&state.pool, ip, email).await?;
 
     let user = create_user(&state.pool, email, &form.password).await?;
     session.cycle_id().await.map_err(|err| {

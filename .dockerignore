@@ -1,0 +1,13 @@
+target
+.git
+.env
+.env.*
+!.env.sample
+img
+index.html
+worker/node_modules
+worker/.wrangler
+**/*.db
+**/*.db-*
+agent-transcripts
+.cursor

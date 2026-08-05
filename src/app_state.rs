@@ -1,12 +1,10 @@
 use chrono::NaiveDate;
 
 use crate::db::DbPool;
-use crate::redis::RedisPool;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: DbPool,
-    pub redis: RedisPool,
     /// When set (via `CURRENT_DATE=YYYY-MM-DD`), replaces the system date for schedule UI.
     pub today_override: Option<NaiveDate>,
 }

@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
 use chrono::NaiveDate;
-use libsql::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::{begin, execute, get_conn, query_all, query_optional, DbPool, DbTx, FromRow};
+use crate::db::{
+    begin, execute, get_conn, params, query_all, query_optional, DbConn, DbPool, DbTx, FromRow,
+};
 use crate::error::{AppError, AppResult};
 
 use super::amort::{build_schedule, ExtraInput};
@@ -29,7 +30,7 @@ pub struct Profile {
 }
 
 impl FromRow for Profile {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             id: row.get(0)?,
             user_id: row.get(1)?,
@@ -92,7 +93,7 @@ pub struct ExtraPayment {
 }
 
 impl FromRow for ExtraPayment {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             id: row.get(0)?,
             profile_id: row.get(1)?,
@@ -115,7 +116,7 @@ pub struct HomeImprovement {
 }
 
 impl FromRow for HomeImprovement {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             id: row.get(0)?,
             profile_id: row.get(1)?,
@@ -147,7 +148,7 @@ pub async fn require_owned_profile(
 }
 
 async fn require_owned_profile_conn(
-    conn: &Connection,
+    conn: &DbConn,
     user_id: Uuid,
     profile_id: &str,
 ) -> AppResult<()> {
@@ -174,7 +175,7 @@ pub async fn require_profile_access(
 }
 
 async fn require_profile_access_conn(
-    conn: &Connection,
+    conn: &DbConn,
     user_id: Uuid,
     profile_id: &str,
 ) -> AppResult<ProfileRole> {
@@ -208,7 +209,7 @@ pub async fn list_profiles(pool: &DbPool, user_id: Uuid) -> AppResult<Vec<Profil
     list_profiles_conn(&conn, user_id).await
 }
 
-async fn list_profiles_conn(conn: &Connection, user_id: Uuid) -> AppResult<Vec<Profile>> {
+async fn list_profiles_conn(conn: &DbConn, user_id: Uuid) -> AppResult<Vec<Profile>> {
     let key = user_key(user_id);
     query_all(
         conn,
@@ -235,7 +236,7 @@ pub async fn load_profile(pool: &DbPool, user_id: Uuid, id: &str) -> AppResult<O
 }
 
 async fn load_profile_conn(
-    conn: &Connection,
+    conn: &DbConn,
     user_id: Uuid,
     id: &str,
 ) -> AppResult<Option<Profile>> {
@@ -264,7 +265,7 @@ pub async fn get_active_profile_id(pool: &DbPool, user_id: Uuid) -> AppResult<Op
     get_active_profile_id_conn(&conn, user_id).await
 }
 
-async fn get_active_profile_id_conn(conn: &Connection, user_id: Uuid) -> AppResult<Option<String>> {
+async fn get_active_profile_id_conn(conn: &DbConn, user_id: Uuid) -> AppResult<Option<String>> {
     let value: Option<(String,)> = query_optional(
         conn,
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
@@ -280,7 +281,7 @@ pub async fn set_active_profile(pool: &DbPool, user_id: Uuid, id: Option<&str>) 
 }
 
 async fn set_active_profile_conn(
-    conn: &Connection,
+    conn: &DbConn,
     user_id: Uuid,
     id: Option<&str>,
 ) -> AppResult<()> {
@@ -305,7 +306,7 @@ pub async fn list_paid_keys(pool: &DbPool, profile_id: &str) -> AppResult<Vec<St
     list_paid_keys_conn(&conn, profile_id).await
 }
 
-async fn list_paid_keys_conn(conn: &Connection, profile_id: &str) -> AppResult<Vec<String>> {
+async fn list_paid_keys_conn(conn: &DbConn, profile_id: &str) -> AppResult<Vec<String>> {
     let rows: Vec<(String,)> = query_all(
         conn,
         "SELECT pay_key FROM paid_keys WHERE profile_id = ?",
@@ -339,7 +340,7 @@ pub struct PaymentNote {
 }
 
 impl FromRow for PaymentNote {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             pay_key: row.get(0)?,
             note: row.get(1)?,
@@ -353,7 +354,7 @@ pub async fn list_payment_notes(pool: &DbPool, profile_id: &str) -> AppResult<Ve
 }
 
 async fn list_payment_notes_conn(
-    conn: &Connection,
+    conn: &DbConn,
     profile_id: &str,
 ) -> AppResult<Vec<PaymentNote>> {
     query_all(
@@ -494,7 +495,7 @@ pub async fn list_extras(pool: &DbPool, profile_id: &str) -> AppResult<Vec<Extra
     list_extras_conn(&conn, profile_id).await
 }
 
-async fn list_extras_conn(conn: &Connection, profile_id: &str) -> AppResult<Vec<ExtraPayment>> {
+async fn list_extras_conn(conn: &DbConn, profile_id: &str) -> AppResult<Vec<ExtraPayment>> {
     query_all(
         conn,
         r#"
@@ -514,7 +515,7 @@ pub async fn list_improvements(pool: &DbPool, profile_id: &str) -> AppResult<Vec
 }
 
 async fn list_improvements_conn(
-    conn: &Connection,
+    conn: &DbConn,
     profile_id: &str,
 ) -> AppResult<Vec<HomeImprovement>> {
     query_all(
@@ -1075,7 +1076,7 @@ async fn ensure_unique_name(
 }
 
 async fn ensure_unique_name_conn(
-    conn: &Connection,
+    conn: &DbConn,
     user_id: Uuid,
     name: &str,
     except_id: Option<&str>,

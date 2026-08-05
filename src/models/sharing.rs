@@ -1,7 +1,7 @@
 //! Profile share links and collaborators.
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
-use libsql::params;
+use crate::db::params;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ pub struct ShareLinkStatus {
 }
 
 impl FromRow for ShareLinkStatus {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             id: row.get(0)?,
             expires_at: row.get(1)?,
@@ -38,7 +38,7 @@ pub struct CollaboratorRow {
 }
 
 impl FromRow for CollaboratorRow {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             user_id: row.get(0)?,
             email: row.get(1)?,

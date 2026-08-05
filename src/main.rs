@@ -5,8 +5,8 @@ mod csrf;
 mod db;
 mod error;
 mod models;
-mod redis;
 mod routes;
+mod session_store;
 mod templates;
 
 use std::net::SocketAddr;
@@ -18,12 +18,12 @@ use chrono::NaiveDate;
 use time::Duration;
 use tower_http::services::ServeDir;
 use tower_sessions::{Expiry, SessionManagerLayer};
-use tower_sessions_redis_store::RedisStore;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
 use config::SessionConfig;
-use db::{execute, get_conn, DbPool};
+use db::{execute_batch, get_conn, DbPool};
+use session_store::DbSessionStore;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,27 +46,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_user_avatar(&pool).await?;
     models::ensure_user_default_tab(&pool).await?;
     models::ensure_user_payments_year_expand(&pool).await?;
-    auth::ensure_test_user(&pool).await?;
+    auth::rate_limit::ensure_schema(&pool).await?;
 
-    let redis_url = std::env::var("REDIS_URL")
-        .map_err(|_| {
-            "REDIS_URL is required (Upstash TCP URL, e.g. rediss://default:...@....upstash.io:6379)"
-        })?
-        .trim()
-        .trim_matches('"')
-        .to_string();
-    if redis_url.is_empty() {
-        return Err(
-            "REDIS_URL is empty (check .env and that your shell is not exporting an empty REDIS_URL)"
-                .into(),
-        );
+    let session_store = DbSessionStore::new(pool.clone());
+    session_store.migrate().await?;
+    session_store.clone().spawn_cleanup_task();
+
+    // Seed after schema is ready, but don't block the listen socket (Argon2 is slow
+    // and delays Cloudflare Containers' port-ready check).
+    {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            if let Err(err) = auth::ensure_test_user(&pool).await {
+                tracing::error!(error = %err, "failed to seed test users");
+            }
+        });
     }
-    let redis = redis::connect(&redis_url)
-        .await
-        .map_err(|err| format!("failed to connect to Redis: {err}"))?;
-    tracing::info!("connected to Redis");
 
-    let session_store = RedisStore::new(redis.clone());
     let session_cfg = SessionConfig::from_env();
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(session_cfg.secure)
@@ -77,7 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let today_override = parse_current_date_override()?;
     let state = AppState {
         pool,
-        redis,
         today_override,
     };
 
@@ -135,6 +130,12 @@ fn parse_current_date_override() -> Result<Option<NaiveDate>, Box<dyn std::error
 }
 
 async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
+    // D1 schema is applied via `wrangler d1 migrations`; skip embedded SQL there.
+    if matches!(pool, DbPool::D1(_)) {
+        tracing::info!("skipping embedded SQL migrations (DB_MODE=d1)");
+        return Ok(());
+    }
+
     let conn = get_conn(pool).await?;
     for sql in [
         include_str!("../migrations/001_init.sql"),
@@ -143,14 +144,9 @@ async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>>
         include_str!("../migrations/004_payment_notes.sql"),
         include_str!("../migrations/005_profile_sharing.sql"),
         include_str!("../migrations/006_home_improvements.sql"),
+        include_str!("../migrations/007_sessions_rate_limits.sql"),
     ] {
-        for stmt in sql.split(';') {
-            let stmt = stmt.trim();
-            if stmt.is_empty() {
-                continue;
-            }
-            execute(&conn, stmt, ()).await?;
-        }
+        execute_batch(&conn, sql).await?;
     }
     Ok(())
 }

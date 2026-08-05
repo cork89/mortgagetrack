@@ -4,3 +4,8 @@
 .env.local
 *.db
 .env
+.dev.vars
+node_modules/
+.wrangler/
+dev.vars
+*.log

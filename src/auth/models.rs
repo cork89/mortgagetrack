@@ -2,7 +2,7 @@
 
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use libsql::params;
+use crate::db::params;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -21,7 +21,7 @@ pub struct User {
 }
 
 impl FromRow for User {
-    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+    fn from_row(row: &crate::db::Row) -> crate::error::AppResult<Self> {
         Ok(Self {
             id: row.get(0)?,
             email: row.get(1)?,
@@ -109,36 +109,42 @@ pub async fn find_user_by_id(pool: &DbPool, id: Uuid) -> AppResult<Option<User>>
     .await
 }
 
+struct UserWithHash {
+    user: User,
+    password_hash: String,
+}
+
+impl FromRow for UserWithHash {
+    fn from_row(row: &crate::db::Row) -> AppResult<Self> {
+        Ok(Self {
+            user: User {
+                id: row.get(0)?,
+                email: row.get(1)?,
+                created_at: row.get(2)?,
+                avatar: row.get(3)?,
+                default_tab: row.get(4)?,
+                payments_year_expand: row.get(5)?,
+            },
+            password_hash: row.get(6)?,
+        })
+    }
+}
+
 pub async fn find_user_by_email(pool: &DbPool, email: &str) -> AppResult<Option<(User, String)>> {
     let conn = get_conn(pool).await?;
-    let mut rows = conn
-        .query(
-            r#"
+    let row: Option<UserWithHash> = query_optional(
+        &conn,
+        r#"
             SELECT u.id, u.email, u.created_at, u.avatar, u.default_tab, u.payments_year_expand,
                    c.password_hash
             FROM users u
             INNER JOIN local_credentials c ON c.user_id = u.id
             WHERE u.email = ? COLLATE NOCASE
             "#,
-            params![email],
-        )
-        .await?;
-
-    let Some(row) = rows.next().await? else {
-        return Ok(None);
-    };
-
-    Ok(Some((
-        User {
-            id: row.get(0)?,
-            email: row.get(1)?,
-            created_at: row.get(2)?,
-            avatar: row.get(3)?,
-            default_tab: row.get(4)?,
-            payments_year_expand: row.get(5)?,
-        },
-        row.get(6)?,
-    )))
+        params![email],
+    )
+    .await?;
+    Ok(row.map(|r| (r.user, r.password_hash)))
 }
 
 pub async fn update_default_tab(
