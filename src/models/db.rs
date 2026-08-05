@@ -5,17 +5,14 @@ use libsql::{params, Connection};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::{
-    begin, execute, get_conn, query_all, query_optional, DbPool, DbTx, FromRow,
-};
+use crate::db::{begin, execute, get_conn, query_all, query_optional, DbPool, DbTx, FromRow};
 use crate::error::{AppError, AppResult};
 
 use super::amort::{build_schedule, ExtraInput};
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
-pub const PROFILE_CONFLICT_MSG: &str =
-    "Someone else updated this profile. Your view has been refreshed.";
+pub const PROFILE_CONFLICT_MSG: &str = "Failed to update. Your view has been refreshed.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -267,10 +264,7 @@ pub async fn get_active_profile_id(pool: &DbPool, user_id: Uuid) -> AppResult<Op
     get_active_profile_id_conn(&conn, user_id).await
 }
 
-async fn get_active_profile_id_conn(
-    conn: &Connection,
-    user_id: Uuid,
-) -> AppResult<Option<String>> {
+async fn get_active_profile_id_conn(conn: &Connection, user_id: Uuid) -> AppResult<Option<String>> {
     let value: Option<(String,)> = query_optional(
         conn,
         "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
@@ -280,11 +274,7 @@ async fn get_active_profile_id_conn(
     Ok(value.map(|v| v.0).filter(|s| !s.is_empty()))
 }
 
-pub async fn set_active_profile(
-    pool: &DbPool,
-    user_id: Uuid,
-    id: Option<&str>,
-) -> AppResult<()> {
+pub async fn set_active_profile(pool: &DbPool, user_id: Uuid, id: Option<&str>) -> AppResult<()> {
     let conn = get_conn(pool).await?;
     set_active_profile_conn(&conn, user_id, id).await
 }
@@ -518,10 +508,7 @@ async fn list_extras_conn(conn: &Connection, profile_id: &str) -> AppResult<Vec<
     .await
 }
 
-pub async fn list_improvements(
-    pool: &DbPool,
-    profile_id: &str,
-) -> AppResult<Vec<HomeImprovement>> {
+pub async fn list_improvements(pool: &DbPool, profile_id: &str) -> AppResult<Vec<HomeImprovement>> {
     let conn = get_conn(pool).await?;
     list_improvements_conn(&conn, profile_id).await
 }
@@ -800,14 +787,24 @@ pub async fn delete_profile(pool: &DbPool, user_id: Uuid, id: &str) -> AppResult
     require_owned_profile(pool, user_id, id).await?;
 
     let conn = get_conn(pool).await?;
-    execute(&conn, "DELETE FROM paid_keys WHERE profile_id = ?", params![id]).await?;
+    execute(
+        &conn,
+        "DELETE FROM paid_keys WHERE profile_id = ?",
+        params![id],
+    )
+    .await?;
     execute(
         &conn,
         "DELETE FROM payment_notes WHERE profile_id = ?",
         params![id],
     )
     .await?;
-    execute(&conn, "DELETE FROM extras WHERE profile_id = ?", params![id]).await?;
+    execute(
+        &conn,
+        "DELETE FROM extras WHERE profile_id = ?",
+        params![id],
+    )
+    .await?;
     execute(
         &conn,
         "DELETE FROM home_improvements WHERE profile_id = ?",
@@ -1022,11 +1019,7 @@ async fn refresh_loan_totals_tx(tx: &DbTx, user_id: Uuid, profile_id: &str) -> A
     Ok(())
 }
 
-async fn load_profile_in_tx(
-    tx: &DbTx,
-    user_id: Uuid,
-    id: &str,
-) -> AppResult<Option<Profile>> {
+async fn load_profile_in_tx(tx: &DbTx, user_id: Uuid, id: &str) -> AppResult<Option<Profile>> {
     let key = user_key(user_id);
     query_optional(
         tx,

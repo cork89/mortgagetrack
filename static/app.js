@@ -483,7 +483,7 @@
       toast.setAttribute("role", "status");
       document.body.appendChild(toast);
     }
-    toast.textContent = message || "Someone else updated this profile. Your view has been refreshed.";
+    toast.textContent = message || "Failed to update. Your view has been refreshed.";
     toast.classList.add("visible");
     clearTimeout(showConflictToast._timer);
     showConflictToast._timer = setTimeout(() => toast.classList.remove("visible"), 6000);
