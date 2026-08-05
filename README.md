@@ -22,7 +22,7 @@ Server-side Rust (Axum + Askama + HTMX). Locally it uses SQLite; in production i
 * Copy `.env.sample` to `.env`
 * `cargo run` (Rust toolchain required)
 
-Sessions and auth rate limits are stored in SQLite (`sessions` / `rate_limits` tables). No Redis/Upstash.
+Sessions and auth rate limits are stored in SQLite (`sessions` / `rate_limits` tables).
 
 ### Optional: `wrangler dev` (Worker + Container via Docker)
 
@@ -60,5 +60,3 @@ Prerequisites: Docker, Node.js, a Cloudflare account.
 5. Deploy (builds the Rust image + Worker): `npm run deploy` or `cf deploy`
 
 Custom Domains for `homeabell.com` and `www.homeabell.com` are configured in [`wrangler.jsonc`](wrangler.jsonc).
-
-Optional: import an existing Turso/SQLite dump into D1 with `wrangler d1 execute homeabell --remote --file=...`.
