@@ -14,6 +14,131 @@
     }
   });
 
+  function loadingButtonsFor(elt, evt) {
+    const submitter = evt?.submitter;
+    if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+      return [submitter];
+    }
+    if (elt instanceof HTMLButtonElement) return [elt];
+    if (elt instanceof HTMLInputElement && elt.type === "submit") return [elt];
+    const form =
+      elt instanceof HTMLFormElement ? elt : elt?.closest?.("form") || null;
+    if (!form) return [];
+    return Array.from(
+      form.querySelectorAll('button[type="submit"], input[type="submit"]'),
+    );
+  }
+
+  function setButtonsLoading(buttons, loading) {
+    for (const btn of buttons) {
+      if (!(btn instanceof HTMLElement)) continue;
+      btn.disabled = loading;
+      btn.classList.toggle("is-loading", loading);
+      if (loading) btn.setAttribute("aria-busy", "true");
+      else btn.removeAttribute("aria-busy");
+    }
+  }
+
+  function isPaidToggle(elt) {
+    return elt instanceof HTMLElement && elt.classList.contains("paid-toggle");
+  }
+
+  function paymentFilter() {
+    return dashboard()?.dataset.filter || "all";
+  }
+
+  function paidToggleKey(elt) {
+    return elt?.dataset?.payKey || elt?.dataset?.pay || "";
+  }
+
+  function paidTogglesForKey(key) {
+    if (!key) return [];
+    return [...document.querySelectorAll(".paid-toggle")].filter(
+      (btn) => paidToggleKey(btn) === key,
+    );
+  }
+
+  function setPaidToggleUi(elt, paid) {
+    if (!(elt instanceof HTMLElement)) return;
+
+    if (elt.classList.contains("pay-chip")) {
+      const unpaidStatus = elt.dataset.unpaidStatus || "future";
+      const unpaidText = elt.dataset.unpaidStatusText || "Upcoming";
+      elt.classList.remove("paid", "due", "missed", "future");
+      elt.classList.add(paid ? "paid" : unpaidStatus);
+      elt.setAttribute("aria-pressed", paid ? "true" : "false");
+      const statusText = paid
+        ? elt.classList.contains("extra")
+          ? unpaidText.includes("Recast")
+            ? "Recast · Paid"
+            : "Extra · Paid"
+          : "Paid"
+        : unpaidText;
+      const statusEl = elt.querySelector(".chip-status");
+      if (statusEl) statusEl.textContent = statusText;
+      const amount = elt.querySelector("strong")?.textContent || "";
+      const aria = paid ? "Mark unpaid" : "Mark paid";
+      elt.setAttribute("aria-label", `${amount}, ${statusText}. ${aria}`);
+      return;
+    }
+
+    elt.classList.toggle("paid", paid);
+    const label = paid ? "Mark unpaid" : "Mark paid";
+    elt.setAttribute("aria-label", label);
+    elt.title = label;
+
+    const row = elt.closest("tr");
+    const card = elt.closest(".pay-card");
+    row?.classList.toggle("paid-row", paid);
+    card?.classList.toggle("paid", paid);
+
+    const filter = paymentFilter();
+    const hide =
+      (filter === "unpaid" && paid) || (filter === "paid" && !paid);
+    row?.classList.toggle("filter-hidden", hide);
+    card?.classList.toggle("filter-hidden", hide);
+  }
+
+  function applyPaidToggleKey(key, paid) {
+    paidTogglesForKey(key).forEach((btn) => setPaidToggleUi(btn, paid));
+  }
+
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const elt = e.detail.elt;
+    if (isPaidToggle(elt)) {
+      const paid = elt.classList.contains("paid");
+      elt._paidSnapshot = { key: paidToggleKey(elt), paid };
+      applyPaidToggleKey(elt._paidSnapshot.key, !paid);
+      return;
+    }
+    const buttons = loadingButtonsFor(
+      elt,
+      e.detail.requestConfig?.triggeringEvent,
+    );
+    if (!buttons.length) return;
+    elt._htmxLoadingButtons = buttons;
+    setButtonsLoading(buttons, true);
+  });
+
+  document.addEventListener("htmx:afterRequest", (e) => {
+    const elt = e.detail.elt;
+    if (isPaidToggle(elt)) {
+      if (elt._paidSnapshot) {
+        // 409 swaps a fresh dashboard; don't overwrite that with a local revert.
+        if (!e.detail.successful && e.detail.xhr?.status !== 409) {
+          applyPaidToggleKey(elt._paidSnapshot.key, elt._paidSnapshot.paid);
+        }
+        delete elt._paidSnapshot;
+      }
+      return;
+    }
+    const buttons =
+      elt?._htmxLoadingButtons ||
+      loadingButtonsFor(elt, e.detail.requestConfig?.triggeringEvent);
+    setButtonsLoading(buttons, false);
+    if (elt) delete elt._htmxLoadingButtons;
+  });
+
   document.addEventListener(
     "submit",
     (e) => {
@@ -126,11 +251,131 @@
   }
 
   let scrolledToCurrentPayment = false;
+  let applyingYearCollapse = false;
+
+  function paymentsSurface(panel = panelEl("payments")) {
+    return panel?.querySelector?.(".payments-panel") || null;
+  }
+
+  function yearOpenStorageKey(profileId) {
+    return `payments-year-open:${profileId || "default"}`;
+  }
+
+  function yearModeStorageKey(profileId) {
+    return `payments-year-mode:${profileId || "default"}`;
+  }
+
+  function readYearOpenOverrides(profileId) {
+    try {
+      const raw = sessionStorage.getItem(yearOpenStorageKey(profileId));
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeYearOpenOverrides(profileId, overrides) {
+    try {
+      sessionStorage.setItem(yearOpenStorageKey(profileId), JSON.stringify(overrides));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function clearYearOpenOverrides(profileId) {
+    try {
+      sessionStorage.removeItem(yearOpenStorageKey(profileId));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function setYearGroupExpanded(group, expanded) {
+    if (!group) return;
+    const year = group.dataset.year;
+    group.dataset.expanded = expanded ? "true" : "false";
+    if (group.tagName === "DETAILS") {
+      group.open = expanded;
+    } else {
+      group.classList.toggle("is-collapsed", !expanded);
+      const toggle = group.querySelector(".year-toggle");
+      if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+    if (year) {
+      const panel = panelEl("payments");
+      panel?.querySelectorAll(`.pay-year-group[data-year="${year}"]`).forEach((other) => {
+        if (other === group) return;
+        other.dataset.expanded = expanded ? "true" : "false";
+        if (other.tagName === "DETAILS") {
+          other.open = expanded;
+        } else {
+          other.classList.toggle("is-collapsed", !expanded);
+          const toggle = other.querySelector(".year-toggle");
+          if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+        }
+      });
+    }
+  }
+
+  function applyPaymentYearCollapse(panel = panelEl("payments")) {
+    const surface = paymentsSurface(panel);
+    if (!surface) return;
+    const profileId = surface.dataset.profileId || "";
+    const mode = surface.dataset.paymentsYearExpand || "current";
+    try {
+      const modeKey = yearModeStorageKey(profileId);
+      const prevMode = sessionStorage.getItem(modeKey);
+      if (prevMode && prevMode !== mode) {
+        clearYearOpenOverrides(profileId);
+      }
+      sessionStorage.setItem(modeKey, mode);
+    } catch {
+      /* ignore */
+    }
+    const overrides = readYearOpenOverrides(profileId);
+    applyingYearCollapse = true;
+    try {
+      surface.querySelectorAll(".pay-year-group[data-year]").forEach((group) => {
+        const year = group.dataset.year;
+        const serverExpanded = group.dataset.expanded === "true";
+        const expanded =
+          year != null && Object.prototype.hasOwnProperty.call(overrides, year)
+            ? !!overrides[year]
+            : serverExpanded;
+        setYearGroupExpanded(group, expanded);
+      });
+    } finally {
+      applyingYearCollapse = false;
+    }
+  }
+
+  function rememberYearExpanded(year, expanded) {
+    if (applyingYearCollapse) return;
+    const surface = paymentsSurface();
+    if (!surface || year == null) return;
+    const profileId = surface.dataset.profileId || "";
+    const overrides = readYearOpenOverrides(profileId);
+    overrides[String(year)] = expanded;
+    writeYearOpenOverrides(profileId, overrides);
+  }
+
+  function expandYearForCurrentMonth(panel = panelEl("payments")) {
+    const target = panel?.querySelector?.(".payment-current-month");
+    if (!target) return;
+    const group = target.closest(".pay-year-group");
+    if (!group) return;
+    setYearGroupExpanded(group, true);
+    rememberYearExpanded(group.dataset.year, true);
+  }
 
   function maybeScrollToCurrentMonthPayment() {
     if (scrolledToCurrentPayment) return;
     const panel = panelEl("payments");
     if (!panel?.classList.contains("active")) return;
+    applyPaymentYearCollapse(panel);
+    expandYearForCurrentMonth(panel);
     const target = [...panel.querySelectorAll(".payment-current-month")].find(
       (el) => el.getClientRects().length > 0
     );
@@ -739,6 +984,16 @@
       if (accountMenu && !accountMenu.contains(e.target)) closeAccountMenu();
     });
     document.body.addEventListener("click", (e) => {
+      const yearToggle = e.target.closest(".year-toggle");
+      if (yearToggle) {
+        e.preventDefault();
+        const group = yearToggle.closest(".pay-year-group");
+        if (!group) return;
+        const next = group.dataset.expanded !== "true";
+        setYearGroupExpanded(group, next);
+        rememberYearExpanded(group.dataset.year, next);
+        return;
+      }
       const noteBtn = e.target.closest(".note-btn");
       if (noteBtn) {
         e.preventDefault();
@@ -763,6 +1018,19 @@
         activateTab(tab.dataset.tab);
       }
     });
+    document.body.addEventListener("toggle", (e) => {
+      const group = e.target.closest?.("details.pay-year-group");
+      if (!group || e.target !== group) return;
+      const expanded = group.open;
+      group.dataset.expanded = expanded ? "true" : "false";
+      rememberYearExpanded(group.dataset.year, expanded);
+      const year = group.dataset.year;
+      if (!year) return;
+      const panel = panelEl("payments");
+      panel?.querySelectorAll(`tbody.pay-year-group[data-year="${year}"]`).forEach((other) => {
+        setYearGroupExpanded(other, expanded);
+      });
+    }, true);
     const queryTab = new URLSearchParams(location.search).get("tab");
     // One-time migrate old #tab bookmarks to ?tab=.
     const legacyHashTab = location.hash.replace(/^#/, "");
@@ -773,6 +1041,7 @@
       const panel = panelEl(id);
       if (panel) panel.dataset.stale = "false";
     });
+    applyPaymentYearCollapse();
     activateTab(initialTab, { focus: false, syncUrl: true });
   }
 
@@ -806,6 +1075,7 @@
     if (targetId === "panel-payments") {
       e.detail.target.dataset.stale = "false";
       syncDashboardMetaFromDom();
+      applyPaymentYearCollapse(e.detail.target);
       return;
     }
     if (targetId === "panel-improvements") {
@@ -829,6 +1099,7 @@
         const panel = panelEl(id);
         if (panel) panel.dataset.stale = "false";
       });
+      applyPaymentYearCollapse();
       const dash = dashboard();
       const queryTab = new URLSearchParams(location.search).get("tab");
       const nextTab = normalizeTab(queryTab || dash?.dataset.tab || "calendar");

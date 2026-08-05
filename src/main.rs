@@ -2,6 +2,7 @@ mod app_state;
 mod auth;
 mod config;
 mod csrf;
+mod db;
 mod error;
 mod models;
 mod redis;
@@ -14,8 +15,6 @@ use std::path::PathBuf;
 use axum::middleware;
 use axum::Router;
 use chrono::NaiveDate;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::SqlitePool;
 use time::Duration;
 use tower_http::services::ServeDir;
 use tower_sessions::{Expiry, SessionManagerLayer};
@@ -24,6 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
 use config::SessionConfig;
+use db::{execute, get_conn, DbPool};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,9 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let database_url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:mortgage.db".into());
-    let pool = connect_db(&database_url).await?;
+    let pool = db::connect_db().await?;
     run_migrations(&pool).await?;
     models::ensure_profiles_belong_to_users(&pool).await?;
     models::ensure_profile_version(&pool).await?;
@@ -47,12 +45,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_improvement_detail(&pool).await?;
     models::ensure_user_avatar(&pool).await?;
     models::ensure_user_default_tab(&pool).await?;
+    models::ensure_user_payments_year_expand(&pool).await?;
     auth::ensure_test_user(&pool).await?;
 
-    let redis_url = std::env::var("REDIS_URL").map_err(|_| {
-        "REDIS_URL is required (Upstash TCP URL, e.g. rediss://default:...@....upstash.io:6379)"
-    })?;
-    let redis = redis::connect(&redis_url).await?;
+    let redis_url = std::env::var("REDIS_URL")
+        .map_err(|_| {
+            "REDIS_URL is required (Upstash TCP URL, e.g. rediss://default:...@....upstash.io:6379)"
+        })?
+        .trim()
+        .trim_matches('"')
+        .to_string();
+    if redis_url.is_empty() {
+        return Err(
+            "REDIS_URL is empty (check .env and that your shell is not exporting an empty REDIS_URL)"
+                .into(),
+        );
+    }
+    let redis = redis::connect(&redis_url)
+        .await
+        .map_err(|err| format!("failed to connect to Redis: {err}"))?;
     tracing::info!("connected to Redis");
 
     let session_store = RedisStore::new(redis.clone());
@@ -61,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_secure(session_cfg.secure)
         .with_http_only(session_cfg.http_only)
         .with_same_site(session_cfg.same_site)
-        .with_expiry(Expiry::OnInactivity(Duration::days(14)));
+        .with_expiry(Expiry::OnInactivity(Duration::minutes(60)));
 
     let today_override = parse_current_date_override()?;
     let state = AppState {
@@ -123,19 +134,8 @@ fn parse_current_date_override() -> Result<Option<NaiveDate>, Box<dyn std::error
     Ok(Some(date))
 }
 
-async fn connect_db(url: &str) -> Result<SqlitePool, sqlx::Error> {
-    let options = url
-        .parse::<SqliteConnectOptions>()?
-        .create_if_missing(true)
-        .foreign_keys(true);
-
-    SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect_with(options)
-        .await
-}
-
-async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
+    let conn = get_conn(pool).await?;
     for sql in [
         include_str!("../migrations/001_init.sql"),
         include_str!("../migrations/002_auth.sql"),
@@ -149,7 +149,7 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             if stmt.is_empty() {
                 continue;
             }
-            sqlx::query(stmt).execute(pool).await?;
+            execute(&conn, stmt, ()).await?;
         }
     }
     Ok(())

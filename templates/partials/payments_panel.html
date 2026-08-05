@@ -1,5 +1,7 @@
 {% import "partials/payment_macros.html" as pays %}
-<div class="panel-surface payments-panel">
+<div class="panel-surface payments-panel"
+  data-payments-year-expand="{{ payments_year_expand }}"
+  data-profile-id="{{ profile_id }}">
   <div class="panel-head payments-head">
     <div class="payments-head-copy">
       <h2>Payments</h2>
@@ -78,48 +80,80 @@
           <th class="cell-status">Status</th>
         </tr>
       </thead>
-      <tbody id="paymentsBody">
-        {% if payment_rows.is_empty() %}
+      {% if payment_years.is_empty() %}
+      <tbody>
         <tr><td colspan="7" class="empty-state">No payments match this filter.</td></tr>
-        {% else %}
-          {% for row in payment_rows %}
-            {% if row.is_year_header %}
-            <tr class="year-summary{% if row.is_current_year %} current-year{% endif %}">
-              <td class="cell-text" colspan="2">
-                <span class="year-label">{{ row.year_label }}</span>
-              </td>
-              <td>{{ row.payment }}</td>
-              <td>{{ row.principal }}</td>
-              <td>{{ row.interest }}</td>
-              <td></td>
-              <td class="cell-status"></td>
-            </tr>
-            {% else %}
-            <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.is_current_month %}payment-current-month {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
-              <td class="cell-text">{{ row.label_html|safe }}</td>
-              <td class="cell-text">{{ row.due }}</td>
-              <td>{{ row.payment }}</td>
-              <td>{{ row.principal }}</td>
-              <td>{{ row.interest }}</td>
-              <td>{{ row.balance }}</td>
-              <td class="cell-status">
-                {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
-              </td>
-            </tr>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
       </tbody>
+      {% else %}
+        {% for group in payment_years %}
+        <tbody id="pay-year-{{ group.year }}-rows"
+          class="pay-year-group{% if !group.expanded %} is-collapsed{% endif %}{% if group.is_current_year %} current-year{% endif %}"
+          data-year="{{ group.year }}"
+          data-expanded="{% if group.expanded %}true{% else %}false{% endif %}">
+          <tr class="year-summary{% if group.is_current_year %} current-year{% endif %}">
+            <td class="cell-text" colspan="2">
+              <button type="button" class="year-toggle"
+                aria-expanded="{% if group.expanded %}true{% else %}false{% endif %}"
+                aria-controls="pay-year-{{ group.year }}-rows"
+                data-year="{{ group.year }}">
+                <span class="year-chevron" aria-hidden="true"></span>
+                <span class="year-label">{{ group.year_label }}</span>
+              </button>
+            </td>
+            <td>{{ group.payment }}</td>
+            <td>{{ group.principal }}</td>
+            <td>{{ group.interest }}</td>
+            <td></td>
+            <td class="cell-status"></td>
+          </tr>
+          {% for row in group.rows %}
+          <tr class="{% if row.paid %}paid-row {% endif %}{% if row.is_extra %}extra-row {% endif %}{% if row.is_current_year %}current-year {% endif %}{% if row.is_current_month %}payment-current-month {% endif %}{% if row.zeroed %}zeroed-row{% endif %}">
+            <td class="cell-text">{{ row.label_html|safe }}</td>
+            <td class="cell-text">{{ row.due }}</td>
+            <td>{{ row.payment }}</td>
+            <td>{{ row.principal }}</td>
+            <td>{{ row.interest }}</td>
+            <td>{{ row.balance }}</td>
+            <td class="cell-status">
+              {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% endfor %}
+      {% endif %}
     </table>
   </div>
   <div class="pay-cards">
-    {% if payment_rows.is_empty() %}
+    {% if payment_years.is_empty() %}
     <p class="empty-state">No payments match this filter.</p>
     {% else %}
-      {% for row in payment_rows %}
-        {% if row.is_year_header %}
-        <div class="pay-year{% if row.is_current_year %} current-year{% endif %}">{{ row.year_label }}</div>
-        {% else %}
+      {% for group in payment_years %}
+      <details class="pay-year-group{% if group.is_current_year %} current-year{% endif %}"
+        data-year="{{ group.year }}"
+        data-expanded="{% if group.expanded %}true{% else %}false{% endif %}"
+        {% if group.expanded %}open{% endif %}>
+        <summary class="pay-year">
+          <div class="pay-year-head">
+            <span class="year-chevron" aria-hidden="true"></span>
+            <span class="year-label">{{ group.year_label }}</span>
+          </div>
+          <div class="pay-year-totals">
+            <span class="pay-meta-item">
+              <span class="pay-meta-badge" title="Total payment" aria-label="Total payment">T</span>
+              <span>{{ group.payment }}</span>
+            </span>
+            <span class="pay-meta-item">
+              <span class="pay-meta-badge" title="Principal" aria-label="Principal">P</span>
+              <span>{{ group.principal }}</span>
+            </span>
+            <span class="pay-meta-item">
+              <span class="pay-meta-badge" title="Interest" aria-label="Interest">I</span>
+              <span>{{ group.interest }}</span>
+            </span>
+          </div>
+        </summary>
+        {% for row in group.rows %}
         <article class="pay-card{% if row.paid %} paid{% endif %}{% if row.is_extra %} extra{% endif %}{% if row.is_current_month %} payment-current-month{% endif %}{% if row.zeroed %} zeroed{% endif %}">
           <div class="pay-card-main">
             <div class="pay-card-lead">
@@ -136,16 +170,24 @@
           </div>
           <div class="pay-card-foot">
             <div class="pay-card-meta">
-              <span>P: {{ row.principal }}</span>
-              <span class="pay-sep" aria-hidden="true">|</span>
-              <span>I: {{ row.interest }}</span>
-              <span class="pay-sep" aria-hidden="true">|</span>
-              <span>B: {{ row.balance_short }}</span>
+              <span class="pay-meta-item">
+                <span class="pay-meta-badge" title="Principal" aria-label="Principal">P</span>
+                <span>{{ row.principal }}</span>
+              </span>
+              <span class="pay-meta-item">
+                <span class="pay-meta-badge" title="Interest" aria-label="Interest">I</span>
+                <span>{{ row.interest }}</span>
+              </span>
+              <span class="pay-meta-item">
+                <span class="pay-meta-badge" title="Balance" aria-label="Balance">B</span>
+                <span>{{ row.balance_short }}</span>
+              </span>
             </div>
             {% call pays::payment_status_actions(profile_id, row, view_year, payment_filter, grain) %}
           </div>
         </article>
-        {% endif %}
+        {% endfor %}
+      </details>
       {% endfor %}
     {% endif %}
   </div>

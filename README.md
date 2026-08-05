@@ -16,7 +16,7 @@ It allows you keep track of your mortgage payments and share with anyone you are
 
 ## Tech
 
-This is a server side rendered rust app using htmx for any front end interactivity, and axum, sqlx, and sqlite for the backend.
+This is a server side rendered rust app using htmx for any front end interactivity, and axum with Turso/libSQL for the backend.
 
 
 ## Quick Start

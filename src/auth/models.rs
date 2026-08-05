@@ -2,20 +2,35 @@
 
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use libsql::params;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
+use crate::db::{begin, execute, get_conn, query_optional, DbPool, FromRow};
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
     pub email: String,
     pub created_at: String,
     pub avatar: Option<String>,
     pub default_tab: String,
+    pub payments_year_expand: String,
+}
+
+impl FromRow for User {
+    fn from_row(row: &libsql::Row) -> Result<Self, libsql::Error> {
+        Ok(Self {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            created_at: row.get(2)?,
+            avatar: row.get(3)?,
+            default_tab: row.get(4)?,
+            payments_year_expand: row.get(5)?,
+        })
+    }
 }
 
 impl User {
@@ -80,64 +95,103 @@ pub fn validate_password(password: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn find_user_by_id(pool: &SqlitePool, id: Uuid) -> AppResult<Option<User>> {
-    let row = sqlx::query_as::<_, User>(
+pub async fn find_user_by_id(pool: &DbPool, id: Uuid) -> AppResult<Option<User>> {
+    let conn = get_conn(pool).await?;
+    query_optional(
+        &conn,
         r#"
-        SELECT id, email, created_at, avatar, default_tab
+        SELECT id, email, created_at, avatar, default_tab, payments_year_expand
         FROM users
         WHERE id = ?
         "#,
+        params![id.to_string()],
     )
-    .bind(id.to_string())
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
+    .await
 }
 
-pub async fn find_user_by_email(pool: &SqlitePool, email: &str) -> AppResult<Option<(User, String)>> {
-    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String, String)>(
-        r#"
-        SELECT u.id, u.email, u.created_at, u.avatar, u.default_tab, c.password_hash
-        FROM users u
-        INNER JOIN local_credentials c ON c.user_id = u.id
-        WHERE u.email = ? COLLATE NOCASE
-        "#,
-    )
-    .bind(email)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|(id, email, created_at, avatar, default_tab, password_hash)| {
-        (
-            User {
-                id,
-                email,
-                created_at,
-                avatar,
-                default_tab,
-            },
-            password_hash,
+pub async fn find_user_by_email(pool: &DbPool, email: &str) -> AppResult<Option<(User, String)>> {
+    let conn = get_conn(pool).await?;
+    let mut rows = conn
+        .query(
+            r#"
+            SELECT u.id, u.email, u.created_at, u.avatar, u.default_tab, u.payments_year_expand,
+                   c.password_hash
+            FROM users u
+            INNER JOIN local_credentials c ON c.user_id = u.id
+            WHERE u.email = ? COLLATE NOCASE
+            "#,
+            params![email],
         )
-    }))
+        .await?;
+
+    let Some(row) = rows.next().await? else {
+        return Ok(None);
+    };
+
+    Ok(Some((
+        User {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            created_at: row.get(2)?,
+            avatar: row.get(3)?,
+            default_tab: row.get(4)?,
+            payments_year_expand: row.get(5)?,
+        },
+        row.get(6)?,
+    )))
 }
 
 pub async fn update_default_tab(
-    pool: &SqlitePool,
+    pool: &DbPool,
     user_id: Uuid,
     default_tab: &str,
 ) -> AppResult<()> {
-    let result = sqlx::query("UPDATE users SET default_tab = ? WHERE id = ?")
-        .bind(default_tab)
-        .bind(user_id.to_string())
-        .execute(pool)
-        .await?;
-    if result.rows_affected() == 0 {
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
+        "UPDATE users SET default_tab = ? WHERE id = ?",
+        params![default_tab, user_id.to_string()],
+    )
+    .await?;
+    if result == 0 {
         return Err(AppError::NotFound("Account not found.".into()));
     }
     Ok(())
 }
 
-pub async fn create_user(pool: &SqlitePool, email: &str, password: &str) -> AppResult<User> {
+pub async fn update_payments_year_expand(
+    pool: &DbPool,
+    user_id: Uuid,
+    payments_year_expand: &str,
+) -> AppResult<()> {
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
+        "UPDATE users SET payments_year_expand = ? WHERE id = ?",
+        params![payments_year_expand, user_id.to_string()],
+    )
+    .await?;
+    if result == 0 {
+        return Err(AppError::NotFound("Account not found.".into()));
+    }
+    Ok(())
+}
+
+pub async fn update_avatar(pool: &DbPool, user_id: Uuid, avatar: &str) -> AppResult<()> {
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
+        "UPDATE users SET avatar = ? WHERE id = ?",
+        params![avatar, user_id.to_string()],
+    )
+    .await?;
+    if result == 0 {
+        return Err(AppError::NotFound("Account not found.".into()));
+    }
+    Ok(())
+}
+
+pub async fn create_user(pool: &DbPool, email: &str, password: &str) -> AppResult<User> {
     if find_user_by_email(pool, email).await?.is_some() {
         return Err(AppError::BadRequest(
             "An account with that email already exists.".into(),
@@ -147,28 +201,27 @@ pub async fn create_user(pool: &SqlitePool, email: &str, password: &str) -> AppR
     let id = Uuid::new_v4();
     let password_hash = hash_password(password).await?;
 
-    let mut tx = pool.begin().await?;
+    let conn = get_conn(pool).await?;
+    let tx = begin(&conn).await?;
 
-    sqlx::query(
+    execute(
+        &tx,
         r#"
         INSERT INTO users (id, email)
         VALUES (?, ?)
         "#,
+        params![id.to_string(), email],
     )
-    .bind(id.to_string())
-    .bind(email)
-    .execute(&mut *tx)
     .await?;
 
-    sqlx::query(
+    execute(
+        &tx,
         r#"
         INSERT INTO local_credentials (user_id, password_hash)
         VALUES (?, ?)
         "#,
+        params![id.to_string(), password_hash.as_str()],
     )
-    .bind(id.to_string())
-    .bind(&password_hash)
-    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
@@ -178,51 +231,55 @@ pub async fn create_user(pool: &SqlitePool, email: &str, password: &str) -> AppR
         .ok_or_else(|| AppError::Internal("User vanished after create".into()))
 }
 
-pub async fn password_hash_for_user(pool: &SqlitePool, user_id: Uuid) -> AppResult<Option<String>> {
-    let row: Option<(String,)> = sqlx::query_as(
+pub async fn password_hash_for_user(pool: &DbPool, user_id: Uuid) -> AppResult<Option<String>> {
+    let conn = get_conn(pool).await?;
+    let row: Option<(String,)> = query_optional(
+        &conn,
         r#"
         SELECT password_hash
         FROM local_credentials
         WHERE user_id = ?
         "#,
+        params![user_id.to_string()],
     )
-    .bind(user_id.to_string())
-    .fetch_optional(pool)
     .await?;
     Ok(row.map(|(hash,)| hash))
 }
 
 pub async fn update_password(
-    pool: &SqlitePool,
+    pool: &DbPool,
     user_id: Uuid,
     new_password: &str,
 ) -> AppResult<()> {
     let password_hash = hash_password(new_password).await?;
-    let result = sqlx::query(
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
         r#"
         UPDATE local_credentials
         SET password_hash = ?
         WHERE user_id = ?
         "#,
+        params![password_hash.as_str(), user_id.to_string()],
     )
-    .bind(&password_hash)
-    .bind(user_id.to_string())
-    .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
+    if result == 0 {
         return Err(AppError::Internal("No credentials for user".into()));
     }
     Ok(())
 }
 
-pub async fn delete_user(pool: &SqlitePool, user_id: Uuid) -> AppResult<()> {
-    let result = sqlx::query("DELETE FROM users WHERE id = ?")
-        .bind(user_id.to_string())
-        .execute(pool)
-        .await?;
+pub async fn delete_user(pool: &DbPool, user_id: Uuid) -> AppResult<()> {
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
+        "DELETE FROM users WHERE id = ?",
+        params![user_id.to_string()],
+    )
+    .await?;
 
-    if result.rows_affected() == 0 {
+    if result == 0 {
         return Err(AppError::NotFound("Account not found.".into()));
     }
     Ok(())

@@ -5,13 +5,13 @@ use axum::{
     http::{header, request::Parts, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
-use sqlx::SqlitePool;
 use tower_sessions::Session;
 use uuid::Uuid;
 
 use super::middleware::{get_user_id, is_htmx};
 use super::models::find_user_by_id;
 use crate::app_state::AppState;
+use crate::db::DbPool;
 use crate::error::AppResult;
 
 #[derive(Debug, Clone)]
@@ -20,10 +20,11 @@ pub struct AuthUser {
     pub email: String,
     pub avatar: Option<String>,
     pub default_tab: String,
+    pub payments_year_expand: String,
 }
 
 /// Resolve the signed-in user from the session, if any.
-pub async fn current_user(session: &Session, pool: &SqlitePool) -> AppResult<Option<AuthUser>> {
+pub async fn current_user(session: &Session, pool: &DbPool) -> AppResult<Option<AuthUser>> {
     let Some(user_id) = get_user_id(session).await? else {
         return Ok(None);
     };
@@ -35,6 +36,7 @@ pub async fn current_user(session: &Session, pool: &SqlitePool) -> AppResult<Opt
         email: user.email,
         avatar: user.avatar,
         default_tab: user.default_tab,
+        payments_year_expand: user.payments_year_expand,
     }))
 }
 
@@ -70,6 +72,7 @@ impl FromRequestParts<AppState> for AuthUser {
             email: user.email,
             avatar: user.avatar,
             default_tab: user.default_tab,
+            payments_year_expand: user.payments_year_expand,
         })
     }
 }

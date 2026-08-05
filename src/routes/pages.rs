@@ -15,15 +15,15 @@ use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, add_improvement, build_dashboard, clear_paid, create_profile, delete_extra,
-    delete_improvement, delete_profile, empty_state, get_active_profile_id, list_extras,
-    list_improvements, list_paid_keys, list_payment_notes, list_profiles, load_profile,
-    mark_due_paid, rename_profile, set_active_profile, toggle_paid, update_improvement,
-    update_profile_loan, upsert_payment_note, PaymentFilter, ProfileOption, TabId,
+    delete_improvement, delete_profile, empty_state, list_extras, list_paid_keys, load_page_bundle,
+    load_profile, mark_due_paid, rename_profile, set_active_profile, toggle_paid,
+    update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter, PaymentsYearExpand,
+    ProfileOption, TabId,
 };
 use crate::templates::{
-    conflict_dashboard, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate,
-    ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate, LandingTemplate,
-    PaymentsTemplate, SummaryTemplate,
+    conflict_dashboard, panel_trigger, panel_update, CalendarTemplate, ChartTemplate,
+    DashboardTemplate, ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate,
+    LandingTemplate, PaymentsTemplate, SummaryTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -520,29 +520,11 @@ async fn toggle_paid_handler(
     };
     let version = parse_version(form.version)?;
     match toggle_paid(&state.pool, user.id, &id, &form.pay_key, version).await {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
+        Ok((_now_paid, next_version)) => {
             // Extra/recast paid status changes amortization, payment, and total interest.
             let invalidate_chart = form.pay_key.starts_with("extra:");
-            if tab == "payments" {
-                Ok(panel_update(
-                    payments_from_dashboard(d),
-                    "payments",
-                    invalidate_chart,
-                    version,
-                ))
-            } else {
-                Ok(panel_update(
-                    calendar_from_dashboard(d),
-                    "calendar",
-                    invalidate_chart,
-                    version,
-                ))
-            }
+            let keep = if tab == "payments" { "payments" } else { "calendar" };
+            Ok(panel_trigger(keep, invalidate_chart, next_version))
         }
         Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
         Err(err) => Err(err),
@@ -790,22 +772,10 @@ async fn load_page(
     q: &IndexQuery,
     user: &AuthUser,
 ) -> AppResult<IndexTemplate> {
-    let profiles = list_profiles(&state.pool, user.id).await?;
-    let mut active_id = get_active_profile_id(&state.pool, user.id).await?;
-    let mut active = match &active_id {
-        Some(id) => load_profile(&state.pool, user.id, id).await?,
-        None => None,
-    };
-    // Access may have been revoked; fall back to another visible profile.
-    if active_id.is_some() && active.is_none() {
-        let fallback = profiles.first().map(|p| p.id.as_str());
-        set_active_profile(&state.pool, user.id, fallback).await?;
-        active_id = fallback.map(|s| s.to_string());
-        active = match &active_id {
-            Some(id) => load_profile(&state.pool, user.id, id).await?,
-            None => None,
-        };
-    }
+    let bundle = load_page_bundle(&state.pool, user.id).await?;
+    let profiles = bundle.profiles;
+    let active = bundle.active;
+    let active_id = active.as_ref().map(|p| p.id.clone());
 
     let today = state.today();
     let view_year = q.year.unwrap_or_else(|| today.year());
@@ -819,25 +789,23 @@ async fn load_page(
 
     let dashboard = if let Some(profile) = &active {
         if profile.has_loan() {
-            let paid = list_paid_keys(&state.pool, &profile.id).await?;
-            let extras = list_extras(&state.pool, &profile.id).await?;
-            let improvements = list_improvements(&state.pool, &profile.id).await?;
-            let notes = list_payment_notes(&state.pool, &profile.id)
-                .await?
+            let notes = bundle
+                .notes
                 .into_iter()
                 .map(|n| (n.pay_key, n.note))
                 .collect();
             build_dashboard(
                 profile,
-                &paid,
-                &extras,
+                &bundle.paid,
+                &bundle.extras,
                 &notes,
-                &improvements,
+                &bundle.improvements,
                 view_year,
                 filter,
                 grain,
                 tab,
                 today,
+                PaymentsYearExpand::parse(&user.payments_year_expand),
             )
         } else {
             None
@@ -946,7 +914,8 @@ fn calendar_from_dashboard(d: crate::models::DashboardView) -> CalendarTemplate 
 fn payments_from_dashboard(d: crate::models::DashboardView) -> PaymentsTemplate {
     PaymentsTemplate {
         profile_id: d.profile_id,
-        payment_rows: d.payment_rows,
+        payment_years: d.payment_years,
+        payments_year_expand: d.payments_year_expand,
         payment_filter: d.payment_filter,
         summary: d.summary,
         extra_date_default: d.extra_date_default,

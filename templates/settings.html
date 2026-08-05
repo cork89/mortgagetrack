@@ -11,51 +11,74 @@
     <h1 id="auth-heading">Settings</h1>
   </header>
 
-  <div class="identity">
-    <div class="avatar-edit">
-      <img class="avatar avatar-md" src="{{ avatar_src }}" alt="" width="40" height="40" />
-      <button type="button" class="avatar-edit-btn" popovertarget="avatarPopover" aria-label="Change avatar" title="Change avatar">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-        </svg>
-      </button>
+  <div class="account-card">
+    <div class="identity">
+      <div class="avatar-edit">
+        <img class="avatar avatar-md" src="{{ avatar_src }}" alt="" width="40" height="40" />
+        <button type="button" class="avatar-edit-btn" popovertarget="avatarPopover" aria-label="Change avatar" title="Change avatar">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
+        </button>
+      </div>
+      <p class="email">
+        <span class="user-label">User</span>
+        <strong>{{ email }}</strong>
+      </p>
     </div>
-    <p class="email">
-      <span class="user-label">User</span>
-      <strong>{{ email }}</strong>
-    </p>
+
+    {% if avatar_updated %}
+    <p class="success" role="status">Avatar updated.</p>
+    {% endif %}
+    {% if avatar_error %}
+    <p class="error" role="alert">Could not update avatar. Pick one of the options and try again.</p>
+    {% endif %}
+    {% if default_tab_updated %}
+    <p class="success" role="status">Default tab updated.</p>
+    {% endif %}
+    {% if default_tab_error %}
+    <p class="error" role="alert">Could not update default tab. Pick one of the options and try again.</p>
+    {% endif %}
+    {% if year_expand_updated %}
+    <p class="success" role="status">Payment years preference updated.</p>
+    {% endif %}
+    {% if year_expand_error %}
+    <p class="error" role="alert">Could not update payment years. Pick one of the options and try again.</p>
+    {% endif %}
+    {% if password_updated %}
+    <p class="success" role="status">Password updated.</p>
+    {% endif %}
+
+    <form class="auth-form preference-form" method="post" action="/settings/default-tab">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <label class="field">
+        <span>Default home tab</span>
+        <select name="default_tab" aria-describedby="default-tab-hint"
+          hx-post="/settings/default-tab"
+          hx-trigger="change"
+          hx-include="closest form">
+          {% for opt in tab_options %}
+          <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+
+    <form class="auth-form preference-form" method="post" action="/settings/payments-year-expand">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <label class="field">
+        <span>Mortgage payments expanded</span>
+        <select name="payments_year_expand" aria-describedby="payments-year-expand-hint"
+          hx-post="/settings/payments-year-expand"
+          hx-trigger="change"
+          hx-include="closest form">
+          {% for opt in year_expand_options %}
+          <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
   </div>
-
-  {% if avatar_updated %}
-  <p class="success" role="status">Avatar updated.</p>
-  {% endif %}
-  {% if avatar_error %}
-  <p class="error" role="alert">Could not update avatar. Pick one of the options and try again.</p>
-  {% endif %}
-  {% if default_tab_updated %}
-  <p class="success" role="status">Default tab updated.</p>
-  {% endif %}
-  {% if default_tab_error %}
-  <p class="error" role="alert">Could not update default tab. Pick one of the options and try again.</p>
-  {% endif %}
-  {% if password_updated %}
-  <p class="success" role="status">Password updated.</p>
-  {% endif %}
-
-  <form class="auth-form preference-form" method="post" action="/settings/default-tab">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <label class="field">
-      <span>Default home tab</span>
-      <select name="default_tab" aria-describedby="default-tab-hint"
-        hx-post="/settings/default-tab"
-        hx-trigger="change"
-        hx-include="closest form">
-        {% for opt in tab_options %}
-        <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-  </form>
 
   <div class="stack">
     <button type="button" class="btn-primary auth-submit" popovertarget="passwordPopover">

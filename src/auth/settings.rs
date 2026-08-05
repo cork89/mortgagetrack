@@ -12,14 +12,14 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 use super::models::{
-    delete_user, password_hash_for_user, update_default_tab, update_password, validate_password,
-    verify_password,
+    delete_user, password_hash_for_user, update_avatar as set_user_avatar, update_default_tab,
+    update_password, update_payments_year_expand, validate_password, verify_password,
 };
 use crate::app_state::AppState;
 use crate::auth::{hx_redirect, is_htmx, purge_session, AuthUser, HOME_PATH};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
-use crate::models::TabId;
+use crate::models::{PaymentsYearExpand, TabId};
 use crate::templates::{
     AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate, TabOption,
 };
@@ -66,6 +66,10 @@ pub fn routes() -> Router<AppState> {
         .route("/settings/delete", post(delete_account))
         .route("/settings/avatar", post(update_avatar))
         .route("/settings/default-tab", post(update_default_tab_handler))
+        .route(
+            "/settings/payments-year-expand",
+            post(update_payments_year_expand_handler),
+        )
         .route("/avatars/{id}", get(avatar))
 }
 
@@ -74,6 +78,7 @@ pub struct SettingsQuery {
     pub password: Option<String>,
     pub avatar: Option<String>,
     pub tab: Option<String>,
+    pub years: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +96,7 @@ pub struct DeleteAccountForm {
 fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> SettingsTemplate {
     let current = resolved_avatar_id(&user.id, user.avatar.as_deref());
     let current_tab = TabId::parse(&user.default_tab);
+    let current_year_expand = PaymentsYearExpand::parse(&user.payments_year_expand);
     SettingsTemplate {
         csrf_token,
         email: user.email.clone(),
@@ -110,10 +116,20 @@ fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> 
                 selected: *tab == current_tab,
             })
             .collect(),
+        year_expand_options: PaymentsYearExpand::ALL
+            .iter()
+            .map(|mode| TabOption {
+                id: mode.as_str().to_string(),
+                label: mode.label().to_string(),
+                selected: *mode == current_year_expand,
+            })
+            .collect(),
         avatar_updated: q.avatar.as_deref() == Some("updated"),
         avatar_error: q.avatar.as_deref() == Some("error"),
         default_tab_updated: q.tab.as_deref() == Some("updated"),
         default_tab_error: q.tab.as_deref() == Some("error"),
+        year_expand_updated: q.years.as_deref() == Some("updated"),
+        year_expand_error: q.years.as_deref() == Some("error"),
         password_updated: q.password.as_deref() == Some("updated"),
         password_error: String::new(),
         delete_error: String::new(),
@@ -166,12 +182,7 @@ async fn update_avatar(
     if !is_valid_avatar(&form.avatar) {
         return hx_redirect(&headers, "/settings?avatar=error");
     }
-    if let Err(err) = sqlx::query("UPDATE users SET avatar = ? WHERE id = ?")
-        .bind(&form.avatar)
-        .bind(user.id.to_string())
-        .execute(&state.pool)
-        .await
-    {
+    if let Err(err) = set_user_avatar(&state.pool, user.id, &form.avatar).await {
         tracing::error!("Failed to update avatar: {}", err);
         return hx_redirect(&headers, "/settings?avatar=error");
     }
@@ -200,6 +211,28 @@ async fn update_default_tab_handler(
     hx_redirect(&headers, "/settings?tab=updated")
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdatePaymentsYearExpandForm {
+    pub payments_year_expand: String,
+}
+
+async fn update_payments_year_expand_handler(
+    State(state): State<AppState>,
+    _session: Session,
+    user: AuthUser,
+    headers: HeaderMap,
+    Form(form): Form<UpdatePaymentsYearExpandForm>,
+) -> Response {
+    let Some(mode) = PaymentsYearExpand::try_parse(&form.payments_year_expand) else {
+        return hx_redirect(&headers, "/settings?years=error");
+    };
+    if let Err(err) = update_payments_year_expand(&state.pool, user.id, mode.as_str()).await {
+        tracing::error!("Failed to update payments year expand: {}", err);
+        return hx_redirect(&headers, "/settings?years=error");
+    }
+    hx_redirect(&headers, "/settings?years=updated")
+}
+
 async fn change_password(
     State(state): State<AppState>,
     session: Session,
@@ -226,6 +259,7 @@ async fn change_password(
                         password: None,
                         avatar: None,
                         tab: None,
+                        years: None,
                     },
                 );
                 page.password_error = message;
@@ -295,6 +329,7 @@ async fn delete_account(
                         password: None,
                         avatar: None,
                         tab: None,
+                        years: None,
                     },
                 );
                 page.delete_error = message;

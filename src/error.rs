@@ -3,13 +3,12 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use sqlx::Error as SqlxError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error(transparent)]
-    Database(#[from] SqlxError),
+    #[error("{0}")]
+    Database(String),
 
     #[error(transparent)]
     Template(#[from] AskamaError),
@@ -28,6 +27,12 @@ pub enum AppError {
 
     #[error("{0}")]
     Internal(String),
+}
+
+impl From<libsql::Error> for AppError {
+    fn from(err: libsql::Error) -> Self {
+        Self::Database(err.to_string())
+    }
 }
 
 impl IntoResponse for AppError {

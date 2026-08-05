@@ -6,7 +6,7 @@ use axum::{
 
 use crate::models::{
     ChartPair, DashboardView, EmptyState, ExtraPayment, ImprovementRowView, MonthCell,
-    PaymentRowView, PayoffAccelerator, ProfileOption, YearStat, YearSummary,
+    PaymentYearGroup, PayoffAccelerator, ProfileOption, YearStat, YearSummary,
 };
 
 /// Wrap any Askama template so Axum handlers can return it as `text/html`.
@@ -31,6 +31,21 @@ where
     }
 }
 
+fn mark_panels_stale_trigger(
+    keep_tab: &str,
+    invalidate_chart: bool,
+    version: i64,
+) -> Option<HeaderValue> {
+    let trigger = serde_json::json!({
+        "markPanelsStale": {
+            "keep": keep_tab,
+            "invalidateChart": invalidate_chart,
+            "version": version
+        }
+    });
+    HeaderValue::from_str(&trigger.to_string()).ok()
+}
+
 /// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale
 /// and advance the optimistic-concurrency version after a successful write.
 pub fn panel_update<T: Template>(
@@ -40,14 +55,19 @@ pub fn panel_update<T: Template>(
     version: i64,
 ) -> Response {
     let mut response = HtmlTemplate(template).into_response();
-    let trigger = serde_json::json!({
-        "markPanelsStale": {
-            "keep": keep_tab,
-            "invalidateChart": invalidate_chart,
-            "version": version
-        }
-    });
-    if let Ok(value) = HeaderValue::from_str(&trigger.to_string()) {
+    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart, version) {
+        response.headers_mut().insert(
+            HeaderName::from_static("hx-trigger"),
+            value,
+        );
+    }
+    response
+}
+
+/// Empty success for optimistic UI writes: bump version and mark other tabs stale.
+pub fn panel_trigger(keep_tab: &str, invalidate_chart: bool, version: i64) -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart, version) {
         response.headers_mut().insert(
             HeaderName::from_static("hx-trigger"),
             value,
@@ -141,7 +161,8 @@ pub struct CalendarTemplate {
 #[template(path = "partials/payments.html")]
 pub struct PaymentsTemplate {
     pub profile_id: String,
-    pub payment_rows: Vec<PaymentRowView>,
+    pub payment_years: Vec<PaymentYearGroup>,
+    pub payments_year_expand: String,
     pub payment_filter: String,
     pub summary: YearSummary,
     pub extra_date_default: String,
@@ -242,10 +263,13 @@ pub struct SettingsTemplate {
     pub avatar_src: String,
     pub avatar_options: Vec<AvatarOption>,
     pub tab_options: Vec<TabOption>,
+    pub year_expand_options: Vec<TabOption>,
     pub avatar_updated: bool,
     pub avatar_error: bool,
     pub default_tab_updated: bool,
     pub default_tab_error: bool,
+    pub year_expand_updated: bool,
+    pub year_expand_error: bool,
     pub password_updated: bool,
     pub password_error: String,
     pub delete_error: String,

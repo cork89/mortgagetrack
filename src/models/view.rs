@@ -60,6 +60,58 @@ impl TabId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentsYearExpand {
+    Current,
+    All,
+    CurrentFuture,
+}
+
+impl PaymentsYearExpand {
+    pub const ALL: [PaymentsYearExpand; 3] = [
+        PaymentsYearExpand::Current,
+        PaymentsYearExpand::All,
+        PaymentsYearExpand::CurrentFuture,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PaymentsYearExpand::Current => "current",
+            PaymentsYearExpand::All => "all",
+            PaymentsYearExpand::CurrentFuture => "current_future",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PaymentsYearExpand::Current => "Current year only",
+            PaymentsYearExpand::All => "All years",
+            PaymentsYearExpand::CurrentFuture => "Current and future",
+        }
+    }
+
+    pub fn try_parse(s: &str) -> Option<Self> {
+        match s {
+            "current" => Some(PaymentsYearExpand::Current),
+            "all" => Some(PaymentsYearExpand::All),
+            "current_future" => Some(PaymentsYearExpand::CurrentFuture),
+            _ => None,
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        Self::try_parse(s).unwrap_or(PaymentsYearExpand::Current)
+    }
+
+    pub fn expands(self, year: i32, today_year: i32) -> bool {
+        match self {
+            PaymentsYearExpand::Current => year == today_year,
+            PaymentsYearExpand::All => true,
+            PaymentsYearExpand::CurrentFuture => year >= today_year,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaymentFilter {
     All,
     Unpaid,
@@ -120,6 +172,8 @@ pub struct PaymentChip {
     pub amount: String,
     pub status: String,
     pub status_text: String,
+    pub unpaid_status: String,
+    pub unpaid_status_text: String,
     pub is_extra: bool,
     pub aria: String,
 }
@@ -134,8 +188,6 @@ pub struct MonthCell {
 
 #[derive(Debug, Clone)]
 pub struct PaymentRowView {
-    pub is_year_header: bool,
-    pub year_label: String,
     pub is_current_year: bool,
     pub is_current_month: bool,
     pub label_html: String,
@@ -152,6 +204,18 @@ pub struct PaymentRowView {
     pub zeroed: bool,
     pub has_note: bool,
     pub note_json: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaymentYearGroup {
+    pub year: i32,
+    pub year_label: String,
+    pub is_current_year: bool,
+    pub expanded: bool,
+    pub payment: String,
+    pub principal: String,
+    pub interest: String,
+    pub rows: Vec<PaymentRowView>,
 }
 
 #[derive(Debug, Clone)]
@@ -224,7 +288,8 @@ pub struct DashboardView {
     pub year_stats: Vec<YearStat>,
     pub view_year: i32,
     pub months: Vec<MonthCell>,
-    pub payment_rows: Vec<PaymentRowView>,
+    pub payment_years: Vec<PaymentYearGroup>,
+    pub payments_year_expand: String,
     pub payment_filter: String,
     pub summary: YearSummary,
     pub chart: ChartPair,
@@ -293,19 +358,25 @@ fn status_label(status: &str) -> &'static str {
     }
 }
 
-fn chip_for(row: &ScheduleRow, paid: &HashSet<String>, today: NaiveDate) -> PaymentChip {
-    let is_paid = paid.contains(&row.pay_key);
-    let status = payment_status(row.due, is_paid, today).to_string();
-    let status_text = if row.kind == RowKind::Extra {
+fn chip_status_text(row: &ScheduleRow, status: &str) -> String {
+    if row.kind == RowKind::Extra {
         let kind = if row.recast { "Recast" } else { "Extra" };
         if status == "paid" {
             format!("{kind} · Paid")
         } else {
-            format!("{kind} · {}", status_label(&status))
+            format!("{kind} · {}", status_label(status))
         }
     } else {
-        status_label(&status).to_string()
-    };
+        status_label(status).to_string()
+    }
+}
+
+fn chip_for(row: &ScheduleRow, paid: &HashSet<String>, today: NaiveDate) -> PaymentChip {
+    let is_paid = paid.contains(&row.pay_key);
+    let status = payment_status(row.due, is_paid, today).to_string();
+    let unpaid_status = payment_status(row.due, false, today).to_string();
+    let status_text = chip_status_text(row, &status);
+    let unpaid_status_text = chip_status_text(row, &unpaid_status);
     let aria = if status == "paid" {
         "Mark unpaid"
     } else {
@@ -316,6 +387,8 @@ fn chip_for(row: &ScheduleRow, paid: &HashSet<String>, today: NaiveDate) -> Paym
         amount: money(row.payment),
         status,
         status_text,
+        unpaid_status,
+        unpaid_status_text,
         is_extra: row.kind == RowKind::Extra,
         aria: aria.to_string(),
     }
@@ -332,6 +405,7 @@ pub fn build_dashboard(
     chart_grain: &str,
     active_tab: TabId,
     today: NaiveDate,
+    year_expand: PaymentsYearExpand,
 ) -> Option<DashboardView> {
     let loan = profile.loan()?;
     let paid: HashSet<String> = paid_keys.iter().cloned().collect();
@@ -349,7 +423,7 @@ pub fn build_dashboard(
     let year_stats = year_strip(schedule, &paid, extras.len(), loan.principal, today);
     let accelerator = payoff_accelerator(schedule, &paid, extras, &loan);
     let months = calendar_months(schedule, &paid, view_year, today);
-    let (payment_rows, summary) = payments_table(
+    let (payment_years, summary) = payments_table(
         schedule,
         &paid,
         notes,
@@ -358,6 +432,7 @@ pub fn build_dashboard(
         built.total_interest,
         filter,
         today,
+        year_expand,
     );
     let chart = ChartPair {
         grain: if chart_grain == "yearly" {
@@ -405,7 +480,8 @@ pub fn build_dashboard(
         year_stats,
         view_year,
         months,
-        payment_rows,
+        payment_years,
+        payments_year_expand: year_expand.as_str().to_string(),
         payment_filter: filter.as_str().to_string(),
         summary,
         chart,
@@ -742,7 +818,8 @@ fn payments_table(
     total_interest: f64,
     filter: PaymentFilter,
     today: NaiveDate,
-) -> (Vec<PaymentRowView>, YearSummary) {
+    year_expand: PaymentsYearExpand,
+) -> (Vec<PaymentYearGroup>, YearSummary) {
     let y = today.year();
     let rows: Vec<&ScheduleRow> = schedule
         .iter()
@@ -772,29 +849,7 @@ fn payments_table(
         .map(|r| r.pay_key.as_str());
 
     let mut out = Vec::new();
-    if rows.is_empty() {
-        out.push(PaymentRowView {
-            is_year_header: false,
-            year_label: String::new(),
-            is_current_year: false,
-            is_current_month: false,
-            label_html: String::new(),
-            due: String::new(),
-            payment: String::new(),
-            principal: String::new(),
-            interest: String::new(),
-            balance: String::new(),
-            balance_short: String::new(),
-            pay_key: String::new(),
-            paid: false,
-            is_extra: false,
-            extra_id: String::new(),
-            zeroed: false,
-            has_note: false,
-            note_json: "\"\"".into(),
-        });
-        // empty marker handled in template via empty check on payment_rows length + special flag
-    } else {
+    if !rows.is_empty() {
         let mut groups: Vec<(i32, Vec<&ScheduleRow>)> = Vec::new();
         for row in rows {
             if groups.last().map(|(yr, _)| *yr) != Some(row.due.year()) {
@@ -807,27 +862,7 @@ fn payments_table(
             let payment_total: f64 = group.iter().map(|r| r.payment).sum();
             let principal_total: f64 = group.iter().map(|r| r.principal).sum();
             let interest_total: f64 = group.iter().map(|r| r.interest).sum();
-            out.push(PaymentRowView {
-                is_year_header: true,
-                year_label: year.to_string(),
-                is_current_year: year == y,
-                is_current_month: false,
-                label_html: String::new(),
-                due: String::new(),
-                payment: money(payment_total),
-                principal: money(principal_total),
-                interest: money(interest_total),
-                balance: String::new(),
-                balance_short: String::new(),
-                pay_key: String::new(),
-                paid: false,
-                is_extra: false,
-                extra_id: String::new(),
-                zeroed: false,
-                has_note: false,
-                note_json: "\"\"".into(),
-            });
-
+            let mut year_rows = Vec::with_capacity(group.len());
             for row in group {
                 let is_paid = paid.contains(&row.pay_key);
                 let label_html = if row.kind == RowKind::Extra {
@@ -840,9 +875,7 @@ fn payments_table(
                     row.label.clone()
                 };
                 let (has_note, note_json) = note_fields(notes, &row.pay_key);
-                out.push(PaymentRowView {
-                    is_year_header: false,
-                    year_label: String::new(),
+                year_rows.push(PaymentRowView {
                     is_current_year: row.due.year() == y,
                     is_current_month: current_month_key == Some(row.pay_key.as_str()),
                     label_html,
@@ -861,6 +894,16 @@ fn payments_table(
                     note_json,
                 });
             }
+            out.push(PaymentYearGroup {
+                year,
+                year_label: year.to_string(),
+                is_current_year: year == y,
+                expanded: year_expand.expands(year, y),
+                payment: money(payment_total),
+                principal: money(principal_total),
+                interest: money(interest_total),
+                rows: year_rows,
+            });
         }
     }
 
@@ -892,19 +935,6 @@ fn payments_table(
         balance_after: money(bal),
         hint: format!("{scheduled_count} scheduled · {pct_paid}% paid"),
     };
-
-    // Fix empty marker: use empty payment_rows when no matches
-    if schedule.is_empty()
-        || (filter != PaymentFilter::All
-            && out.len() == 1
-            && !out[0].is_year_header
-            && out[0].pay_key.is_empty())
-    {
-        // replace with empty vec so template shows empty state
-        if out.len() == 1 && out[0].pay_key.is_empty() && !out[0].is_year_header {
-            out.clear();
-        }
-    }
 
     (out, summary)
 }

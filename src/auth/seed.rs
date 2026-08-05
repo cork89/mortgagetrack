@@ -1,7 +1,6 @@
-use sqlx::SqlitePool;
-
 use super::models::{create_user, find_user_by_email, validate_email, validate_password};
 use crate::config::env_bool;
+use crate::db::DbPool;
 use crate::error::AppResult;
 
 const TEST_USERS: &[(&str, &str)] = &[
@@ -13,7 +12,7 @@ const TEST_USERS: &[(&str, &str)] = &[
 ///
 /// Requires `ALLOW_DEV_SEED_USERS=true` plus both email and password for each user.
 /// Skips emails that already exist. Intended for local development only.
-pub async fn ensure_test_user(pool: &SqlitePool) -> AppResult<()> {
+pub async fn ensure_test_user(pool: &DbPool) -> AppResult<()> {
     if !env_bool("ALLOW_DEV_SEED_USERS", false) {
         return Ok(());
     }
@@ -24,7 +23,7 @@ pub async fn ensure_test_user(pool: &SqlitePool) -> AppResult<()> {
     Ok(())
 }
 
-async fn ensure_one(pool: &SqlitePool, email_key: &str, password_key: &str) -> AppResult<()> {
+async fn ensure_one(pool: &DbPool, email_key: &str, password_key: &str) -> AppResult<()> {
     let email = match std::env::var(email_key) {
         Ok(value) if !value.trim().is_empty() => value,
         _ => return Ok(()),

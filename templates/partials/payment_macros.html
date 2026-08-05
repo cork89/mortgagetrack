@@ -12,11 +12,11 @@
     </svg>
   </button>
   {% if !row.zeroed %}
-  <button type="button" class="status-btn{% if row.paid %} paid{% endif %}"
+  <button type="button" class="status-btn paid-toggle{% if row.paid %} paid{% endif %}"
+    data-pay-key="{{ row.pay_key }}"
     hx-post="/profiles/{{ profile_id }}/toggle-paid"
     hx-vals='{"pay_key":"{{ row.pay_key }}","tab":"payments","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-    hx-target="#panel-payments"
-    hx-swap="innerHTML show:none"
+    hx-swap="none"
     aria-label="{% if row.paid %}Mark unpaid{% else %}Mark paid{% endif %}"
     title="{% if row.paid %}Mark unpaid{% else %}Mark paid{% endif %}">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">

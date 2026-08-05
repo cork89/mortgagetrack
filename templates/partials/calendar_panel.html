@@ -24,14 +24,15 @@
       <div class="month-chips">
         {% for chip in month.chips %}
         <button type="button"
-          class="pay-chip {{ chip.status }}{% if chip.is_extra %} extra{% endif %}"
+          class="pay-chip paid-toggle {{ chip.status }}{% if chip.is_extra %} extra{% endif %}"
           data-pay="{{ chip.pay_key }}"
+          data-unpaid-status="{{ chip.unpaid_status }}"
+          data-unpaid-status-text="{{ chip.unpaid_status_text }}"
           aria-pressed="{% if chip.status == "paid" %}true{% else %}false{% endif %}"
           aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
           hx-post="/profiles/{{ profile_id }}/toggle-paid"
           hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-          hx-target="#panel-calendar"
-          hx-swap="{{ hx_swap }}">
+          hx-swap="none">
           <strong>{{ chip.amount }}</strong>
           <span class="chip-status">{{ chip.status_text }}</span>
         </button>

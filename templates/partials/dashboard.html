@@ -57,7 +57,8 @@
 
   <div class="panel{% if d.active_tab == "payments" %} active{% endif %}" id="panel-payments" role="tabpanel" aria-labelledby="tab-payments">
     {% let profile_id = d.profile_id.as_str() %}
-    {% let payment_rows = &d.payment_rows %}
+    {% let payment_years = &d.payment_years %}
+    {% let payments_year_expand = d.payments_year_expand.as_str() %}
     {% let payment_filter = d.payment_filter.as_str() %}
     {% let summary = &d.summary %}
     {% let extra_date_default = d.extra_date_default.as_str() %}

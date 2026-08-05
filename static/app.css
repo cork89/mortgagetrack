@@ -236,6 +236,12 @@ button:active,
 
 .btn-primary:hover { background: var(--sea-deep); }
 
+.btn-primary:disabled,
+.btn-danger:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--ink-soft);
@@ -245,6 +251,45 @@ button:active,
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.6);
   color: var(--ink);
+}
+
+button.is-loading,
+.btn-primary.is-loading,
+.btn-danger.is-loading,
+.btn-ghost.is-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+  cursor: wait;
+  transform: none;
+}
+
+button.is-loading::after,
+.btn-primary.is-loading::after,
+.btn-danger.is-loading::after,
+.btn-ghost.is-loading::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.15em;
+  height: 1.15em;
+  margin: -0.575em 0 0 -0.575em;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.65s linear infinite;
+}
+
+.btn-ghost.is-loading::after {
+  border-color: color-mix(in srgb, var(--ink-soft) 35%, transparent);
+  border-top-color: var(--sea);
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hint {
@@ -957,6 +1002,10 @@ thead th {
 tbody tr { transition: background 0.15s; }
 tbody tr:hover { background: rgba(168, 212, 207, 0.18); }
 tbody tr.paid-row { background: rgba(47, 111, 106, 0.06); }
+tbody tr.filter-hidden,
+.pay-card.filter-hidden {
+  display: none;
+}
 tbody tr.current-year td:first-child {
   box-shadow: inset 3px 0 0 var(--sea);
 }
@@ -980,6 +1029,10 @@ tbody tr.zeroed-row td:first-child {
 
 tbody tr.zeroed-row.current-year td:first-child {
   box-shadow: inset 3px 0 0 var(--zeroed);
+}
+
+tbody.pay-year-group.is-collapsed tr:not(.year-summary) {
+  display: none;
 }
 
 tbody tr.year-summary {
@@ -1006,11 +1059,41 @@ tbody tr.year-summary.current-year td:first-child {
   box-shadow: inset 3px 0 0 var(--sea), 0 1px 0 rgba(30, 74, 71, 0.06);
 }
 
+tbody tr.year-summary .year-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
 tbody tr.year-summary .year-label {
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--sea-deep);
   letter-spacing: -0.01em;
+}
+
+.year-chevron {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--sea-deep);
+  border-bottom: 2px solid var(--sea-deep);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+tbody.pay-year-group:not(.is-collapsed) .year-chevron,
+details.pay-year-group[open] > summary .year-chevron {
+  transform: rotate(45deg);
 }
 
 .status-actions {
@@ -1046,9 +1129,10 @@ tbody tr.year-summary .year-label {
 
   .payments-toolbar {
     display: grid;
-    grid-template-columns: 1fr 1.2fr 1fr;
+    grid-template-columns: 1fr 1.2fr auto;
     gap: 0.45rem;
     width: 100%;
+    align-items: center;
   }
 
   .payments-toolbar .filter-label {
@@ -1065,7 +1149,8 @@ tbody tr.year-summary .year-label {
   .payments-toolbar > .extra-disclosure {
     grid-column: 3;
     grid-row: 1;
-    width: 100%;
+    width: auto;
+    justify-self: end;
   }
 
   .payments-toolbar .filter-label > span {
@@ -1081,8 +1166,7 @@ tbody tr.year-summary .year-label {
   }
 
   .payments-toolbar select,
-  .payments-toolbar .btn-compact,
-  .payments-toolbar .extra-disclosure > summary {
+  .payments-toolbar > .btn-compact {
     width: 100%;
     min-width: 0;
     justify-content: center;
@@ -1090,6 +1174,19 @@ tbody tr.year-summary .year-label {
     font-size: 0.8rem;
     padding: 0.55rem 0.4rem;
     white-space: nowrap;
+  }
+
+  .payments-toolbar .extra-disclosure > summary.btn-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+    min-width: 2.4rem;
+    padding: 0;
+    aspect-ratio: 1;
+  }
+
+  .payments-toolbar .extra-disclosure > summary.btn-icon svg {
+    width: 1.15rem;
+    height: 1.15rem;
   }
 
   .btn-label-full { display: none; }
@@ -1146,14 +1243,55 @@ tbody tr.year-summary .year-label {
     padding: 0.75rem 0.85rem 1rem;
   }
 
+  details.pay-year-group {
+    margin: 0 0 0.85rem;
+  }
+
+  details.pay-year-group:last-child {
+    margin-bottom: 0;
+  }
+
   .pay-year {
+    display: grid;
+    gap: 0.45rem;
     margin: 0.45rem 0 0.7rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .pay-year::-webkit-details-marker,
+  .pay-year::marker {
+    display: none;
+    content: "";
+  }
+
+  .pay-year-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
     font-family: var(--font-display);
     font-size: 1.7rem;
     font-weight: 700;
     letter-spacing: -0.03em;
     line-height: 1.1;
     color: var(--sea-deep);
+  }
+
+  .pay-year .year-chevron {
+    width: 0.65rem;
+    height: 0.65rem;
+  }
+
+  .pay-year-totals {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.65rem;
+    padding-left: 1.2rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--ink-soft);
   }
 
   .pay-card {
@@ -1244,15 +1382,34 @@ tbody tr.year-summary .year-label {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.2rem 0.35rem;
+    gap: 0.35rem 0.65rem;
     min-width: 0;
     font-size: 0.78rem;
     font-weight: 500;
     color: var(--ink-soft);
   }
 
-  .pay-sep {
-    color: rgba(61, 79, 85, 0.4);
+  .pay-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .pay-meta-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 50%;
+    background: var(--sea);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    flex-shrink: 0;
+    cursor: help;
   }
 
   .pay-card .status-actions {
@@ -2298,14 +2455,19 @@ tbody tr.year-summary .year-label {
   text-align: right;
 }
 
+.account-panel .account-card {
+  display: grid;
+  gap: 1rem;
+  padding: 0.85rem 1rem 1rem;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--line);
+}
+
 .account-panel .identity {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid var(--line);
 }
 
 .avatar-edit {
@@ -2362,10 +2524,11 @@ tbody tr.year-summary .year-label {
 .account-panel .preference-form {
   display: grid;
   gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid var(--line);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .account-panel .stack {
