@@ -286,6 +286,13 @@ button.is-loading::after,
   border-top-color: var(--sea);
 }
 
+/* Unpaid mark-paid: green spinner on the light button surface */
+.status-btn.paid-toggle.is-loading:not(.paid)::after,
+.pay-chip.paid-toggle.is-loading:not(.paid)::after {
+  border-color: color-mix(in srgb, var(--sea) 30%, transparent);
+  border-top-color: var(--sea);
+}
+
 @keyframes btn-spin {
   to {
     transform: rotate(360deg);

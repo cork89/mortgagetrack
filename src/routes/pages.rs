@@ -523,10 +523,32 @@ async fn toggle_paid_handler(
     let version = parse_version(form.version)?;
     match toggle_paid(&state.pool, user.id, &id, &form.pay_key, version).await {
         Ok((_now_paid, next_version)) => {
-            // Extra/recast paid status changes amortization, payment, and total interest.
-            let invalidate_chart = form.pay_key.starts_with("extra:");
+            // Extra/recast paid status changes amortization, payment, and total interest —
+            // refresh the active panel instead of relying on optimistic UI alone.
+            if form.pay_key.starts_with("extra:") {
+                let page = load_page(&state, &q, &user).await?;
+                let d = page
+                    .dashboard
+                    .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+                let version = d.profile_version;
+                return if tab == "payments" {
+                    Ok(panel_update(
+                        payments_from_dashboard(d),
+                        "payments",
+                        true,
+                        version,
+                    ))
+                } else {
+                    Ok(panel_update(
+                        calendar_from_dashboard(d),
+                        "calendar",
+                        true,
+                        version,
+                    ))
+                };
+            }
             let keep = if tab == "payments" { "payments" } else { "calendar" };
-            Ok(panel_trigger(keep, invalidate_chart, next_version))
+            Ok(panel_trigger(keep, false, next_version))
         }
         Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
         Err(err) => Err(err),

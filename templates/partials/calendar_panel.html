@@ -32,7 +32,7 @@
           aria-label="{{ chip.amount }}, {{ chip.status_text }}. {{ chip.aria }}"
           hx-post="/profiles/{{ profile_id }}/toggle-paid"
           hx-vals='{"pay_key":"{{ chip.pay_key }}","tab":"calendar","year":"{{ view_year }}","filter":"{{ payment_filter }}","grain":"{{ grain }}"}'
-          hx-swap="none">
+          {% if chip.is_extra %}hx-target="#panel-calendar" hx-swap="innerHTML show:none"{% else %}hx-swap="none"{% endif %}>
           <strong>{{ chip.amount }}</strong>
           <span class="chip-status">{{ chip.status_text }}</span>
         </button>

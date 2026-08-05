@@ -43,6 +43,14 @@
     return elt instanceof HTMLElement && elt.classList.contains("paid-toggle");
   }
 
+  // Extra/recast toggles change interest totals — server refreshes the panel.
+  function isExtraPaidToggle(elt) {
+    if (!(elt instanceof HTMLElement)) return false;
+    if (elt.classList.contains("extra")) return true;
+    const key = paidToggleKey(elt);
+    return key.startsWith("extra:");
+  }
+
   function paymentFilter() {
     return dashboard()?.dataset.filter || "all";
   }
@@ -106,6 +114,18 @@
   document.addEventListener("htmx:beforeRequest", (e) => {
     const elt = e.detail.elt;
     if (isPaidToggle(elt)) {
+      // Extras rebuild the schedule; wait for the panel swap instead of flipping locally.
+      if (isExtraPaidToggle(elt)) {
+        const buttons = loadingButtonsFor(
+          elt,
+          e.detail.requestConfig?.triggeringEvent,
+        );
+        if (buttons.length) {
+          elt._htmxLoadingButtons = buttons;
+          setButtonsLoading(buttons, true);
+        }
+        return;
+      }
       const paid = elt.classList.contains("paid");
       elt._paidSnapshot = { key: paidToggleKey(elt), paid };
       applyPaidToggleKey(elt._paidSnapshot.key, !paid);
@@ -129,6 +149,12 @@
           applyPaidToggleKey(elt._paidSnapshot.key, elt._paidSnapshot.paid);
         }
         delete elt._paidSnapshot;
+      }
+      // Extra toggles may have used the loading-button path; clear it if still present
+      // (successful panel swaps replace the button, so this mainly covers failures).
+      if (elt._htmxLoadingButtons) {
+        setButtonsLoading(elt._htmxLoadingButtons, false);
+        delete elt._htmxLoadingButtons;
       }
       return;
     }
