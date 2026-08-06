@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session_store.clone().spawn_cleanup_task();
 
     // Seed after schema is ready, but don't block the listen socket (Argon2 is slow
-    // and delays Cloudflare Containers' port-ready check).
+    // and delays container port-ready checks on hosted runtimes).
     {
         let pool = pool.clone();
         tokio::spawn(async move {
@@ -130,9 +130,9 @@ fn parse_current_date_override() -> Result<Option<NaiveDate>, Box<dyn std::error
 }
 
 async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    // D1 schema is applied via `wrangler d1 migrations`; skip embedded SQL there.
-    if matches!(pool, DbPool::D1(_)) {
-        tracing::info!("skipping embedded SQL migrations (DB_MODE=d1)");
+    // Remote SQL RPC schema is applied by the hosting gateway; skip embedded SQL there.
+    if matches!(pool, DbPool::SqlRpc(_)) {
+        tracing::info!("skipping embedded SQL migrations (DB_MODE=sql_rpc)");
         return Ok(());
     }
 

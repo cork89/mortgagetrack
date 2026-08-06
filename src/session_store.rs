@@ -1,4 +1,4 @@
-//! SQLite / D1-backed tower-sessions store.
+//! SQLite / SQL-RPC-backed tower-sessions store.
 
 use async_trait::async_trait;
 use time::OffsetDateTime;

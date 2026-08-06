@@ -1,4 +1,4 @@
-//! D1 HTTP RPC client (talks to the Cloudflare Worker DB gateway).
+//! HTTP SQL RPC client (talks to a gateway that executes SQL remotely).
 
 use std::sync::Arc;
 
@@ -9,11 +9,11 @@ use super::value::{IntoSqlParams, Row, SqlValue};
 use crate::error::{AppError, AppResult};
 
 #[derive(Clone)]
-pub struct D1Client {
-    inner: Arc<D1Inner>,
+pub struct SqlRpcClient {
+    inner: Arc<SqlRpcInner>,
 }
 
-struct D1Inner {
+struct SqlRpcInner {
     http: Client,
     rpc_url: String,
     secret: String,
@@ -37,10 +37,10 @@ struct RpcResponse {
     rows: Option<Vec<Vec<serde_json::Value>>>,
 }
 
-impl D1Client {
+impl SqlRpcClient {
     pub fn new(rpc_url: String, secret: String) -> Self {
         Self {
-            inner: Arc::new(D1Inner {
+            inner: Arc::new(SqlRpcInner {
                 http: Client::new(),
                 rpc_url: rpc_url.trim_end_matches('/').to_string(),
                 secret,
@@ -70,18 +70,18 @@ impl D1Client {
             .json(&body)
             .send()
             .await
-            .map_err(|err| AppError::Database(format!("D1 RPC request failed: {err}")))?;
+            .map_err(|err| AppError::Database(format!("SQL RPC request failed: {err}")))?;
 
         let status = response.status();
         let parsed: RpcResponse = response.json().await.map_err(|err| {
-            AppError::Database(format!("D1 RPC invalid JSON (HTTP {status}): {err}"))
+            AppError::Database(format!("SQL RPC invalid JSON (HTTP {status}): {err}"))
         })?;
 
         if !parsed.ok {
             return Err(AppError::Database(
                 parsed
                     .error
-                    .unwrap_or_else(|| format!("D1 RPC error (HTTP {status})")),
+                    .unwrap_or_else(|| format!("SQL RPC error (HTTP {status})")),
             ));
         }
         Ok(parsed)
@@ -108,7 +108,7 @@ impl D1Client {
     }
 
     pub async fn execute_batch(&self, sql: &str) -> AppResult<()> {
-        // Worker splits on ';' for exec-style batches.
+        // Gateway splits on ';' for exec-style batches.
         let _ = self.rpc("batch_sql", sql, Vec::new()).await?;
         Ok(())
     }
