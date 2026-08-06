@@ -4,6 +4,7 @@
 //! - [`models`] — users, credentials, password hashing
 //! - [`extractor`] — [`AuthUser`] + HTMX-aware rejection
 //! - [`handlers`] — register / login / logout routes
+//! - [`password_reset`] — forgot / reset password
 //! - [`settings`] — change password / delete account
 //! - [`middleware`] — session helpers and HTMX redirect utilities
 
@@ -13,12 +14,15 @@ mod handlers;
 mod middleware;
 mod models;
 mod next;
+mod password_reset;
 pub mod rate_limit;
 mod seed;
 
 use axum::Router;
 
 use crate::app_state::AppState;
+use crate::db::DbPool;
+use crate::error::AppResult;
 
 pub use extractor::{current_user, AuthUser};
 pub use middleware::{
@@ -32,5 +36,10 @@ pub use seed::ensure_test_user;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .merge(handlers::routes())
+        .merge(password_reset::routes())
         .merge(settings::routes())
+}
+
+pub async fn ensure_password_reset_schema(pool: &DbPool) -> AppResult<()> {
+    password_reset::ensure_schema(pool).await
 }

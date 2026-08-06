@@ -180,7 +180,11 @@ async fn index(
 ) -> AppResult<Response> {
     let csrf_token = csrf::ensure_token(&session).await?;
     let Some(user) = current_user(&session, &state.pool).await? else {
-        return Ok(HtmlTemplate(LandingTemplate { csrf_token }).into_response());
+        return Ok(HtmlTemplate(LandingTemplate {
+            csrf_token,
+            app_name: state.app_name.clone(),
+        })
+        .into_response());
     };
     let mut page = load_page(&state, &q, &user).await?;
     page.csrf_token = csrf_token;
@@ -875,6 +879,7 @@ async fn load_page(
 
     Ok(IndexTemplate {
         csrf_token: String::new(),
+        app_name: state.app_name.clone(),
         has_profiles: !profiles.is_empty(),
         profiles: profile_opts,
         is_owner,

@@ -101,6 +101,7 @@ pub fn conflict_dashboard(template: DashboardTemplate, message: &str) -> Respons
 #[template(path = "index.html")]
 pub struct IndexTemplate {
     pub csrf_token: String,
+    pub app_name: String,
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
     pub is_owner: bool,
@@ -212,12 +213,14 @@ pub struct ErrorPartial {
 #[template(path = "landing.html")]
 pub struct LandingTemplate {
     pub csrf_token: String,
+    pub app_name: String,
 }
 
 #[derive(Template)]
 #[template(path = "login.html")]
 pub struct LoginTemplate {
     pub csrf_token: String,
+    pub app_name: String,
     pub error: String,
     pub email: String,
     pub next: String,
@@ -229,11 +232,33 @@ pub struct LoginTemplate {
 #[template(path = "register.html")]
 pub struct RegisterTemplate {
     pub csrf_token: String,
+    pub app_name: String,
     pub error: String,
     pub email: String,
     pub next: String,
     pub next_query: String,
     pub share_invite: bool,
+}
+
+#[derive(Template)]
+#[template(path = "forgot_password.html")]
+pub struct ForgotPasswordTemplate {
+    pub csrf_token: String,
+    pub app_name: String,
+    pub error: String,
+    pub email: String,
+    pub sent: bool,
+    pub sent_message: String,
+}
+
+#[derive(Template)]
+#[template(path = "reset_password.html")]
+pub struct ResetPasswordTemplate {
+    pub csrf_token: String,
+    pub app_name: String,
+    pub error: String,
+    pub token: String,
+    pub token_valid: bool,
 }
 
 #[derive(Template)]
@@ -259,6 +284,7 @@ pub struct TabOption {
 #[template(path = "settings.html")]
 pub struct SettingsTemplate {
     pub csrf_token: String,
+    pub app_name: String,
     pub email: String,
     pub avatar_src: String,
     pub avatar_options: Vec<AvatarOption>,

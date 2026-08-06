@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Homeabell — Shave Years Off Your Mortgage{% endblock %}
+{% block title %}{{ app_name }} — Shave Years Off Your Mortgage{% endblock %}
 
 {% block body_class %}landing{% endblock %}
 
 {% block body %}
 <nav class="landing-sticky-nav" id="sticky-nav" aria-label="Main Navigation">
   <div>
-    <span>Homeabell</span>
+    <span>{{ app_name }}</span>
     <a href="/register" class="btn-primary">Get started free</a>
   </div>
 </nav>
 
-<section class="landing-hero" aria-label="Homeabell Landing">
+<section class="landing-hero" aria-label="{{ app_name }} Landing">
   <div class="landing-hero-visual" aria-hidden="true">
     <img src="/static/hero.jpg" alt="" />
     <div class="overlay"></div>
@@ -35,7 +35,7 @@
 
   <div class="landing-hero-copy">
     <header>
-      <h1>Homeabell</h1>
+      <h1>{{ app_name }}</h1>
       <span class="brand-rule" aria-hidden="true"></span>
       <h2>Shave years off your mortgage, without the complex spreadsheets.</h2>
       <p>A private mortgage tracker to record extra principal payments, track your schedule, and accelerate your payoff date.</p>

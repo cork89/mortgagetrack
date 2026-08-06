@@ -93,12 +93,18 @@ pub struct DeleteAccountForm {
     pub password: String,
 }
 
-fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> SettingsTemplate {
+fn settings_template(
+    user: &AuthUser,
+    csrf_token: String,
+    app_name: String,
+    q: &SettingsQuery,
+) -> SettingsTemplate {
     let current = resolved_avatar_id(&user.id, user.avatar.as_deref());
     let current_tab = TabId::parse(&user.default_tab);
     let current_year_expand = PaymentsYearExpand::parse(&user.payments_year_expand);
     SettingsTemplate {
         csrf_token,
+        app_name,
         email: user.email.clone(),
         avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
         avatar_options: AVATAR_OPTIONS
@@ -137,12 +143,19 @@ fn settings_template(user: &AuthUser, csrf_token: String, q: &SettingsQuery) -> 
 }
 
 async fn settings_page(
+    State(state): State<AppState>,
     session: Session,
     user: AuthUser,
     Query(q): Query<SettingsQuery>,
 ) -> AppResult<Response> {
     let csrf_token = csrf::ensure_token(&session).await?;
-    Ok(HtmlTemplate(settings_template(&user, csrf_token, &q)).into_response())
+    Ok(HtmlTemplate(settings_template(
+        &user,
+        csrf_token,
+        state.app_name.clone(),
+        &q,
+    ))
+    .into_response())
 }
 
 async fn avatar(
@@ -255,6 +268,7 @@ async fn change_password(
                 let mut page = settings_template(
                     &user,
                     csrf_token,
+                    state.app_name.clone(),
                     &SettingsQuery {
                         password: None,
                         avatar: None,
@@ -325,6 +339,7 @@ async fn delete_account(
                 let mut page = settings_template(
                     &user,
                     csrf_token,
+                    state.app_name.clone(),
                     &SettingsQuery {
                         password: None,
                         avatar: None,

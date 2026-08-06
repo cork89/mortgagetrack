@@ -2413,6 +2413,22 @@ details.pay-year-group[open] > summary .year-chevron {
   text-decoration: underline;
 }
 
+.auth-forgot {
+  margin: -0.35rem 0 0;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.auth-forgot a {
+  color: var(--sea-deep);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-forgot a:hover {
+  text-decoration: underline;
+}
+
 #auth-error:empty {
   display: none;
 }

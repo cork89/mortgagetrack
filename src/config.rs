@@ -2,6 +2,8 @@
 
 use tower_sessions::cookie::SameSite;
 
+const DEFAULT_APP_NAME: &str = "MortgageTrack";
+
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
     pub secure: bool,
@@ -19,6 +21,11 @@ impl SessionConfig {
             http_only: true,
         }
     }
+}
+
+/// Product name shown in HTML (titles, brand marks). Defaults to MortgageTrack.
+pub fn app_name_from_env() -> String {
+    env_string("APP_NAME", DEFAULT_APP_NAME)
 }
 
 fn env_string(key: &str, default: &str) -> String {

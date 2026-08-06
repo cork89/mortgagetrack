@@ -54,7 +54,11 @@ pub struct RegisterForm {
     pub next: Option<String>,
 }
 
-async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
+async fn login_page(
+    State(state): State<AppState>,
+    session: Session,
+    Query(q): Query<AuthQuery>,
+) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
     if get_user_id(&session).await?.is_some() {
@@ -68,6 +72,7 @@ async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<R
     let csrf_token = csrf::ensure_token(&session).await?;
     Ok(HtmlTemplate(LoginTemplate {
         csrf_token,
+        app_name: state.app_name.clone(),
         error: String::new(),
         email: String::new(),
         next: fields.next,
@@ -77,7 +82,11 @@ async fn login_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<R
     .into_response())
 }
 
-async fn register_page(session: Session, Query(q): Query<AuthQuery>) -> AppResult<Response> {
+async fn register_page(
+    State(state): State<AppState>,
+    session: Session,
+    Query(q): Query<AuthQuery>,
+) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
     if get_user_id(&session).await?.is_some() {
@@ -91,6 +100,7 @@ async fn register_page(session: Session, Query(q): Query<AuthQuery>) -> AppResul
     let csrf_token = csrf::ensure_token(&session).await?;
     Ok(HtmlTemplate(RegisterTemplate {
         csrf_token,
+        app_name: state.app_name.clone(),
         error: String::new(),
         email: String::new(),
         next: fields.next,
@@ -120,6 +130,7 @@ async fn login_submit(
             let status = auth_error_status(&err);
             let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
             auth_error_response(
+                &state.app_name,
                 &headers,
                 status,
                 csrf_token,
@@ -184,6 +195,7 @@ async fn register_submit(
             let status = auth_error_status(&err);
             let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
             auth_error_response(
+                &state.app_name,
                 &headers,
                 status,
                 csrf_token,
@@ -279,6 +291,7 @@ fn auth_error_status(err: &AppError) -> StatusCode {
 }
 
 fn auth_error_response(
+    app_name: &str,
     headers: &HeaderMap,
     status: StatusCode,
     csrf_token: String,
@@ -295,6 +308,7 @@ fn auth_error_response(
             status,
             HtmlTemplate(LoginTemplate {
                 csrf_token,
+                app_name: app_name.to_string(),
                 error: message,
                 email: email.to_string(),
                 next: fields.next,
@@ -308,6 +322,7 @@ fn auth_error_response(
             status,
             HtmlTemplate(RegisterTemplate {
                 csrf_token,
+                app_name: app_name.to_string(),
                 error: message,
                 email: email.to_string(),
                 next: fields.next,

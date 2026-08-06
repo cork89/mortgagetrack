@@ -10,10 +10,12 @@ use crate::error::{AppError, AppResult};
 const MAX_ATTEMPTS: i64 = 10;
 const WINDOW_SECS: i64 = 15 * 60;
 
-const KEY_LOGIN_IP: &str = "homeabell:rl:login:ip:";
-const KEY_LOGIN_EMAIL: &str = "homeabell:rl:login:email:";
-const KEY_REGISTER_IP: &str = "homeabell:rl:register:ip:";
-const KEY_REGISTER_EMAIL: &str = "homeabell:rl:register:email:";
+const KEY_LOGIN_IP: &str = "mortgagetrack:rl:login:ip:";
+const KEY_LOGIN_EMAIL: &str = "mortgagetrack:rl:login:email:";
+const KEY_REGISTER_IP: &str = "mortgagetrack:rl:register:ip:";
+const KEY_REGISTER_EMAIL: &str = "mortgagetrack:rl:register:email:";
+const KEY_RESET_IP: &str = "mortgagetrack:rl:reset:ip:";
+const KEY_RESET_EMAIL: &str = "mortgagetrack:rl:reset:email:";
 
 pub async fn ensure_schema(pool: &DbPool) -> AppResult<()> {
     let conn = get_conn(pool).await?;
@@ -72,6 +74,15 @@ pub async fn check_register(pool: &DbPool, ip: &str, email: &str) -> AppResult<(
     bump(
         pool,
         &format!("{KEY_REGISTER_EMAIL}{}", normalize_email(email)),
+    )
+    .await
+}
+
+pub async fn check_password_reset(pool: &DbPool, ip: &str, email: &str) -> AppResult<()> {
+    bump(pool, &format!("{KEY_RESET_IP}{ip}")).await?;
+    bump(
+        pool,
+        &format!("{KEY_RESET_EMAIL}{}", normalize_email(email)),
     )
     .await
 }

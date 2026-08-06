@@ -4,6 +4,7 @@ mod config;
 mod csrf;
 mod db;
 mod error;
+mod mail;
 mod models;
 mod routes;
 mod session_store;
@@ -21,7 +22,7 @@ use tower_sessions::{Expiry, SessionManagerLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use app_state::AppState;
-use config::SessionConfig;
+use config::{app_name_from_env, SessionConfig};
 use db::{execute_batch, get_conn, DbPool};
 use session_store::DbSessionStore;
 
@@ -47,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_user_default_tab(&pool).await?;
     models::ensure_user_payments_year_expand(&pool).await?;
     auth::rate_limit::ensure_schema(&pool).await?;
+    auth::ensure_password_reset_schema(&pool).await?;
 
     let session_store = DbSessionStore::new(pool.clone());
     session_store.migrate().await?;
@@ -71,9 +73,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_expiry(Expiry::OnInactivity(Duration::minutes(60)));
 
     let today_override = parse_current_date_override()?;
+    let mailer = mail::Mailer::from_env()?;
+    let app_base_url = mail::app_base_url_from_env();
+    let app_name = app_name_from_env();
     let state = AppState {
         pool,
         today_override,
+        mailer,
+        app_base_url,
+        app_name: app_name.clone(),
     };
 
     let static_dir = std::env::var("STATIC_DIR")
@@ -105,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!(
         secure = session_cfg.secure,
-        "Homeabell listening on http://{addr}"
+        "{app_name} listening on http://{addr}"
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
@@ -145,6 +153,7 @@ async fn run_migrations(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>>
         include_str!("../migrations/005_profile_sharing.sql"),
         include_str!("../migrations/006_home_improvements.sql"),
         include_str!("../migrations/007_sessions_rate_limits.sql"),
+        include_str!("../migrations/008_password_reset.sql"),
     ] {
         execute_batch(&conn, sql).await?;
     }

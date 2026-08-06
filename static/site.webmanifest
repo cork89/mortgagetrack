@@ -1,6 +1,6 @@
 {
-  "name": "Homeabell",
-  "short_name": "Homeabell",
+  "name": "MortgageTrack",
+  "short_name": "MortgageTrack",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",
