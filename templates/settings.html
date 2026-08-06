@@ -124,9 +124,11 @@
     <form class="auth-form"
       method="post"
       action="/settings/password"
+      {% if auth_edge %}data-auth-edge="change-password"{% else %}
       hx-post="/settings/password"
       hx-target="#password-status"
       hx-swap="innerHTML"
+      {% endif %}
     >
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div id="password-status" aria-live="polite">
@@ -166,10 +168,12 @@
     <form class="auth-form"
       method="post"
       action="/settings/delete"
+      {% if auth_edge %}data-auth-edge="delete"{% else %}
       hx-post="/settings/delete"
       hx-target="#delete-status"
       hx-swap="innerHTML"
       hx-confirm="Delete your account permanently? Your owned mortgage profiles and data will be removed. This cannot be undone."
+      {% endif %}
     >
       <p>
         Permanently delete your account, owned mortgage profiles, and related data.
@@ -194,6 +198,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% if auth_edge %}<script src="/static/auth.js" defer></script>{% endif %}
 <script>
   document.querySelectorAll("[data-open-on-load]").forEach((el) => {
     if (typeof el.showPopover === "function") el.showPopover();

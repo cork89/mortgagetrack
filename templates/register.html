@@ -13,9 +13,11 @@
   <form class="auth-form"
     method="post"
     action="/register"
+    {% if auth_edge %}data-auth-edge="register"{% else %}
     hx-post="/register"
     hx-target="#auth-error"
     hx-swap="innerHTML"
+    {% endif %}
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     {% if !next.is_empty() %}
@@ -50,4 +52,8 @@
     <a href="/login{% if !next_query.is_empty() %}?next={{ next_query }}{% endif %}">Sign in</a>
   </p>
 </section>
+{% endblock %}
+
+{% block scripts %}
+{% if auth_edge %}<script src="/static/auth.js" defer></script>{% endif %}
 {% endblock %}

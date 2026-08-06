@@ -56,7 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Seed after schema is ready, but don't block the listen socket (Argon2 is slow
     // and delays container port-ready checks on hosted runtimes).
-    {
+    // When AUTH_TRUST_HEADERS is set, Better Auth on the Worker owns credentials/seed.
+    if !auth::trust_identity_headers() {
         let pool = pool.clone();
         tokio::spawn(async move {
             if let Err(err) = auth::ensure_test_user(&pool).await {

@@ -907,14 +907,19 @@ fn payments_table(
         }
     }
 
-    let mut bal = principal;
+    let mut principal_remaining = principal;
     for r in schedule {
         if paid.contains(&r.pay_key) {
-            bal = r.balance;
+            principal_remaining = r.balance;
         } else {
             break;
         }
     }
+    let interest_remaining: f64 = schedule
+        .iter()
+        .filter(|r| !paid.contains(&r.pay_key))
+        .map(|r| r.interest)
+        .sum();
     let scheduled_count = schedule
         .iter()
         .filter(|r| r.kind == RowKind::Scheduled)
@@ -932,7 +937,7 @@ fn payments_table(
     let summary = YearSummary {
         monthly_payment: money(monthly_payment),
         total_interest: money(total_interest),
-        balance_after: money(bal),
+        balance_after: money(principal_remaining + interest_remaining),
         hint: format!("{scheduled_count} scheduled · {pct_paid}% paid"),
     };
 

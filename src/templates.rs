@@ -226,6 +226,8 @@ pub struct LoginTemplate {
     pub next: String,
     pub next_query: String,
     pub share_invite: bool,
+    /// When true, forms post to Better Auth via `/static/auth.js`.
+    pub auth_edge: bool,
 }
 
 #[derive(Template)]
@@ -238,6 +240,7 @@ pub struct RegisterTemplate {
     pub next: String,
     pub next_query: String,
     pub share_invite: bool,
+    pub auth_edge: bool,
 }
 
 #[derive(Template)]
@@ -249,6 +252,7 @@ pub struct ForgotPasswordTemplate {
     pub email: String,
     pub sent: bool,
     pub sent_message: String,
+    pub auth_edge: bool,
 }
 
 #[derive(Template)]
@@ -259,6 +263,7 @@ pub struct ResetPasswordTemplate {
     pub error: String,
     pub token: String,
     pub token_valid: bool,
+    pub auth_edge: bool,
 }
 
 #[derive(Template)]
@@ -299,4 +304,5 @@ pub struct SettingsTemplate {
     pub password_updated: bool,
     pub password_error: String,
     pub delete_error: String,
+    pub auth_edge: bool,
 }

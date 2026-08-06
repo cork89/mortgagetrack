@@ -16,7 +16,9 @@ use super::models::{
     update_password, update_payments_year_expand, validate_password, verify_password,
 };
 use crate::app_state::AppState;
-use crate::auth::{hx_redirect, is_htmx, purge_session, AuthUser, HOME_PATH};
+use crate::auth::{
+    hx_redirect, is_htmx, purge_session, trust_identity_headers, AuthUser, HOME_PATH,
+};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{PaymentsYearExpand, TabId};
@@ -139,6 +141,7 @@ fn settings_template(
         password_updated: q.password.as_deref() == Some("updated"),
         password_error: String::new(),
         delete_error: String::new(),
+        auth_edge: trust_identity_headers(),
     }
 }
 
@@ -253,6 +256,13 @@ async fn change_password(
     headers: HeaderMap,
     Form(form): Form<ChangePasswordForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return (
+            StatusCode::GONE,
+            "Password changes are handled by Better Auth at /api/auth/change-password.",
+        )
+            .into_response();
+    }
     match change_password_inner(&state, &session, &user, &form).await {
         Ok(()) => hx_redirect(&headers, "/settings?password=updated"),
         Err(err) => {
@@ -324,6 +334,13 @@ async fn delete_account(
     headers: HeaderMap,
     Form(form): Form<DeleteAccountForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return (
+            StatusCode::GONE,
+            "Account deletion is handled by Better Auth at /api/auth/delete-user.",
+        )
+            .into_response();
+    }
     match delete_account_inner(&state, &session, &user, &form).await {
         Ok(()) => hx_redirect(&headers, HOME_PATH),
         Err(err) => {

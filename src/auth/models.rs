@@ -109,6 +109,45 @@ pub async fn find_user_by_id(pool: &DbPool, id: Uuid) -> AppResult<Option<User>>
     .await
 }
 
+/// Upsert the domain `users` projection for an edge-authenticated identity.
+///
+/// Used when Better Auth already created the account (Worker D1) but this DB
+/// (e.g. local container SQLite) does not yet have the row.
+pub async fn ensure_user_projection(pool: &DbPool, id: Uuid, email: &str) -> AppResult<User> {
+    let email = validate_email(email)?;
+    if let Some(user) = find_user_by_id(pool, id).await? {
+        if user.email != email {
+            let conn = get_conn(pool).await?;
+            execute(
+                &conn,
+                "UPDATE users SET email = ? WHERE id = ?",
+                params![email, id.to_string()],
+            )
+            .await?;
+            return find_user_by_id(pool, id)
+                .await?
+                .ok_or_else(|| AppError::Internal("user missing after email update".into()));
+        }
+        return Ok(user);
+    }
+
+    let conn = get_conn(pool).await?;
+    execute(
+        &conn,
+        r#"
+        INSERT INTO users (id, email)
+        VALUES (?, ?)
+        ON CONFLICT(id) DO UPDATE SET email = excluded.email
+        "#,
+        params![id.to_string(), email],
+    )
+    .await?;
+
+    find_user_by_id(pool, id)
+        .await?
+        .ok_or_else(|| AppError::Internal("user missing after projection upsert".into()))
+}
+
 struct UserWithHash {
     user: User,
     password_hash: String,

@@ -175,11 +175,12 @@ pub struct NoteForm {
 
 async fn index(
     session: Session,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(q): Query<IndexQuery>,
 ) -> AppResult<Response> {
     let csrf_token = csrf::ensure_token(&session).await?;
-    let Some(user) = current_user(&session, &state.pool).await? else {
+    let Some(user) = current_user(&headers, &session, &state.pool).await? else {
         return Ok(HtmlTemplate(LandingTemplate {
             csrf_token,
             app_name: state.app_name.clone(),

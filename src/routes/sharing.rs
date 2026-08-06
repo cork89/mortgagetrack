@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::{
-    avatar_src, encode_query_value, get_user_id, hx_redirect, set_pending_share, take_pending_share,
-    AuthUser, HOME_PATH,
+    avatar_src, encode_query_value, hx_redirect, resolve_user_id, set_pending_share,
+    take_pending_share, AuthUser, HOME_PATH,
 };
 use crate::error::AppResult;
 use crate::models::{
@@ -38,9 +38,10 @@ pub fn routes() -> Router<AppState> {
 async fn accept_share(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Path(token): Path<String>,
 ) -> AppResult<Response> {
-    let Some(user_id) = get_user_id(&session).await? else {
+    let Some(user_id) = resolve_user_id(&headers, &session).await? else {
         set_pending_share(&session, &token).await?;
         let next = format!("/share/{token}");
         let location = format!("/register?next={}", encode_query_value(&next));

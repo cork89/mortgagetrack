@@ -19,8 +19,9 @@ use super::models::{
 use super::rate_limit::{self, client_ip};
 use crate::app_state::AppState;
 use crate::auth::{
-    encode_query_value, get_user_id, hx_redirect, is_htmx, is_share_invite_next, purge_session,
-    safe_next, set_pending_share, set_user_id, share_token_from_next, take_pending_share, HOME_PATH,
+    encode_query_value, hx_redirect, is_htmx, is_share_invite_next, purge_session, resolve_user_id,
+    safe_next, set_pending_share, set_user_id, share_token_from_next, take_pending_share,
+    trust_identity_headers, HOME_PATH,
 };
 use crate::csrf;
 use crate::error::{AppError, AppResult};
@@ -54,14 +55,23 @@ pub struct RegisterForm {
     pub next: Option<String>,
 }
 
+fn edge_auth_gone() -> Response {
+    (
+        StatusCode::GONE,
+        "Credential auth is handled by Better Auth at /api/auth. Reload the page.",
+    )
+        .into_response()
+}
+
 async fn login_page(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Query(q): Query<AuthQuery>,
 ) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
-    if get_user_id(&session).await?.is_some() {
+    if resolve_user_id(&headers, &session).await?.is_some() {
         let dest = if fields.next.is_empty() {
             HOME_PATH
         } else {
@@ -78,6 +88,7 @@ async fn login_page(
         next: fields.next,
         next_query: fields.next_query,
         share_invite: fields.share_invite,
+        auth_edge: trust_identity_headers(),
     })
     .into_response())
 }
@@ -85,11 +96,12 @@ async fn login_page(
 async fn register_page(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Query(q): Query<AuthQuery>,
 ) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
-    if get_user_id(&session).await?.is_some() {
+    if resolve_user_id(&headers, &session).await?.is_some() {
         let dest = if fields.next.is_empty() {
             HOME_PATH
         } else {
@@ -106,6 +118,7 @@ async fn register_page(
         next: fields.next,
         next_query: fields.next_query,
         share_invite: fields.share_invite,
+        auth_edge: trust_identity_headers(),
     })
     .into_response())
 }
@@ -117,6 +130,9 @@ async fn login_submit(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(form): Form<LoginForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return edge_auth_gone();
+    }
     remember_share_invite(&session, form.next.as_deref())
         .await
         .ok();
@@ -182,6 +198,9 @@ async fn register_submit(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(form): Form<RegisterForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return edge_auth_gone();
+    }
     remember_share_invite(&session, form.next.as_deref())
         .await
         .ok();
@@ -314,6 +333,7 @@ fn auth_error_response(
                 next: fields.next,
                 next_query: fields.next_query,
                 share_invite: fields.share_invite,
+                auth_edge: false,
             }),
         )
             .into_response()
@@ -328,6 +348,7 @@ fn auth_error_response(
                 next: fields.next,
                 next_query: fields.next_query,
                 share_invite: fields.share_invite,
+                auth_edge: false,
             }),
         )
             .into_response()

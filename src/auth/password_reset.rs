@@ -20,7 +20,9 @@ use super::models::{
 };
 use super::rate_limit::{self, client_ip};
 use crate::app_state::AppState;
-use crate::auth::{get_user_id, hx_redirect, is_htmx, set_user_id, HOME_PATH};
+use crate::auth::{
+    hx_redirect, is_htmx, resolve_user_id, set_user_id, trust_identity_headers, HOME_PATH,
+};
 use crate::csrf;
 use crate::db::{execute, get_conn, params, query_optional, DbPool, FromRow};
 use crate::error::{AppError, AppResult};
@@ -94,12 +96,21 @@ pub struct ResetForm {
     pub confirm_password: String,
 }
 
+fn edge_auth_gone() -> Response {
+    (
+        StatusCode::GONE,
+        "Password reset is handled by Better Auth at /api/auth.",
+    )
+        .into_response()
+}
+
 async fn forgot_page(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Query(q): Query<ForgotQuery>,
 ) -> AppResult<Response> {
-    if get_user_id(&session).await?.is_some() {
+    if resolve_user_id(&headers, &session).await?.is_some() {
         return Ok(Redirect::to(HOME_PATH).into_response());
     }
     let csrf_token = csrf::ensure_token(&session).await?;
@@ -110,6 +121,7 @@ async fn forgot_page(
         email: String::new(),
         sent: q.sent.as_deref() == Some("1"),
         sent_message: SENT_MESSAGE.to_string(),
+        auth_edge: trust_identity_headers(),
     })
     .into_response())
 }
@@ -121,6 +133,9 @@ async fn forgot_submit(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Form(form): Form<ForgotForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return edge_auth_gone();
+    }
     let ip = client_ip(&headers, Some(peer));
     match forgot_inner(&state, &form, &ip).await {
         Ok(()) => hx_redirect(&headers, "/forgot-password?sent=1"),
@@ -147,6 +162,7 @@ async fn forgot_submit(
                         email: form.email,
                         sent: false,
                         sent_message: SENT_MESSAGE.to_string(),
+                        auth_edge: false,
                     }),
                 )
                     .into_response()
@@ -200,15 +216,17 @@ async fn send_reset_email(state: &AppState, user: &User, token: &str) -> AppResu
 
 async fn reset_page(
     session: Session,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(q): Query<ResetQuery>,
 ) -> AppResult<Response> {
-    if get_user_id(&session).await?.is_some() {
+    if resolve_user_id(&headers, &session).await?.is_some() {
         return Ok(Redirect::to(HOME_PATH).into_response());
     }
 
     let token = q.token.unwrap_or_default();
     let csrf_token = csrf::ensure_token(&session).await?;
+    let auth_edge = trust_identity_headers();
 
     if token.is_empty() {
         return Ok(HtmlTemplate(ResetPasswordTemplate {
@@ -217,11 +235,17 @@ async fn reset_page(
             error: "This reset link is missing or invalid.".into(),
             token: String::new(),
             token_valid: false,
+            auth_edge,
         })
         .into_response());
     }
 
-    let token_valid = peek_reset_token(&state.pool, &token).await?.is_some();
+    // Edge mode: Better Auth validates the token; show the form whenever a token is present.
+    let token_valid = if auth_edge {
+        true
+    } else {
+        peek_reset_token(&state.pool, &token).await?.is_some()
+    };
     Ok(HtmlTemplate(ResetPasswordTemplate {
         csrf_token,
         app_name: state.app_name.clone(),
@@ -232,6 +256,7 @@ async fn reset_page(
         },
         token,
         token_valid,
+        auth_edge,
     })
     .into_response())
 }
@@ -242,6 +267,9 @@ async fn reset_submit(
     headers: HeaderMap,
     Form(form): Form<ResetForm>,
 ) -> Response {
+    if trust_identity_headers() {
+        return edge_auth_gone();
+    }
     match reset_inner(&state, &session, &form).await {
         Ok(()) => hx_redirect(&headers, HOME_PATH),
         Err(err) => {
@@ -269,6 +297,7 @@ async fn reset_submit(
                         error: message,
                         token: form.token,
                         token_valid,
+                        auth_edge: false,
                     }),
                 )
                     .into_response()

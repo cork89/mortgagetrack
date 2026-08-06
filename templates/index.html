@@ -18,7 +18,7 @@
     </button>
     <div class="menu-panel" role="menu" id="accountMenuPanel">
       <a href="/settings" role="menuitem">Settings</a>
-      <form method="post" action="/logout">
+      <form method="post" action="/logout" data-auth-edge="logout">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button type="submit" role="menuitem">Sign out</button>
       </form>
@@ -35,4 +35,8 @@
 {% include "partials/loan_popover.html" %}
 {% include "partials/note_popover.html" %}
 {% include "partials/improvement_popover.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/auth.js" defer></script>
 {% endblock %}
