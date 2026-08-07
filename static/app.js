@@ -43,9 +43,11 @@
     return elt instanceof HTMLElement && elt.classList.contains("paid-toggle");
   }
 
-  // Extra/recast toggles change interest totals — server refreshes the panel.
-  function isExtraPaidToggle(elt) {
+  // Server-refreshed toggles (payments panel, or extra/recast anywhere).
+  // Calendar scheduled chips keep optimistic UI.
+  function isServerPaidToggle(elt) {
     if (!(elt instanceof HTMLElement)) return false;
+    if (elt.closest("#panel-payments")) return true;
     if (elt.classList.contains("extra")) return true;
     const key = paidToggleKey(elt);
     return key.startsWith("extra:");
@@ -114,8 +116,8 @@
   document.addEventListener("htmx:beforeRequest", (e) => {
     const elt = e.detail.elt;
     if (isPaidToggle(elt)) {
-      // Extras rebuild the schedule; wait for the panel swap instead of flipping locally.
-      if (isExtraPaidToggle(elt)) {
+      // Payments panel / extras: wait for the panel swap instead of flipping locally.
+      if (isServerPaidToggle(elt)) {
         const buttons = loadingButtonsFor(
           elt,
           e.detail.requestConfig?.triggeringEvent,

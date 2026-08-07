@@ -528,9 +528,10 @@ async fn toggle_paid_handler(
     let version = parse_version(form.version)?;
     match toggle_paid(&state.pool, user.id, &id, &form.pay_key, version).await {
         Ok((_now_paid, next_version)) => {
-            // Extra/recast paid status changes amortization, payment, and total interest —
-            // refresh the active panel instead of relying on optimistic UI alone.
-            if form.pay_key.starts_with("extra:") {
+            let is_extra = form.pay_key.starts_with("extra:");
+            // Payments tab: always refresh so total balance / interest summary stay in sync.
+            // Extras/recasts also change amortization — refresh whichever panel is active.
+            if tab == "payments" || is_extra {
                 let page = load_page(&state, &q, &user).await?;
                 let d = page
                     .dashboard
@@ -540,7 +541,7 @@ async fn toggle_paid_handler(
                     Ok(panel_update(
                         payments_from_dashboard(d),
                         "payments",
-                        true,
+                        is_extra,
                         version,
                     ))
                 } else {
@@ -552,8 +553,7 @@ async fn toggle_paid_handler(
                     ))
                 };
             }
-            let keep = if tab == "payments" { "payments" } else { "calendar" };
-            Ok(panel_trigger(keep, false, next_version))
+            Ok(panel_trigger("calendar", false, next_version))
         }
         Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
         Err(err) => Err(err),
