@@ -10,6 +10,11 @@
     </a>
     <h1 id="auth-heading">Settings</h1>
   </header>
+  {% if is_admin %}
+  <p class="admin-link-row">
+    <a class="btn-ghost" href="/admin">Admin · Users</a>
+  </p>
+  {% endif %}
 
   <div class="account-card">
     <div class="identity">

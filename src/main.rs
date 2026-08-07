@@ -47,6 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     models::ensure_user_avatar(&pool).await?;
     models::ensure_user_default_tab(&pool).await?;
     models::ensure_user_payments_year_expand(&pool).await?;
+    models::ensure_user_role(&pool).await?;
+    models::ensure_user_tier(&pool).await?;
+    models::ensure_user_paid_until(&pool).await?;
     auth::rate_limit::ensure_schema(&pool).await?;
     auth::ensure_password_reset_schema(&pool).await?;
 

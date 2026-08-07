@@ -5,6 +5,9 @@
   <h1 class="brand">
     <img class="brand-mark" src="/static/web-app-manifest-512x512.png" alt="" width="40" height="40" />
     {{ app_name }}
+    {% if is_paid %}
+    <span class="pro-badge" title="Pro plan">Pro</span>
+    {% endif %}
   </h1>
   <div class="menu account-menu" id="accountMenu">
     <button type="button"
@@ -18,6 +21,9 @@
     </button>
     <div class="menu-panel" role="menu" id="accountMenuPanel">
       <a href="/settings" role="menuitem">Settings</a>
+      {% if is_admin %}
+      <a href="/admin" role="menuitem">Admin</a>
+      {% endif %}
       <form method="post" action="/logout" data-auth-edge="logout">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button type="submit" role="menuitem">Sign out</button>

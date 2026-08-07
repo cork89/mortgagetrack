@@ -1,3 +1,4 @@
+mod admin;
 mod pages;
 mod sharing;
 
@@ -11,4 +12,5 @@ pub fn router() -> Router<AppState> {
         .merge(auth::routes())
         .merge(pages::routes())
         .merge(sharing::routes())
+        .merge(admin::routes())
 }

@@ -2,13 +2,58 @@
 
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use chrono::{DateTime, Utc};
 use crate::db::params;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
 
-use crate::db::{begin, execute, get_conn, query_optional, DbPool, FromRow};
+use crate::db::{begin, execute, get_conn, query_all, query_optional, DbPool, FromRow};
 use crate::error::{AppError, AppResult};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    User,
+    Admin,
+}
+
+impl UserRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Admin => "admin",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "admin" => Self::Admin,
+            _ => Self::User,
+        }
+    }
+}
+
+/// Parse an ISO-8601 / RFC3339 paid-until timestamp. Empty/invalid → None.
+/// Date-only values (`YYYY-MM-DD`) count as end of that UTC day.
+pub fn parse_paid_until(raw: Option<&str>) -> Option<DateTime<Utc>> {
+    let raw = raw?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    if let Ok(date) = chrono::NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+        let ndt = date.and_hms_opt(23, 59, 59)?;
+        return Some(DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc));
+    }
+    None
+}
+
+pub fn paid_until_active(paid_until: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+    paid_until.is_some_and(|until| now < until)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -18,6 +63,8 @@ pub struct User {
     pub avatar: Option<String>,
     pub default_tab: String,
     pub payments_year_expand: String,
+    pub role: String,
+    pub paid_until: Option<String>,
 }
 
 impl FromRow for User {
@@ -29,6 +76,8 @@ impl FromRow for User {
             avatar: row.get(3)?,
             default_tab: row.get(4)?,
             payments_year_expand: row.get(5)?,
+            role: row.get(6)?,
+            paid_until: row.get(7)?,
         })
     }
 }
@@ -37,6 +86,14 @@ impl User {
     pub fn uuid(&self) -> AppResult<Uuid> {
         Uuid::parse_str(&self.id)
             .map_err(|_| AppError::Internal("invalid user id in database".into()))
+    }
+
+    pub fn role_enum(&self) -> UserRole {
+        UserRole::parse(&self.role)
+    }
+
+    pub fn paid_until_dt(&self) -> Option<DateTime<Utc>> {
+        parse_paid_until(self.paid_until.as_deref())
     }
 }
 
@@ -100,7 +157,7 @@ pub async fn find_user_by_id(pool: &DbPool, id: Uuid) -> AppResult<Option<User>>
     query_optional(
         &conn,
         r#"
-        SELECT id, email, created_at, avatar, default_tab, payments_year_expand
+        SELECT id, email, created_at, avatar, default_tab, payments_year_expand, role, paid_until
         FROM users
         WHERE id = ?
         "#,
@@ -109,24 +166,69 @@ pub async fn find_user_by_id(pool: &DbPool, id: Uuid) -> AppResult<Option<User>>
     .await
 }
 
+#[derive(Debug, Clone)]
+pub struct AdminUserListRow {
+    pub id: String,
+    pub email: String,
+    pub role: String,
+    pub paid_until: Option<String>,
+}
+
+impl FromRow for AdminUserListRow {
+    fn from_row(row: &crate::db::Row) -> AppResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            role: row.get(2)?,
+            paid_until: row.get(3)?,
+        })
+    }
+}
+
+pub async fn list_users_for_admin(pool: &DbPool) -> AppResult<Vec<AdminUserListRow>> {
+    let conn = get_conn(pool).await?;
+    query_all(
+        &conn,
+        r#"
+        SELECT id, email, role, paid_until
+        FROM users
+        ORDER BY email COLLATE NOCASE
+        "#,
+        (),
+    )
+    .await
+}
+
 /// Upsert the domain `users` projection for an edge-authenticated identity.
 ///
 /// Used when Better Auth already created the account (Worker D1) but this DB
 /// (e.g. local container SQLite) does not yet have the row.
-pub async fn ensure_user_projection(pool: &DbPool, id: Uuid, email: &str) -> AppResult<User> {
+pub async fn ensure_user_projection(
+    pool: &DbPool,
+    id: Uuid,
+    email: &str,
+    role: UserRole,
+    paid_until: Option<DateTime<Utc>>,
+) -> AppResult<User> {
     let email = validate_email(email)?;
+    let role_s = role.as_str();
+    let paid_s = paid_until.map(|dt| dt.to_rfc3339());
+
     if let Some(user) = find_user_by_id(pool, id).await? {
-        if user.email != email {
+        let needs_update = user.email != email
+            || user.role != role_s
+            || user.paid_until.as_deref() != paid_s.as_deref();
+        if needs_update {
             let conn = get_conn(pool).await?;
             execute(
                 &conn,
-                "UPDATE users SET email = ? WHERE id = ?",
-                params![email, id.to_string()],
+                "UPDATE users SET email = ?, role = ?, paid_until = ? WHERE id = ?",
+                params![email, role_s, paid_s.clone(), id.to_string()],
             )
             .await?;
             return find_user_by_id(pool, id)
                 .await?
-                .ok_or_else(|| AppError::Internal("user missing after email update".into()));
+                .ok_or_else(|| AppError::Internal("user missing after projection update".into()));
         }
         return Ok(user);
     }
@@ -135,11 +237,14 @@ pub async fn ensure_user_projection(pool: &DbPool, id: Uuid, email: &str) -> App
     execute(
         &conn,
         r#"
-        INSERT INTO users (id, email)
-        VALUES (?, ?)
-        ON CONFLICT(id) DO UPDATE SET email = excluded.email
+        INSERT INTO users (id, email, role, paid_until)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            email = excluded.email,
+            role = excluded.role,
+            paid_until = excluded.paid_until
         "#,
-        params![id.to_string(), email],
+        params![id.to_string(), email, role_s, paid_s],
     )
     .await?;
 
@@ -163,8 +268,10 @@ impl FromRow for UserWithHash {
                 avatar: row.get(3)?,
                 default_tab: row.get(4)?,
                 payments_year_expand: row.get(5)?,
+                role: row.get(6)?,
+                paid_until: row.get(7)?,
             },
-            password_hash: row.get(6)?,
+            password_hash: row.get(8)?,
         })
     }
 }
@@ -175,7 +282,7 @@ pub async fn find_user_by_email(pool: &DbPool, email: &str) -> AppResult<Option<
         &conn,
         r#"
             SELECT u.id, u.email, u.created_at, u.avatar, u.default_tab, u.payments_year_expand,
-                   c.password_hash
+                   u.role, u.paid_until, c.password_hash
             FROM users u
             INNER JOIN local_credentials c ON c.user_id = u.id
             WHERE u.email = ? COLLATE NOCASE

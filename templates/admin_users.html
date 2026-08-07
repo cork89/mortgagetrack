@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Admin — {{ app_name }}{% endblock %}
+
+{% block body_class %}admin-page{% endblock %}
+
+{% block body %}
+<section class="auth-panel admin-panel" aria-labelledby="admin-heading">
+  <header>
+    <a class="btn-ghost" href="/">
+      <span aria-hidden="true">←</span> Home
+    </a>
+    <h1 id="admin-heading">Users</h1>
+  </header>
+
+  <div class="admin-card">
+    <p class="admin-meta">{{ users.len() }} account{% if users.len() != 1 %}s{% endif %}</p>
+    {% if users.is_empty() %}
+    <p class="admin-empty">No users found.</p>
+    {% else %}
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th scope="col">Email</th>
+            <th scope="col">Admin</th>
+            <th scope="col">Paid until</th>
+            <th scope="col">Paid now</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr{% if u.is_self %} class="is-self"{% endif %}>
+            <td>
+              <span class="admin-email">{{ u.email }}</span>
+              {% if u.is_self %}<span class="admin-you">you</span>{% endif %}
+            </td>
+            <td>
+              {% if u.is_admin %}
+              <span class="admin-pill is-yes">Yes</span>
+              {% else %}
+              <span class="admin-pill is-no">No</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.paid_until_label.is_empty() %}
+              <span class="admin-muted">—</span>
+              {% else %}
+              <time datetime="{{ u.paid_until_iso }}">{{ u.paid_until_label }}</time>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.is_paid %}
+              <span class="admin-pill is-yes">Yes</span>
+              {% else %}
+              <span class="admin-pill is-no">No</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

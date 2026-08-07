@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Redirect, Response},
     routing::{delete, get, post},
     Form, Router,
@@ -10,13 +10,14 @@ use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
-use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser};
+use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser, PaidUser};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    add_extra, add_improvement, build_dashboard, clear_paid, create_profile, delete_extra,
-    delete_improvement, delete_profile, empty_state, list_extras, list_paid_keys, load_page_bundle,
-    load_profile, mark_due_paid, rename_profile, set_active_profile, set_paid, update_improvement,
+    add_extra, add_improvement, build_dashboard, clear_paid, create_profile, csv_filename_stem,
+    delete_extra, delete_improvement, delete_profile, empty_state, extras_as_inputs, list_extras,
+    list_paid_keys, list_payment_notes, load_page_bundle, load_profile, mark_due_paid,
+    payments_csv, rename_profile, set_active_profile, set_paid, update_improvement,
     update_profile_loan, upsert_payment_note, PaymentFilter, PaymentsYearExpand, ProfileOption,
     TabId,
 };
@@ -41,6 +42,7 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/{id}/rename", post(rename_profile_handler))
         .route("/profiles/{id}/delete", post(delete_profile_handler))
         .route("/profiles/{id}/clear-paid", post(clear_paid_handler))
+        .route("/profiles/{id}/export.csv", get(export_payments_csv))
         .route("/profiles/{id}/mark-due", post(mark_due_handler))
         .route("/profiles/{id}/toggle-paid", post(toggle_paid_handler))
         .route("/profiles/{id}/notes", post(upsert_note_handler))
@@ -167,6 +169,7 @@ async fn dashboard_partial(
     Ok(HtmlTemplate(DashboardTemplate {
         empty: page.empty,
         dashboard: page.dashboard,
+        is_paid: user.is_paid(),
     }))
 }
 
@@ -206,7 +209,59 @@ async fn payments_partial(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(payments_from_dashboard(d)))
+    Ok(HtmlTemplate(payments_from_dashboard(d, user.is_paid())))
+}
+
+async fn export_payments_csv(
+    paid: PaidUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<IndexQuery>,
+) -> AppResult<Response> {
+    let user = paid.0;
+    let profile = load_profile(&state.pool, user.id, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
+    let loan = profile
+        .loan()
+        .ok_or_else(|| AppError::BadRequest("No loan".into()))?;
+
+    let extras = list_extras(&state.pool, &id).await?;
+    let paid_keys: std::collections::HashSet<String> = list_paid_keys(&state.pool, &id)
+        .await?
+        .into_iter()
+        .collect();
+    let notes: std::collections::HashMap<String, String> = list_payment_notes(&state.pool, &id)
+        .await?
+        .into_iter()
+        .map(|n| (n.pay_key, n.note))
+        .collect();
+
+    let extra_inputs = extras_as_inputs(&extras, &paid_keys);
+    let built = crate::models::build_schedule(
+        loan.principal,
+        loan.rate,
+        loan.term_years,
+        loan.start_date,
+        &extra_inputs,
+    );
+    let filter = PaymentFilter::parse(q.filter.as_deref().unwrap_or("all"));
+    let csv = payments_csv(&built.rows, &paid_keys, &notes, filter, state.today());
+
+    let filename = format!("{}.csv", csv_filename_stem(&profile.name));
+    let disposition = format!("attachment; filename=\"{filename}\"");
+    let mut response = csv.into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/csv; charset=utf-8"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&disposition).unwrap_or_else(|_| {
+            HeaderValue::from_static("attachment; filename=\"payments.csv\"")
+        }),
+    );
+    Ok(response)
 }
 
 async fn improvements_partial(
@@ -371,6 +426,7 @@ async fn switch_profile(
     Ok(HtmlTemplate(DashboardTemplate {
         empty: page.empty,
         dashboard: page.dashboard,
+        is_paid: user.is_paid(),
     }))
 }
 
@@ -429,7 +485,7 @@ async fn mark_due_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d), "payments", true))
+    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", true))
 }
 
 async fn toggle_paid_handler(
@@ -456,7 +512,7 @@ async fn toggle_paid_handler(
             .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
         return if tab == "payments" {
             Ok(panel_update(
-                payments_from_dashboard(d),
+                payments_from_dashboard(d, user.is_paid()),
                 "payments",
                 is_extra,
             ))
@@ -484,7 +540,7 @@ async fn upsert_note_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d), "payments", false))
+    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", false))
 }
 
 async fn add_extra_handler(
@@ -513,7 +569,7 @@ async fn add_extra_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d), "payments", false))
+    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", false))
 }
 
 async fn delete_extra_handler(
@@ -532,7 +588,7 @@ async fn delete_extra_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d), "payments", true))
+    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", true))
 }
 
 async fn add_improvement_handler(
@@ -720,6 +776,8 @@ async fn load_page(
         error: String::new(),
         user_email: user.email.clone(),
         avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
+        is_admin: user.is_admin(),
+        is_paid: user.is_paid(),
     })
 }
 
@@ -747,7 +805,7 @@ fn calendar_from_dashboard(d: crate::models::DashboardView) -> CalendarTemplate 
     }
 }
 
-fn payments_from_dashboard(d: crate::models::DashboardView) -> PaymentsTemplate {
+fn payments_from_dashboard(d: crate::models::DashboardView, is_paid: bool) -> PaymentsTemplate {
     PaymentsTemplate {
         profile_id: d.profile_id,
         payment_years: d.payment_years,
@@ -757,6 +815,7 @@ fn payments_from_dashboard(d: crate::models::DashboardView) -> PaymentsTemplate 
         extra_date_default: d.extra_date_default,
         view_year: d.view_year,
         grain: d.chart.grain,
+        is_paid,
     }
 }
 

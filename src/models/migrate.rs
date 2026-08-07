@@ -195,6 +195,51 @@ pub async fn ensure_user_payments_year_expand(pool: &DbPool) -> AppResult<()> {
     Ok(())
 }
 
+pub async fn ensure_user_role(pool: &DbPool) -> AppResult<()> {
+    if users_have_column(pool, "role").await? {
+        return Ok(());
+    }
+    tracing::info!("adding users.role column");
+    let conn = get_conn(pool).await?;
+    execute(
+        &conn,
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+        (),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn ensure_user_tier(pool: &DbPool) -> AppResult<()> {
+    if users_have_column(pool, "tier").await? {
+        return Ok(());
+    }
+    tracing::info!("adding users.tier column");
+    let conn = get_conn(pool).await?;
+    execute(
+        &conn,
+        "ALTER TABLE users ADD COLUMN tier TEXT NOT NULL DEFAULT 'unpaid'",
+        (),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn ensure_user_paid_until(pool: &DbPool) -> AppResult<()> {
+    if users_have_column(pool, "paid_until").await? {
+        return Ok(());
+    }
+    tracing::info!("adding users.paid_until column");
+    let conn = get_conn(pool).await?;
+    execute(
+        &conn,
+        "ALTER TABLE users ADD COLUMN paid_until TEXT",
+        (),
+    )
+    .await?;
+    Ok(())
+}
+
 async fn users_have_column(pool: &DbPool, column: &str) -> AppResult<bool> {
     let conn = get_conn(pool).await?;
     let cols: Vec<(i32, String)> =

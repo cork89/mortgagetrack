@@ -83,6 +83,8 @@ pub struct IndexTemplate {
     pub error: String,
     pub user_email: String,
     pub avatar_src: String,
+    pub is_admin: bool,
+    pub is_paid: bool,
 }
 
 #[derive(Template)]
@@ -141,6 +143,7 @@ pub struct PaymentsTemplate {
     pub extra_date_default: String,
     pub view_year: i32,
     pub grain: String,
+    pub is_paid: bool,
 }
 
 #[derive(Template)]
@@ -165,6 +168,7 @@ pub struct ChartTemplate {
 pub struct DashboardTemplate {
     pub empty: EmptyState,
     pub dashboard: Option<DashboardView>,
+    pub is_paid: bool,
 }
 
 #[derive(Template)]
@@ -277,4 +281,23 @@ pub struct SettingsTemplate {
     pub password_error: String,
     pub delete_error: String,
     pub auth_edge: bool,
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdminUserView {
+    pub email: String,
+    pub is_admin: bool,
+    pub is_paid: bool,
+    pub paid_until_label: String,
+    pub paid_until_iso: String,
+    pub is_self: bool,
+}
+
+#[derive(Template)]
+#[template(path = "admin_users.html")]
+pub struct AdminUsersTemplate {
+    pub csrf_token: String,
+    pub app_name: String,
+    pub users: Vec<AdminUserView>,
 }

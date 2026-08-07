@@ -142,6 +142,7 @@ fn settings_template(
         password_error: String::new(),
         delete_error: String::new(),
         auth_edge: trust_identity_headers(),
+        is_admin: user.is_admin(),
     }
 }
 
