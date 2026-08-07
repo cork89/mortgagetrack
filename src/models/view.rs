@@ -280,7 +280,6 @@ pub struct ChartPair {
 #[derive(Debug, Clone)]
 pub struct DashboardView {
     pub profile_id: String,
-    pub profile_version: i64,
     pub profile_principal: String,
     pub profile_rate: String,
     pub profile_term: String,
@@ -472,7 +471,6 @@ pub fn build_dashboard(
 
     Some(DashboardView {
         profile_id: profile.id.clone(),
-        profile_version: profile.version,
         profile_principal: money(loan.principal),
         profile_rate: format!("{}%", loan.rate),
         profile_term: format!("{}yr", loan.term_years),

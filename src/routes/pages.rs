@@ -1,12 +1,12 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
     routing::{delete, get, post},
     Form, Router,
 };
 use chrono::{Datelike, NaiveDate};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
@@ -16,14 +16,14 @@ use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, add_improvement, build_dashboard, clear_paid, create_profile, delete_extra,
     delete_improvement, delete_profile, empty_state, list_extras, list_paid_keys, load_page_bundle,
-    load_profile, mark_due_paid, rename_profile, set_active_profile, toggle_paid,
-    update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter, PaymentsYearExpand,
-    ProfileOption, TabId,
+    load_profile, mark_due_paid, rename_profile, set_active_profile, set_paid, update_improvement,
+    update_profile_loan, upsert_payment_note, PaymentFilter, PaymentsYearExpand, ProfileOption,
+    TabId,
 };
 use crate::templates::{
-    conflict_dashboard, panel_trigger, panel_update, CalendarTemplate, ChartTemplate,
-    DashboardTemplate, ErrorPartial, HtmlTemplate, ImprovementsTemplate, IndexTemplate,
-    LandingTemplate, PaymentsTemplate, SummaryTemplate,
+    panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
+    HtmlTemplate, ImprovementsTemplate, IndexTemplate, LandingTemplate, PaymentsTemplate,
+    SummaryTemplate,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -68,18 +68,6 @@ pub struct IndexQuery {
     pub grain: Option<String>,
 }
 
-/// Form fields often submit `version=` (empty) on create; treat that as 0.
-fn deserialize_i64_empty_as_zero<'de, D>(deserializer: D) -> Result<i64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let raw = Option::<String>::deserialize(deserializer)?;
-    match raw.as_deref().map(str::trim) {
-        None | Some("") => Ok(0),
-        Some(s) => s.parse().map_err(serde::de::Error::custom),
-    }
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ProfileForm {
     pub name: String,
@@ -87,29 +75,11 @@ pub struct ProfileForm {
     pub rate: f64,
     pub term: i32,
     pub start_date: String,
-    #[serde(default, deserialize_with = "deserialize_i64_empty_as_zero")]
-    pub version: i64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RenameForm {
     pub name: String,
-    pub version: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct ClearPaidForm {
-    version: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct MarkDueForm {
-    version: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct VersionOnlyForm {
-    version: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,7 +94,7 @@ pub struct SwitchForm {
 #[derive(Debug, Deserialize)]
 pub struct ToggleForm {
     pub pay_key: String,
-    pub version: i64,
+    pub paid: bool,
     pub year: Option<i32>,
     pub filter: Option<String>,
     pub grain: Option<String>,
@@ -135,7 +105,6 @@ pub struct ToggleForm {
 pub struct ExtraForm {
     pub date: String,
     pub amount: f64,
-    pub version: i64,
     pub filter: Option<String>,
     #[serde(default)]
     pub recast: bool,
@@ -145,7 +114,6 @@ pub struct ExtraForm {
 pub struct ImprovementForm {
     pub date: String,
     pub amount: f64,
-    pub version: i64,
     #[serde(default)]
     pub note: String,
     #[serde(default)]
@@ -156,7 +124,6 @@ pub struct ImprovementForm {
 pub struct UpdateImprovementForm {
     pub date: String,
     pub amount: f64,
-    pub version: i64,
     #[serde(default)]
     pub note: String,
     #[serde(default)]
@@ -167,7 +134,6 @@ pub struct UpdateImprovementForm {
 pub struct NoteForm {
     pub pay_key: String,
     pub note: String,
-    pub version: i64,
     pub year: Option<i32>,
     pub filter: Option<String>,
     pub grain: Option<String>,
@@ -318,11 +284,6 @@ async fn update_profile_handler(
 ) -> Response {
     match update_profile_inner(&state, user, &id, form).await {
         Ok(_) => hx_redirect(&headers, "/"),
-        Err(AppError::Conflict(msg)) => (
-            StatusCode::CONFLICT,
-            HtmlTemplate(ErrorPartial { message: msg }),
-        )
-            .into_response(),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
         })
@@ -342,7 +303,6 @@ async fn update_profile_inner(
     }
     let start = parse_date(&form.start_date)?;
     validate_loan(form.principal, form.rate, form.term)?;
-    let version = parse_version(form.version)?;
     update_profile_loan(
         &state.pool,
         user.id,
@@ -352,7 +312,6 @@ async fn update_profile_inner(
         form.rate,
         form.term,
         start,
-        version,
     )
     .await?;
     set_active_profile(&state.pool, user.id, Some(id)).await?;
@@ -373,22 +332,8 @@ async fn rename_profile_handler(
         })
         .into_response();
     }
-    let version = match parse_version(form.version) {
-        Ok(v) => v,
-        Err(err) => {
-            return HtmlTemplate(ErrorPartial {
-                message: err.to_string(),
-            })
-            .into_response();
-        }
-    };
-    match rename_profile(&state.pool, user.id, &id, name, version).await {
+    match rename_profile(&state.pool, user.id, &id, name).await {
         Ok(_) => hx_redirect(&headers, "/"),
-        Err(AppError::Conflict(msg)) => (
-            StatusCode::CONFLICT,
-            HtmlTemplate(ErrorPartial { message: msg }),
-        )
-            .into_response(),
         Err(err) => HtmlTemplate(ErrorPartial {
             message: err.to_string(),
         })
@@ -434,24 +379,12 @@ async fn clear_paid_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
-    Form(form): Form<ClearPaidForm>,
 ) -> AppResult<Response> {
-    let q = IndexQuery {
-        tab: None,
-        year: None,
-        filter: None,
-        grain: None,
-    };
-    match clear_paid(&state.pool, user.id, &id, parse_version(form.version)?).await {
-        Ok(_) => {
-            if is_htmx(&headers) {
-                Ok(hx_redirect(&headers, "/"))
-            } else {
-                Ok(Redirect::to("/").into_response())
-            }
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
+    clear_paid(&state.pool, user.id, &id).await?;
+    if is_htmx(&headers) {
+        Ok(hx_redirect(&headers, "/"))
+    } else {
+        Ok(Redirect::to("/").into_response())
     }
 }
 
@@ -460,7 +393,6 @@ async fn mark_due_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(q): Query<IndexQuery>,
-    Form(form): Form<MarkDueForm>,
 ) -> AppResult<Response> {
     let profile = load_profile(&state.pool, user.id, &id)
         .await?
@@ -492,24 +424,12 @@ async fn mark_due_handler(
         })
         .map(|r| r.pay_key.clone())
         .collect();
-    let version = parse_version(form.version)?;
-    match mark_due_paid(&state.pool, user.id, &id, &keys, version).await {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                payments_from_dashboard(d),
-                "payments",
-                true,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    mark_due_paid(&state.pool, user.id, &id, &keys).await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(payments_from_dashboard(d), "payments", true))
 }
 
 async fn toggle_paid_handler(
@@ -525,39 +445,26 @@ async fn toggle_paid_handler(
         filter: form.filter,
         grain: form.grain,
     };
-    let version = parse_version(form.version)?;
-    match toggle_paid(&state.pool, user.id, &id, &form.pay_key, version).await {
-        Ok((_now_paid, next_version)) => {
-            let is_extra = form.pay_key.starts_with("extra:");
-            // Payments tab: always refresh so total balance / interest summary stay in sync.
-            // Extras/recasts also change amortization — refresh whichever panel is active.
-            if tab == "payments" || is_extra {
-                let page = load_page(&state, &q, &user).await?;
-                let d = page
-                    .dashboard
-                    .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-                let version = d.profile_version;
-                return if tab == "payments" {
-                    Ok(panel_update(
-                        payments_from_dashboard(d),
-                        "payments",
-                        is_extra,
-                        version,
-                    ))
-                } else {
-                    Ok(panel_update(
-                        calendar_from_dashboard(d),
-                        "calendar",
-                        true,
-                        version,
-                    ))
-                };
-            }
-            Ok(panel_trigger("calendar", false, next_version))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
+    set_paid(&state.pool, user.id, &id, &form.pay_key, form.paid).await?;
+    let is_extra = form.pay_key.starts_with("extra:");
+    // Payments tab: always refresh so total balance / interest summary stay in sync.
+    // Extras/recasts also change amortization — refresh whichever panel is active.
+    if tab == "payments" || is_extra {
+        let page = load_page(&state, &q, &user).await?;
+        let d = page
+            .dashboard
+            .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+        return if tab == "payments" {
+            Ok(panel_update(
+                payments_from_dashboard(d),
+                "payments",
+                is_extra,
+            ))
+        } else {
+            Ok(panel_update(calendar_from_dashboard(d), "calendar", true))
+        };
     }
+    Ok(panel_trigger("calendar", false))
 }
 
 async fn upsert_note_handler(
@@ -572,33 +479,12 @@ async fn upsert_note_handler(
         filter: form.filter,
         grain: form.grain,
     };
-    let version = parse_version(form.version)?;
-    match upsert_payment_note(
-        &state.pool,
-        user.id,
-        &id,
-        &form.pay_key,
-        &form.note,
-        version,
-    )
-    .await
-    {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                payments_from_dashboard(d),
-                "payments",
-                false,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    upsert_payment_note(&state.pool, user.id, &id, &form.pay_key, &form.note).await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(payments_from_dashboard(d), "payments", false))
 }
 
 async fn add_extra_handler(
@@ -614,41 +500,26 @@ async fn add_extra_handler(
         filter: form.filter,
         grain: None,
     };
-    let version = parse_version(form.version)?;
-    match add_extra(
+    add_extra(
         &state.pool,
         user.id,
         &id,
         date,
         form.amount,
         form.recast,
-        version,
     )
-    .await
-    {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                payments_from_dashboard(d),
-                "payments",
-                false,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    .await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(payments_from_dashboard(d), "payments", false))
 }
 
 async fn delete_extra_handler(
     user: AuthUser,
     State(state): State<AppState>,
     Path((id, extra_id)): Path<(String, String)>,
-    Form(form): Form<VersionOnlyForm>,
 ) -> AppResult<Response> {
     let q = IndexQuery {
         tab: Some("payments".into()),
@@ -656,24 +527,12 @@ async fn delete_extra_handler(
         filter: None,
         grain: None,
     };
-    let version = parse_version(form.version)?;
-    match delete_extra(&state.pool, user.id, &id, &extra_id, version).await {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                payments_from_dashboard(d),
-                "payments",
-                true,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    delete_extra(&state.pool, user.id, &id, &extra_id).await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(payments_from_dashboard(d), "payments", true))
 }
 
 async fn add_improvement_handler(
@@ -689,8 +548,7 @@ async fn add_improvement_handler(
         filter: None,
         grain: None,
     };
-    let version = parse_version(form.version)?;
-    match add_improvement(
+    add_improvement(
         &state.pool,
         user.id,
         &id,
@@ -698,33 +556,23 @@ async fn add_improvement_handler(
         form.amount,
         &form.note,
         &form.detail,
-        version,
     )
-    .await
-    {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                improvements_from_dashboard(d),
-                "improvements",
-                false,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    .await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        improvements_from_dashboard(d),
+        "improvements",
+        false,
+    ))
 }
 
 async fn delete_improvement_handler(
     user: AuthUser,
     State(state): State<AppState>,
     Path((id, improvement_id)): Path<(String, String)>,
-    Form(form): Form<VersionOnlyForm>,
 ) -> AppResult<Response> {
     let q = IndexQuery {
         tab: Some("improvements".into()),
@@ -732,24 +580,16 @@ async fn delete_improvement_handler(
         filter: None,
         grain: None,
     };
-    let version = parse_version(form.version)?;
-    match delete_improvement(&state.pool, user.id, &id, &improvement_id, version).await {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                improvements_from_dashboard(d),
-                "improvements",
-                false,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    delete_improvement(&state.pool, user.id, &id, &improvement_id).await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        improvements_from_dashboard(d),
+        "improvements",
+        false,
+    ))
 }
 
 async fn update_improvement_handler(
@@ -765,8 +605,7 @@ async fn update_improvement_handler(
         filter: None,
         grain: None,
     };
-    let version = parse_version(form.version)?;
-    match update_improvement(
+    update_improvement(
         &state.pool,
         user.id,
         &id,
@@ -775,26 +614,17 @@ async fn update_improvement_handler(
         form.amount,
         &form.note,
         &form.detail,
-        version,
     )
-    .await
-    {
-        Ok(_) => {
-            let page = load_page(&state, &q, &user).await?;
-            let d = page
-                .dashboard
-                .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-            let version = d.profile_version;
-            Ok(panel_update(
-                improvements_from_dashboard(d),
-                "improvements",
-                false,
-                version,
-            ))
-        }
-        Err(AppError::Conflict(msg)) => dashboard_conflict(&state, &user, &q, msg).await,
-        Err(err) => Err(err),
-    }
+    .await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        improvements_from_dashboard(d),
+        "improvements",
+        false,
+    ))
 }
 
 async fn load_page(
@@ -891,31 +721,6 @@ async fn load_page(
         user_email: user.email.clone(),
         avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
     })
-}
-
-fn parse_version(version: i64) -> AppResult<i64> {
-    if version < 1 {
-        return Err(AppError::BadRequest(
-            "Missing profile version. Refresh the page and try again.".into(),
-        ));
-    }
-    Ok(version)
-}
-
-async fn dashboard_conflict(
-    state: &AppState,
-    user: &AuthUser,
-    q: &IndexQuery,
-    message: String,
-) -> AppResult<Response> {
-    let page = load_page(state, q, user).await?;
-    Ok(conflict_dashboard(
-        DashboardTemplate {
-            empty: page.empty,
-            dashboard: page.dashboard,
-        },
-        &message,
-    ))
 }
 
 fn parse_date(s: &str) -> AppResult<NaiveDate> {

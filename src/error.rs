@@ -20,9 +20,6 @@ pub enum AppError {
     NotFound(String),
 
     #[error("{0}")]
-    Conflict(String),
-
-    #[error("{0}")]
     TooManyRequests(String),
 
     #[error("{0}")]
@@ -40,7 +37,6 @@ impl IntoResponse for AppError {
         let (status, message) = match &self {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             AppError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
             AppError::Internal(msg) => {
                 tracing::error!(error = %msg, "internal error");

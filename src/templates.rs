@@ -31,31 +31,24 @@ where
     }
 }
 
-fn mark_panels_stale_trigger(
-    keep_tab: &str,
-    invalidate_chart: bool,
-    version: i64,
-) -> Option<HeaderValue> {
+fn mark_panels_stale_trigger(keep_tab: &str, invalidate_chart: bool) -> Option<HeaderValue> {
     let trigger = serde_json::json!({
         "markPanelsStale": {
             "keep": keep_tab,
-            "invalidateChart": invalidate_chart,
-            "version": version
+            "invalidateChart": invalidate_chart
         }
     });
     HeaderValue::from_str(&trigger.to_string()).ok()
 }
 
-/// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale
-/// and advance the optimistic-concurrency version after a successful write.
+/// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale.
 pub fn panel_update<T: Template>(
     template: T,
     keep_tab: &str,
     invalidate_chart: bool,
-    version: i64,
 ) -> Response {
     let mut response = HtmlTemplate(template).into_response();
-    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart, version) {
+    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart) {
         response.headers_mut().insert(
             HeaderName::from_static("hx-trigger"),
             value,
@@ -64,36 +57,15 @@ pub fn panel_update<T: Template>(
     response
 }
 
-/// Empty success for optimistic UI writes: bump version and mark other tabs stale.
-pub fn panel_trigger(keep_tab: &str, invalidate_chart: bool, version: i64) -> Response {
+/// Empty success for optimistic UI writes: mark other tabs stale.
+pub fn panel_trigger(keep_tab: &str, invalidate_chart: bool) -> Response {
     let mut response = StatusCode::NO_CONTENT.into_response();
-    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart, version) {
+    if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart) {
         response.headers_mut().insert(
             HeaderName::from_static("hx-trigger"),
             value,
         );
     }
-    response
-}
-
-/// 409 conflict: refresh the dashboard and tell the client to show a message.
-pub fn conflict_dashboard(template: DashboardTemplate, message: &str) -> Response {
-    let mut response = HtmlTemplate(template).into_response();
-    *response.status_mut() = StatusCode::CONFLICT;
-    if let Ok(value) = HeaderValue::from_str(message) {
-        response.headers_mut().insert(
-            HeaderName::from_static("x-conflict-message"),
-            value,
-        );
-    }
-    response.headers_mut().insert(
-        HeaderName::from_static("hx-retarget"),
-        HeaderValue::from_static("#main-panel"),
-    );
-    response.headers_mut().insert(
-        HeaderName::from_static("hx-reswap"),
-        HeaderValue::from_static("innerHTML"),
-    );
     response
 }
 

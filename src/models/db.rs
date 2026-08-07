@@ -13,8 +13,6 @@ use super::amort::{build_schedule, ExtraInput};
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
-pub const PROFILE_CONFLICT_MSG: &str = "Failed to update. Your view has been refreshed.";
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub id: String,
@@ -424,39 +422,12 @@ pub async fn load_page_bundle(pool: &DbPool, user_id: Uuid) -> AppResult<PageBun
     })
 }
 
-pub(crate) async fn reserve_profile_version(
-    tx: &DbTx,
-    profile_id: &str,
-    expected_version: i64,
-) -> AppResult<()> {
-    let bump = execute(
-        tx,
-        "UPDATE profiles SET version = version + 1 WHERE id = ? AND version = ?",
-        params![profile_id, expected_version],
-    )
-    .await?;
-    if bump == 0 {
-        let exists: Option<(String,)> = query_optional(
-            tx,
-            "SELECT id FROM profiles WHERE id = ?",
-            params![profile_id],
-        )
-        .await?;
-        if exists.is_none() {
-            return Err(AppError::NotFound("Profile not found".into()));
-        }
-        return Err(AppError::Conflict(PROFILE_CONFLICT_MSG.into()));
-    }
-    Ok(())
-}
-
 pub async fn upsert_payment_note(
     pool: &DbPool,
     user_id: Uuid,
     profile_id: &str,
     pay_key: &str,
     note: &str,
-    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let trimmed = note.trim();
@@ -466,18 +437,16 @@ pub async fn upsert_payment_note(
         ));
     }
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     if trimmed.is_empty() {
         execute(
-            &tx,
+            &conn,
             "DELETE FROM payment_notes WHERE profile_id = ? AND pay_key = ?",
             params![profile_id, pay_key],
         )
         .await?;
     } else {
         execute(
-            &tx,
+            &conn,
             r#"
             INSERT INTO payment_notes (profile_id, pay_key, note) VALUES (?, ?, ?)
             ON CONFLICT(profile_id, pay_key) DO UPDATE SET note = excluded.note
@@ -486,7 +455,6 @@ pub async fn upsert_payment_note(
         )
         .await?;
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -555,7 +523,6 @@ pub async fn add_improvement(
     amount: f64,
     note: &str,
     detail: &str,
-    expected_version: i64,
 ) -> AppResult<HomeImprovement> {
     require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
@@ -565,10 +532,8 @@ pub async fn add_improvement(
     let date_str = date.format("%Y-%m-%d").to_string();
     let (note, detail) = validate_improvement_text(note, detail)?;
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     execute(
-        &tx,
+        &conn,
         "INSERT INTO home_improvements (id, profile_id, date, amount, note, detail) VALUES (?, ?, ?, ?, ?, ?)",
         params![
             id.as_str(),
@@ -580,7 +545,6 @@ pub async fn add_improvement(
         ],
     )
     .await?;
-    tx.commit().await?;
 
     Ok(HomeImprovement {
         id,
@@ -601,7 +565,6 @@ pub async fn update_improvement(
     amount: f64,
     note: &str,
     detail: &str,
-    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
@@ -610,10 +573,8 @@ pub async fn update_improvement(
     let date_str = date.format("%Y-%m-%d").to_string();
     let (note, detail) = validate_improvement_text(note, detail)?;
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     let result = execute(
-        &tx,
+        &conn,
         r#"
         UPDATE home_improvements
         SET date = ?, amount = ?, note = ?, detail = ?
@@ -632,7 +593,6 @@ pub async fn update_improvement(
     if result == 0 {
         return Err(AppError::NotFound("Home improvement not found".into()));
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -641,14 +601,11 @@ pub async fn delete_improvement(
     user_id: Uuid,
     profile_id: &str,
     improvement_id: &str,
-    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     let result = execute(
-        &tx,
+        &conn,
         "DELETE FROM home_improvements WHERE id = ? AND profile_id = ?",
         params![improvement_id, profile_id],
     )
@@ -656,7 +613,6 @@ pub async fn delete_improvement(
     if result == 0 {
         return Err(AppError::NotFound("Home improvement not found".into()));
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -710,7 +666,6 @@ pub async fn update_profile_loan(
     rate: f64,
     term_years: i32,
     start_date: NaiveDate,
-    expected_version: i64,
 ) -> AppResult<Profile> {
     let conn = get_conn(pool).await?;
     require_profile_access_conn(&conn, user_id, id).await?;
@@ -726,10 +681,8 @@ pub async fn update_profile_loan(
     let built = build_schedule(principal, rate, term_years, start_date, &extra_inputs);
     let start = start_date.format("%Y-%m-%d").to_string();
 
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, id, expected_version).await?;
     let result = execute(
-        &tx,
+        &conn,
         r#"
         UPDATE profiles
         SET name = ?, principal = ?, rate = ?, term_years = ?, start_date = ?,
@@ -752,7 +705,6 @@ pub async fn update_profile_loan(
     if result == 0 {
         return Err(AppError::NotFound("Profile not found".into()));
     }
-    tx.commit().await?;
 
     load_profile_conn(&conn, user_id, id)
         .await?
@@ -764,15 +716,12 @@ pub async fn rename_profile(
     user_id: Uuid,
     id: &str,
     name: &str,
-    expected_version: i64,
 ) -> AppResult<()> {
     require_owned_profile(pool, user_id, id).await?;
     ensure_unique_name(pool, user_id, name, Some(id)).await?;
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, id, expected_version).await?;
     let result = execute(
-        &tx,
+        &conn,
         "UPDATE profiles SET name = ? WHERE id = ? AND user_id = ?",
         params![name, id, user_key(user_id)],
     )
@@ -780,7 +729,6 @@ pub async fn rename_profile(
     if result == 0 {
         return Err(AppError::NotFound("Profile not found".into()));
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -830,57 +778,53 @@ pub async fn delete_profile(pool: &DbPool, user_id: Uuid, id: &str) -> AppResult
     Ok(())
 }
 
-pub async fn toggle_paid(
+/// Set paid status for a pay key. No-ops when already in the desired state.
+pub async fn set_paid(
     pool: &DbPool,
     user_id: Uuid,
     profile_id: &str,
     pay_key: &str,
-    expected_version: i64,
-) -> AppResult<(bool, i64)> {
+    paid: bool,
+) -> AppResult<bool> {
     require_profile_access(pool, user_id, profile_id).await?;
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
 
     let existing: Option<(String,)> = query_optional(
-        &tx,
+        &conn,
         "SELECT pay_key FROM paid_keys WHERE profile_id = ? AND pay_key = ?",
         params![profile_id, pay_key],
     )
     .await?;
+    let currently_paid = existing.is_some();
+    if currently_paid == paid {
+        return Ok(paid);
+    }
 
-    let now_paid = if existing.is_some() {
-        execute(
-            &tx,
-            "DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?",
-            params![profile_id, pay_key],
-        )
-        .await?;
-        false
-    } else {
+    let tx = begin(&conn).await?;
+    if paid {
         execute(
             &tx,
             "INSERT INTO paid_keys (profile_id, pay_key) VALUES (?, ?)",
             params![profile_id, pay_key],
         )
         .await?;
-        true
-    };
+    } else {
+        execute(
+            &tx,
+            "DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?",
+            params![profile_id, pay_key],
+        )
+        .await?;
+    }
     refresh_loan_totals_tx(&tx, user_id, profile_id).await?;
     tx.commit().await?;
-    Ok((now_paid, expected_version + 1))
+    Ok(paid)
 }
 
-pub async fn clear_paid(
-    pool: &DbPool,
-    user_id: Uuid,
-    profile_id: &str,
-    expected_version: i64,
-) -> AppResult<()> {
+pub async fn clear_paid(pool: &DbPool, user_id: Uuid, profile_id: &str) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     execute(
         &tx,
         "DELETE FROM paid_keys WHERE profile_id = ?",
@@ -897,12 +841,10 @@ pub async fn mark_due_paid(
     user_id: Uuid,
     profile_id: &str,
     pay_keys: &[String],
-    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     for key in pay_keys {
         execute(
             &tx,
@@ -923,7 +865,6 @@ pub async fn add_extra(
     date: NaiveDate,
     amount: f64,
     recast: bool,
-    expected_version: i64,
 ) -> AppResult<ExtraPayment> {
     require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
@@ -932,18 +873,14 @@ pub async fn add_extra(
     let id = Uuid::new_v4().to_string();
     let date_str = date.format("%Y-%m-%d").to_string();
     let conn = get_conn(pool).await?;
-    let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     execute(
-        &tx,
+        &conn,
         "INSERT INTO extras (id, profile_id, date, amount, recast) VALUES (?, ?, ?, ?, ?)",
         params![id.as_str(), profile_id, date_str.as_str(), amount, recast],
     )
     .await?;
 
     // Extras start unpaid: balance, monthly payment, and total interest update only when marked paid.
-    tx.commit().await?;
-
     Ok(ExtraPayment {
         id,
         profile_id: profile_id.to_string(),
@@ -958,13 +895,11 @@ pub async fn delete_extra(
     user_id: Uuid,
     profile_id: &str,
     extra_id: &str,
-    expected_version: i64,
 ) -> AppResult<()> {
     require_profile_access(pool, user_id, profile_id).await?;
     let pay_key = format!("extra:{extra_id}");
     let conn = get_conn(pool).await?;
     let tx = begin(&conn).await?;
-    reserve_profile_version(&tx, profile_id, expected_version).await?;
     execute(
         &tx,
         "DELETE FROM paid_keys WHERE profile_id = ? AND pay_key = ?",

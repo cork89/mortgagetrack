@@ -146,8 +146,7 @@
     const elt = e.detail.elt;
     if (isPaidToggle(elt)) {
       if (elt._paidSnapshot) {
-        // 409 swaps a fresh dashboard; don't overwrite that with a local revert.
-        if (!e.detail.successful && e.detail.xhr?.status !== 409) {
+        if (!e.detail.successful) {
           applyPaidToggleKey(elt._paidSnapshot.key, elt._paidSnapshot.paid);
         }
         delete elt._paidSnapshot;
@@ -475,48 +474,6 @@
     return document.getElementById("notePopover");
   }
 
-  function dashboardVersion() {
-    return dashboard()?.dataset.version || "";
-  }
-
-  function syncDashboardVersion(version) {
-    if (version == null || version === "") return;
-    const next = String(version);
-    const dash = dashboard();
-    if (dash) dash.dataset.version = next;
-    const profileVersion = document.getElementById("profileVersion");
-    if (profileVersion) profileVersion.value = next;
-    const noteVersion = document.getElementById("noteVersion");
-    if (noteVersion) noteVersion.value = next;
-    const improvementVersion = document.getElementById("improvementVersion");
-    if (improvementVersion) improvementVersion.value = next;
-  }
-
-  function isProfileWritePath(path) {
-    if (!path || !path.startsWith("/profiles/")) return false;
-    if (path === "/profiles" || path === "/profiles/switch") return false;
-    if (path.includes("/share") || path.includes("/leave") || path.includes("/collaborators")) {
-      return false;
-    }
-    if (/\/profiles\/[^/]+\/delete$/.test(path)) return false;
-    return true;
-  }
-
-  function showConflictToast(message) {
-    let toast = document.getElementById("conflictToast");
-    if (!toast) {
-      toast = document.createElement("div");
-      toast.id = "conflictToast";
-      toast.className = "conflict-toast";
-      toast.setAttribute("role", "status");
-      document.body.appendChild(toast);
-    }
-    toast.textContent = message || "Failed to update. Your view has been refreshed.";
-    toast.classList.add("visible");
-    clearTimeout(showConflictToast._timer);
-    showConflictToast._timer = setTimeout(() => toast.classList.remove("visible"), 6000);
-  }
-
   function openNotePopover(btn) {
     const dash = dashboard();
     const profileId = dash?.dataset.profileId;
@@ -539,7 +496,6 @@
     document.getElementById("noteFilter").value = dash.dataset.filter || "all";
     document.getElementById("noteYear").value = dash.dataset.year || String(new Date().getFullYear());
     document.getElementById("noteGrain").value = dash.dataset.grain || "monthly";
-    document.getElementById("noteVersion").value = dash.dataset.version || "";
     const noteText = document.getElementById("noteText");
     if (noteText) {
       noteText.value = note;
@@ -598,7 +554,6 @@
     form.setAttribute("hx-swap", "innerHTML show:none");
 
     if (title) title.textContent = isAdd ? "Add" : "Edit";
-    document.getElementById("improvementVersion").value = dash.dataset.version || "";
     document.getElementById("improvementDate").value = btn.dataset.date || "";
     document.getElementById("improvementAmount").value = isAdd ? "" : (btn.dataset.amount || "");
 
@@ -716,8 +671,6 @@
     const start = document.getElementById("startDate");
     if (start) start.value = start.dataset.default || start.value;
     document.getElementById("error").textContent = "";
-    const versionInput = document.getElementById("profileVersion");
-    if (versionInput) versionInput.value = "";
     popover()?.showPopover();
     document.getElementById("profileName").focus();
   }
@@ -742,14 +695,10 @@
     document.getElementById("term").value = dash.dataset.term || "30";
     document.getElementById("startDate").value = dash.dataset.start || "";
     document.getElementById("error").textContent = "";
-    const versionInput = document.getElementById("profileVersion");
-    if (versionInput) versionInput.value = dash.dataset.version || "";
     document.getElementById("resetPaidBtn").onclick = () => {
       if (!confirm("Clear all tracked payments for this profile?")) return;
-      const version = dashboardVersion();
-      if (!version || typeof htmx === "undefined") return;
+      if (typeof htmx === "undefined") return;
       htmx.ajax("POST", `/profiles/${id}/clear-paid`, {
-        values: { version },
         headers: { "HX-Request": "true" },
       });
     };
@@ -946,22 +895,11 @@
 
   function bindUi() {
     document.body.addEventListener("htmx:configRequest", (e) => {
-      const path = e.detail.path || "";
-      if (!isProfileWritePath(path) || e.detail.verb !== "post") return;
-      const version = dashboardVersion();
-      if (!version) return;
+      const elt = e.detail.elt;
+      if (!isPaidToggle(elt) || e.detail.verb !== "post") return;
+      // Desired state is the opposite of what's currently shown (before optimistic flip).
       e.detail.parameters = e.detail.parameters || {};
-      e.detail.parameters.version = version;
-    });
-    document.body.addEventListener("htmx:beforeSwap", (e) => {
-      if (e.detail.xhr?.status !== 409) return;
-      e.detail.shouldSwap = true;
-      e.detail.isError = false;
-      const message = e.detail.xhr.getResponseHeader("X-Conflict-Message");
-      showConflictToast(message);
-      popover()?.hidePopover();
-      closeNotePopover();
-      closeImprovementPopover();
+      e.detail.parameters.paid = !elt.classList.contains("paid");
     });
     document.getElementById("loanForm")?.addEventListener("submit", (e) => {
       const form = e.currentTarget;
@@ -1172,9 +1110,7 @@
   document.addEventListener("DOMContentLoaded", bindUi);
 
   document.body.addEventListener("markPanelsStale", (e) => {
-    const detail = e.detail || {};
-    if (detail.version != null) syncDashboardVersion(detail.version);
-    markPanelsStale(detail);
+    markPanelsStale(e.detail || {});
   });
 
   document.body.addEventListener("htmx:beforeSwap", (e) => {

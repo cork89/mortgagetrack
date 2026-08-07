@@ -9,7 +9,7 @@ pub use db::{
     add_extra, add_improvement, clear_paid, create_profile, delete_extra, delete_improvement,
     delete_profile, extras_as_inputs, get_active_profile_id, list_extras, list_paid_keys,
     list_profiles, load_page_bundle, load_profile, mark_due_paid, rename_profile,
-    require_profile_access, set_active_profile, toggle_paid, update_improvement,
+    require_profile_access, set_active_profile, set_paid, update_improvement,
     update_profile_loan, upsert_payment_note, ExtraPayment, ProfileRole,
 };
 pub use migrate::{
