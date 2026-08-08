@@ -27,7 +27,9 @@ use crate::error::AppResult;
 pub use extractor::{
     current_user, resolve_user_id, trust_identity_headers, AdminUser, AuthUser, PaidUser,
 };
-pub use models::{list_users_for_admin, paid_until_active, parse_paid_until, UserRole};
+pub use models::{
+    list_users_for_admin, paid_until_active, parse_paid_until, set_user_paid_until, UserRole,
+};
 pub use middleware::{
     hx_redirect, is_htmx, purge_session, set_pending_share, set_user_id, take_pending_share,
     HOME_PATH,

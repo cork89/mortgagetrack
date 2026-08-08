@@ -207,6 +207,18 @@ pub async fn list_profiles(pool: &DbPool, user_id: Uuid) -> AppResult<Vec<Profil
     list_profiles_conn(&conn, user_id).await
 }
 
+/// Number of profiles owned by the user (excludes shared collaborator profiles).
+pub async fn count_owned_profiles(pool: &DbPool, user_id: Uuid) -> AppResult<usize> {
+    let conn = get_conn(pool).await?;
+    let rows: Vec<(String,)> = query_all(
+        &conn,
+        "SELECT id FROM profiles WHERE user_id = ?",
+        params![user_key(user_id).as_str()],
+    )
+    .await?;
+    Ok(rows.len())
+}
+
 async fn list_profiles_conn(conn: &DbConn, user_id: Uuid) -> AppResult<Vec<Profile>> {
     let key = user_key(user_id);
     query_all(

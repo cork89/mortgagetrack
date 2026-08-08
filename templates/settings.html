@@ -32,6 +32,24 @@
       </p>
     </div>
 
+    <section class="billing-block" aria-labelledby="billing-heading">
+      <h2 id="billing-heading" class="billing-heading">Pro plan</h2>
+      {% if billing_success %}
+      <p class="success" role="status">Subscription updated. Pro features are unlocked.</p>
+      {% endif %}
+      {% if is_paid %}
+      <p class="billing-status">You’re on <strong>Pro</strong>. Manage billing or cancel anytime.</p>
+      <button type="button" class="btn-ghost auth-submit" id="manageBillingBtn">Manage billing</button>
+      {% else %}
+      <p class="billing-status">Unlock multiple profiles, CSV export, and more.</p>
+      <div class="billing-plans">
+        <button type="button" class="btn-primary" data-stripe-plan="monthly">$5 / month</button>
+        <button type="button" class="btn-ghost" data-stripe-plan="yearly">$40 / year</button>
+      </div>
+      {% endif %}
+      <p class="error hidden" id="billingError" role="alert"></p>
+    </section>
+
     {% if avatar_updated %}
     <p class="success" role="status">Avatar updated.</p>
     {% endif %}
@@ -173,6 +191,7 @@
     <form class="auth-form"
       method="post"
       action="/settings/delete"
+      id="deleteAccountForm"
       {% if auth_edge %}data-auth-edge="delete"{% else %}
       hx-post="/settings/delete"
       hx-target="#delete-status"
@@ -184,6 +203,9 @@
         Permanently delete your account, owned mortgage profiles, and related data.
         Access to profiles shared with you will also be removed.
       </p>
+      <p class="error hidden" id="deleteProBlock" role="status">
+        Cancel your Pro subscription first (Manage billing above), then you can delete your account.
+      </p>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div id="delete-status" aria-live="polite">
         {% if !delete_error.is_empty() %}
@@ -191,12 +213,12 @@
         {% endif %}
       </div>
 
-      <label class="field">
+      <label class="field" id="deletePasswordField">
         <span>Password</span>
         <input type="password" name="password" autocomplete="current-password" required />
       </label>
 
-      <button type="submit" class="btn-danger auth-submit">Delete account</button>
+      <button type="submit" class="btn-danger auth-submit" id="deleteAccountSubmit">Delete account</button>
     </form>
   </div>
 </div>
@@ -208,5 +230,79 @@
   document.querySelectorAll("[data-open-on-load]").forEach((el) => {
     if (typeof el.showPopover === "function") el.showPopover();
   });
+
+  async function postStripe(path, body) {
+    const errEl = document.getElementById("billingError");
+    if (errEl) {
+      errEl.textContent = "";
+      errEl.classList.add("hidden");
+    }
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok || !data.url) {
+      const message = data.error || "Could not reach Stripe. Try again.";
+      if (errEl) {
+        errEl.textContent = message;
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+    window.location.href = data.url;
+  }
+
+  document.querySelectorAll("[data-stripe-plan]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const plan = btn.getAttribute("data-stripe-plan");
+      if (!plan) return;
+      btn.disabled = true;
+      postStripe("/api/stripe/checkout", { plan }).finally(() => {
+        btn.disabled = false;
+      });
+    });
+  });
+
+  const manageBtn = document.getElementById("manageBillingBtn");
+  if (manageBtn) {
+    manageBtn.addEventListener("click", () => {
+      manageBtn.disabled = true;
+      postStripe("/api/stripe/portal").finally(() => {
+        manageBtn.disabled = false;
+      });
+    });
+  }
+
+  // Block delete UI while Pro is still renewing (server enforces the same rule).
+  (async () => {
+    const blockEl = document.getElementById("deleteProBlock");
+    const submitBtn = document.getElementById("deleteAccountSubmit");
+    const passwordField = document.getElementById("deletePasswordField");
+    const passwordInput = passwordField?.querySelector("input");
+    try {
+      const res = await fetch("/api/stripe/status", { credentials: "same-origin" });
+      const data = await res.json().catch(() => ({}));
+      const sub = data.subscription;
+      const renewing =
+        sub &&
+        sub.status !== "none" &&
+        ["active", "trialing", "past_due"].includes(sub.status) &&
+        !sub.cancelAtPeriodEnd;
+      if (renewing) {
+        blockEl?.classList.remove("hidden");
+        if (submitBtn) submitBtn.disabled = true;
+        if (passwordInput) {
+          passwordInput.required = false;
+          passwordInput.disabled = true;
+        }
+        passwordField?.classList.add("hidden");
+      }
+    } catch {
+      /* keep delete available; server still blocks if needed */
+    }
+  })();
 </script>
 {% endblock %}

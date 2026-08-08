@@ -19,7 +19,8 @@
     </select>
   </div>
   <div class="profile-actions">
-    <button type="button" class="btn-ghost" id="newProfileBtn">New</button>
+    <button type="button" class="btn-ghost" id="newProfileBtn"
+      {% if !can_create_profile %}disabled title="Paid feature"{% endif %}>New</button>
     <button type="button" class="btn-primary" id="editProfileBtn"{% if !has_profiles %} disabled{% endif %}>Edit</button>
   </div>
   <div class="profile-meta" id="profileMeta"{% match dashboard %}{% when None %} hidden{% else %}{% endmatch %}>

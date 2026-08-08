@@ -15,6 +15,7 @@
 
   <div class="admin-card">
     <p class="admin-meta">{{ users.len() }} account{% if users.len() != 1 %}s{% endif %}</p>
+    <p id="adminAccessError" class="admin-error" hidden></p>
     {% if users.is_empty() %}
     <p class="admin-empty">No users found.</p>
     {% else %}
@@ -25,7 +26,7 @@
             <th scope="col">Email</th>
             <th scope="col">Admin</th>
             <th scope="col">Paid until</th>
-            <th scope="col">Paid now</th>
+            <th scope="col">Paid</th>
           </tr>
         </thead>
         <tbody>
@@ -42,7 +43,7 @@
               <span class="admin-pill is-no">No</span>
               {% endif %}
             </td>
-            <td>
+            <td class="admin-paid-until" data-user-id="{{ u.id }}">
               {% if u.paid_until_label.is_empty() %}
               <span class="admin-muted">—</span>
               {% else %}
@@ -50,11 +51,15 @@
               {% endif %}
             </td>
             <td>
-              {% if u.is_paid %}
-              <span class="admin-pill is-yes">Yes</span>
-              {% else %}
-              <span class="admin-pill is-no">No</span>
-              {% endif %}
+              <label class="admin-switch">
+                <input type="checkbox" class="admin-paid-switch"
+                  data-user-id="{{ u.id }}"
+                  {% if u.has_paid_entitlement %}checked{% endif %}
+                  role="switch"
+                  aria-label="Paid access for {{ u.email }}" />
+                <span class="admin-switch-ui" aria-hidden="true"></span>
+                <span class="admin-switch-label">{% if u.has_paid_entitlement %}On{% else %}Off{% endif %}</span>
+              </label>
             </td>
           </tr>
           {% endfor %}
@@ -63,5 +68,84 @@
     </div>
     {% endif %}
   </div>
+
+  {# Top-level POST so the session CSRF cookie is always sent (fetch can 403). #}
+  <form id="adminAccessForm" method="post" action="/admin/access" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="user_id" id="adminAccessUserId" value="" />
+    <input type="hidden" name="paid" id="adminAccessPaid" value="" />
+  </form>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const PAID_UNTIL = "9999-12-31T23:59:59.000Z";
+  const errorEl = document.getElementById("adminAccessError");
+  const form = document.getElementById("adminAccessForm");
+  const userIdInput = document.getElementById("adminAccessUserId");
+  const paidInput = document.getElementById("adminAccessPaid");
+
+  function showError(message) {
+    if (!errorEl) return;
+    errorEl.textContent = message;
+    errorEl.hidden = !message;
+  }
+
+  function setLabel(input, on) {
+    const label = input.closest(".admin-switch")?.querySelector(".admin-switch-label");
+    if (label) label.textContent = on ? "On" : "Off";
+  }
+
+  document.querySelectorAll(".admin-paid-switch").forEach((input) => {
+    input.addEventListener("change", async () => {
+      const userId = input.dataset.userId;
+      const markPaid = input.checked;
+      if (!userId || !form || !userIdInput || !paidInput) return;
+
+      const previous = !markPaid;
+      showError("");
+      input.disabled = true;
+      setLabel(input, markPaid);
+
+      try {
+        // 1) Update Better Auth / D1 (session source of truth).
+        const res = await fetch("/api/admin/access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            userId,
+            paidUntil: markPaid ? PAID_UNTIL : null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          input.checked = previous;
+          setLabel(input, previous);
+          input.disabled = false;
+          const detail = data.error || res.statusText || String(res.status);
+          showError(
+            res.status === 403
+              ? `Forbidden (${detail}). Sign out/in if you just became admin.`
+              : `Could not update access (${detail}).`,
+          );
+          return;
+        }
+
+        // 2) Sync domain users row + reload via top-level form (CSRF-safe).
+        userIdInput.value = userId;
+        paidInput.value = markPaid ? "1" : "0";
+        form.submit();
+      } catch {
+        input.checked = previous;
+        setLabel(input, previous);
+        input.disabled = false;
+        showError("Could not update access.");
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

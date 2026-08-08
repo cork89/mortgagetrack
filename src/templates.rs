@@ -77,6 +77,7 @@ pub struct IndexTemplate {
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
     pub is_owner: bool,
+    pub can_create_profile: bool,
     pub empty: EmptyState,
     pub dashboard: Option<DashboardView>,
     pub default_start: String,
@@ -94,6 +95,7 @@ pub struct ProfileBarTemplate {
     pub profiles: Vec<ProfileOption>,
     pub has_profiles: bool,
     pub is_owner: bool,
+    pub can_create_profile: bool,
     pub dashboard: Option<DashboardView>,
 }
 
@@ -282,13 +284,17 @@ pub struct SettingsTemplate {
     pub delete_error: String,
     pub auth_edge: bool,
     pub is_admin: bool,
+    pub is_paid: bool,
+    pub billing_success: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct AdminUserView {
+    pub id: String,
     pub email: String,
     pub is_admin: bool,
-    pub is_paid: bool,
+    /// True when `paid_until` is set and still in the future.
+    pub has_paid_entitlement: bool,
     pub paid_until_label: String,
     pub paid_until_iso: String,
     pub is_self: bool,

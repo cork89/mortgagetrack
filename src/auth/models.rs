@@ -199,6 +199,26 @@ pub async fn list_users_for_admin(pool: &DbPool) -> AppResult<Vec<AdminUserListR
     .await
 }
 
+/// Set or clear domain `users.paid_until` (admin UI / local projection sync).
+pub async fn set_user_paid_until(
+    pool: &DbPool,
+    user_id: &str,
+    paid_until: Option<DateTime<Utc>>,
+) -> AppResult<()> {
+    let conn = get_conn(pool).await?;
+    let paid_s = paid_until.map(|dt| dt.to_rfc3339());
+    let result = execute(
+        &conn,
+        "UPDATE users SET paid_until = ? WHERE id = ?",
+        params![paid_s, user_id],
+    )
+    .await?;
+    if result == 0 {
+        return Err(AppError::NotFound("User not found".into()));
+    }
+    Ok(())
+}
+
 /// Upsert the domain `users` projection for an edge-authenticated identity.
 ///
 /// Used when Better Auth already created the account (Worker D1) but this DB

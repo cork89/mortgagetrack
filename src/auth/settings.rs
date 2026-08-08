@@ -81,6 +81,7 @@ pub struct SettingsQuery {
     pub avatar: Option<String>,
     pub tab: Option<String>,
     pub years: Option<String>,
+    pub billing: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -143,6 +144,8 @@ fn settings_template(
         delete_error: String::new(),
         auth_edge: trust_identity_headers(),
         is_admin: user.is_admin(),
+        is_paid: user.is_paid(),
+        billing_success: q.billing.as_deref() == Some("success"),
     }
 }
 
@@ -285,6 +288,7 @@ async fn change_password(
                         avatar: None,
                         tab: None,
                         years: None,
+                        billing: None,
                     },
                 );
                 page.password_error = message;
@@ -363,6 +367,7 @@ async fn delete_account(
                         avatar: None,
                         tab: None,
                         years: None,
+                        billing: None,
                     },
                 );
                 page.delete_error = message;

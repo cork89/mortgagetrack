@@ -1,6 +1,8 @@
-use super::models::{create_user, find_user_by_email, validate_email, validate_password};
+use super::models::{
+    create_user, find_user_by_email, validate_email, validate_password, UserRole,
+};
 use crate::config::env_bool;
-use crate::db::DbPool;
+use crate::db::{execute, get_conn, params, DbPool};
 use crate::error::AppResult;
 
 const TEST_USERS: &[(&str, &str)] = &[
@@ -11,19 +13,26 @@ const TEST_USERS: &[(&str, &str)] = &[
 /// Create test/seed users from env vars when enabled.
 ///
 /// Requires `ALLOW_DEV_SEED_USERS=true` plus both email and password for each user.
-/// Skips emails that already exist. Intended for local development only.
+/// Skips emails that already exist (still applies `TEST_USERS_AS_ADMIN` promotion).
+/// Intended for local development only.
 pub async fn ensure_test_user(pool: &DbPool) -> AppResult<()> {
     if !env_bool("ALLOW_DEV_SEED_USERS", false) {
         return Ok(());
     }
     tracing::warn!("ALLOW_DEV_SEED_USERS is enabled; seeding development accounts from env");
+    let as_admin = env_bool("TEST_USERS_AS_ADMIN", false);
     for &(email_key, password_key) in TEST_USERS {
-        ensure_one(pool, email_key, password_key).await?;
+        ensure_one(pool, email_key, password_key, as_admin).await?;
     }
     Ok(())
 }
 
-async fn ensure_one(pool: &DbPool, email_key: &str, password_key: &str) -> AppResult<()> {
+async fn ensure_one(
+    pool: &DbPool,
+    email_key: &str,
+    password_key: &str,
+    as_admin: bool,
+) -> AppResult<()> {
     let email = match std::env::var(email_key) {
         Ok(value) if !value.trim().is_empty() => value,
         _ => return Ok(()),
@@ -43,10 +52,27 @@ async fn ensure_one(pool: &DbPool, email_key: &str, password_key: &str) -> AppRe
 
     if find_user_by_email(pool, &email).await?.is_some() {
         tracing::debug!(%email, "test user already exists");
-        return Ok(());
+    } else {
+        create_user(pool, &email, &password).await?;
+        tracing::info!(%email, "seeded test user from .env");
     }
 
-    create_user(pool, &email, &password).await?;
-    tracing::info!(%email, "seeded test user from .env");
+    if as_admin {
+        promote_to_admin(pool, &email).await?;
+    }
+    Ok(())
+}
+
+async fn promote_to_admin(pool: &DbPool, email: &str) -> AppResult<()> {
+    let conn = get_conn(pool).await?;
+    let result = execute(
+        &conn,
+        "UPDATE users SET role = ? WHERE lower(email) = lower(?) AND role != ?",
+        params![UserRole::Admin.as_str(), email, UserRole::Admin.as_str()],
+    )
+    .await?;
+    if result > 0 {
+        tracing::info!(%email, "promoted seed user to admin (TEST_USERS_AS_ADMIN)");
+    }
     Ok(())
 }

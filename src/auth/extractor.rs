@@ -44,8 +44,10 @@ impl AuthUser {
         self.role == UserRole::Admin
     }
 
+    /// Paid entitlement from `paidUntil` only. Admins are not automatically paid
+    /// so the admin paid switch can be used to test unpaid behavior.
     pub fn is_paid(&self) -> bool {
-        self.is_admin() || paid_until_active(self.paid_until, Utc::now())
+        paid_until_active(self.paid_until, Utc::now())
     }
 }
 
@@ -53,7 +55,7 @@ impl AuthUser {
 #[derive(Debug, Clone)]
 pub struct AdminUser(pub AuthUser);
 
-/// Authenticated paid (or admin) user. Unauthenticated → login redirect; unpaid → 403.
+/// Authenticated user with active `paidUntil`. Unauthenticated → login redirect; unpaid → 403.
 #[derive(Debug, Clone)]
 pub struct PaidUser(pub AuthUser);
 
@@ -264,10 +266,10 @@ mod tests {
     }
 
     #[test]
-    fn admin_inherits_paid() {
+    fn admin_not_automatically_paid() {
         let admin = sample_user(UserRole::Admin, None);
         assert!(admin.is_admin());
-        assert!(admin.is_paid());
+        assert!(!admin.is_paid());
     }
 
     #[test]

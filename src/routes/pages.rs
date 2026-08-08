@@ -14,12 +14,12 @@ use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser, Paid
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    add_extra, add_improvement, build_dashboard, clear_paid, create_profile, csv_filename_stem,
-    delete_extra, delete_improvement, delete_profile, empty_state, extras_as_inputs, list_extras,
-    list_paid_keys, list_payment_notes, load_page_bundle, load_profile, mark_due_paid,
-    payments_csv, rename_profile, set_active_profile, set_paid, update_improvement,
-    update_profile_loan, upsert_payment_note, PaymentFilter, PaymentsYearExpand, ProfileOption,
-    TabId,
+    add_extra, add_improvement, build_dashboard, clear_paid, count_owned_profiles, create_profile,
+    csv_filename_stem, delete_extra, delete_improvement, delete_profile, empty_state,
+    extras_as_inputs, list_extras, list_paid_keys, list_payment_notes, load_page_bundle,
+    load_profile, mark_due_paid, payments_csv, rename_profile, set_active_profile, set_paid,
+    update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter,
+    PaymentsYearExpand, ProfileOption, TabId,
 };
 use crate::templates::{
     panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
@@ -314,6 +314,14 @@ async fn create_profile_inner(
     let name = form.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("Enter a profile name.".into()));
+    }
+    if !user.is_paid() {
+        let owned = count_owned_profiles(&state.pool, user.id).await?;
+        if owned >= 1 {
+            return Err(AppError::BadRequest(
+                "Creating more than one profile is a paid feature.".into(),
+            ));
+        }
     }
     let start = parse_date(&form.start_date)?;
     validate_loan(form.principal, form.rate, form.term)?;
@@ -745,6 +753,11 @@ async fn load_page(
         Some(p) => p.user_id == user_key,
         None => true,
     };
+    let owned_count = profiles
+        .iter()
+        .filter(|p| p.user_id == user_key)
+        .count();
+    let can_create_profile = user.is_paid() || owned_count == 0;
 
     let default_start = {
         let d = today;
@@ -770,6 +783,7 @@ async fn load_page(
         has_profiles: !profiles.is_empty(),
         profiles: profile_opts,
         is_owner,
+        can_create_profile,
         empty: empty_state(active.as_ref()),
         dashboard,
         default_start,
