@@ -16,105 +16,183 @@
   </p>
   {% endif %}
 
-  <div class="account-card">
-    <div class="identity">
-      <div class="avatar-edit">
-        <img class="avatar avatar-md" src="{{ avatar_src }}" alt="" width="40" height="40" />
-        <button type="button" class="avatar-edit-btn" popovertarget="avatarPopover" aria-label="Change avatar" title="Change avatar">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-          </svg>
-        </button>
-      </div>
-      <p class="email">
-        <span class="user-label">User</span>
-        <strong>{{ email }}</strong>
-      </p>
-    </div>
+  <div class="tabs settings-tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" class="tab" data-settings-section="account" role="tab"
+      id="settings-tab-account" aria-controls="settings-panel-account"
+      aria-selected="false" tabindex="-1">Account</button>
+    <button type="button" class="tab active" data-settings-section="app" role="tab"
+      id="settings-tab-app" aria-controls="settings-panel-app"
+      aria-selected="true" tabindex="0">App</button>
+    <button type="button" class="tab{% if !is_paid %} is-locked{% endif %}" data-settings-section="pro" role="tab"
+      id="settings-tab-pro" aria-controls="settings-panel-pro"
+      aria-selected="false" tabindex="-1"
+      {% if !is_paid %}disabled aria-disabled="true" title="Pro plan required"{% endif %}>
+      {% if !is_paid %}
+      <svg class="tab-lock-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" width="16" height="16" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"></path>
+      </svg>
+      {% endif %}
+      <span>Pro</span>
+    </button>
+  </div>
 
-    <section class="billing-block" aria-labelledby="billing-heading">
-      <h2 id="billing-heading" class="billing-heading">Pro plan</h2>
+  <div class="panel" id="settings-panel-account" role="tabpanel" aria-labelledby="settings-tab-account">
+    <section class="billing-block plan-compare" aria-labelledby="billing-heading">
+      <h2 id="billing-heading" class="billing-heading">Choose your plan</h2>
       {% if billing_success %}
       <p class="success" role="status">Subscription updated. Pro features are unlocked.</p>
       {% endif %}
-      {% if is_paid %}
-      <p class="billing-status">You’re on <strong>Pro</strong>. Manage billing or cancel anytime.</p>
-      <button type="button" class="btn-ghost auth-submit" id="manageBillingBtn">Manage billing</button>
-      <div class="mcp-block" style="margin-top: 1.25rem;">
-        <h3 class="billing-heading" style="font-size: 1rem;">Connect with MCP</h3>
-        <p class="billing-status">Use Cursor, Claude, or another MCP client with OAuth. Sign in with this account when prompted.</p>
-        <p class="billing-status"><code id="mcpUrl">{{ mcp_url }}</code></p>
-      </div>
-      {% else %}
-      <p class="billing-status">Unlock multiple profiles, CSV export, MCP access, and more.</p>
-      <div class="billing-plans">
-        <button type="button" class="btn-primary" data-stripe-plan="monthly">$5 / month</button>
-        <button type="button" class="btn-ghost" data-stripe-plan="yearly">$40 / year</button>
-      </div>
+      {% if password_updated %}
+      <p class="success" role="status">Password updated.</p>
       {% endif %}
+
+      <div class="plan-grid">
+        <article class="plan-card{% if !is_paid %} is-current{% endif %}">
+          <div class="plan-card-head">
+            <h3 class="plan-name">Free</h3>
+            <p class="plan-price plan-price-muted">$0</p>
+          </div>
+          <ul class="plan-features">
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+              <span>One mortgage profile</span>
+            </li>
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+              <span>Payment calendar &amp; schedule</span>
+            </li>
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955a1.126 1.126 0 0 1 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
+              <span>Extras, notes &amp; improvements</span>
+            </li>
+          </ul>
+          {% if is_paid %}
+          <p class="plan-cta-note">Included with every account</p>
+          {% else %}
+          <button type="button" class="btn-ghost auth-submit plan-cta" disabled>Current plan</button>
+          {% endif %}
+        </article>
+
+        <article class="plan-card plan-card-pro{% if is_paid %} is-current{% endif %}">
+          <div class="plan-card-head">
+            <h3 class="plan-name">Pro</h3>
+            <p class="plan-price">$5<span>/mo</span></p>
+          </div>
+          <ul class="plan-features">
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+              <span>Everything in Free</span>
+            </li>
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+              <span>Multiple mortgage profiles</span>
+            </li>
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+              <span>CSV payment export</span>
+            </li>
+            <li>
+              <svg class="plan-feature-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>
+              <span>MCP access for AI clients</span>
+            </li>
+          </ul>
+          {% if is_paid %}
+          <button type="button" class="btn-ghost auth-submit plan-cta" id="manageBillingBtn">Manage billing</button>
+          {% else %}
+          <button type="button" class="btn-primary auth-submit plan-cta" data-stripe-plan="monthly">Upgrade</button>
+          {% endif %}
+        </article>
+      </div>
+
       <p class="error hidden" id="billingError" role="alert"></p>
     </section>
 
-    {% if avatar_updated %}
-    <p class="success" role="status">Avatar updated.</p>
-    {% endif %}
-    {% if avatar_error %}
-    <p class="error" role="alert">Could not update avatar. Pick one of the options and try again.</p>
-    {% endif %}
-    {% if default_tab_updated %}
-    <p class="success" role="status">Default tab updated.</p>
-    {% endif %}
-    {% if default_tab_error %}
-    <p class="error" role="alert">Could not update default tab. Pick one of the options and try again.</p>
-    {% endif %}
-    {% if year_expand_updated %}
-    <p class="success" role="status">Payment years preference updated.</p>
-    {% endif %}
-    {% if year_expand_error %}
-    <p class="error" role="alert">Could not update payment years. Pick one of the options and try again.</p>
-    {% endif %}
-    {% if password_updated %}
-    <p class="success" role="status">Password updated.</p>
-    {% endif %}
-
-    <form class="auth-form preference-form" method="post" action="/settings/default-tab">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <label class="field">
-        <span>Default home tab</span>
-        <select name="default_tab" aria-describedby="default-tab-hint"
-          hx-post="/settings/default-tab"
-          hx-trigger="change"
-          hx-include="closest form">
-          {% for opt in tab_options %}
-          <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </form>
-
-    <form class="auth-form preference-form" method="post" action="/settings/payments-year-expand">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <label class="field">
-        <span>Mortgage payments expanded</span>
-        <select name="payments_year_expand" aria-describedby="payments-year-expand-hint"
-          hx-post="/settings/payments-year-expand"
-          hx-trigger="change"
-          hx-include="closest form">
-          {% for opt in year_expand_options %}
-          <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </form>
+    <div class="stack">
+      <button type="button" class="btn-primary auth-submit" popovertarget="passwordPopover">
+        Change password
+      </button>
+      <button type="button" class="btn-danger auth-submit" popovertarget="deletePopover">
+        Delete account
+      </button>
+    </div>
   </div>
 
-  <div class="stack">
-    <button type="button" class="btn-primary auth-submit" popovertarget="passwordPopover">
-      Change password
-    </button>
-    <button type="button" class="btn-danger auth-submit" popovertarget="deletePopover">
-      Delete account
-    </button>
+  <div class="panel active" id="settings-panel-app" role="tabpanel" aria-labelledby="settings-tab-app">
+    <div class="account-card">
+      <div class="identity">
+        <div class="avatar-edit">
+          <img class="avatar avatar-md" src="{{ avatar_src }}" alt="" width="40" height="40" />
+          <button type="button" class="avatar-edit-btn" popovertarget="avatarPopover" aria-label="Change avatar" title="Change avatar">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+            </svg>
+          </button>
+        </div>
+        <p class="email">
+          <span class="user-label">User</span>
+          <strong>{{ email }}</strong>
+        </p>
+      </div>
+
+      {% if avatar_updated %}
+      <p class="success" role="status">Avatar updated.</p>
+      {% endif %}
+      {% if avatar_error %}
+      <p class="error" role="alert">Could not update avatar. Pick one of the options and try again.</p>
+      {% endif %}
+      {% if default_tab_updated %}
+      <p class="success" role="status">Default tab updated.</p>
+      {% endif %}
+      {% if default_tab_error %}
+      <p class="error" role="alert">Could not update default tab. Pick one of the options and try again.</p>
+      {% endif %}
+      {% if year_expand_updated %}
+      <p class="success" role="status">Payment years preference updated.</p>
+      {% endif %}
+      {% if year_expand_error %}
+      <p class="error" role="alert">Could not update payment years. Pick one of the options and try again.</p>
+      {% endif %}
+
+      <form class="auth-form preference-form" method="post" action="/settings/default-tab">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <label class="field">
+          <span>Default home tab</span>
+          <select name="default_tab" aria-describedby="default-tab-hint"
+            hx-post="/settings/default-tab"
+            hx-trigger="change"
+            hx-include="closest form">
+            {% for opt in tab_options %}
+            <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+
+      <form class="auth-form preference-form" method="post" action="/settings/payments-year-expand">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <label class="field">
+          <span>Mortgage payments expanded</span>
+          <select name="payments_year_expand" aria-describedby="payments-year-expand-hint"
+            hx-post="/settings/payments-year-expand"
+            hx-trigger="change"
+            hx-include="closest form">
+            {% for opt in year_expand_options %}
+            <option value="{{ opt.id }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel" id="settings-panel-pro" role="tabpanel" aria-labelledby="settings-tab-pro">
+    <div class="account-card">
+      <div class="mcp-block">
+        <h2 class="billing-heading mcp-heading">Connect with MCP</h2>
+        <p class="billing-status">Use ChatGPT, Claude, or another MCP client. Sign in with this account when prompted.</p>
+        <p class="billing-status"><code id="mcpUrl">{{ mcp_url }}</code></p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -235,6 +313,114 @@
   document.querySelectorAll("[data-open-on-load]").forEach((el) => {
     if (typeof el.showPopover === "function") el.showPopover();
   });
+
+  (function settingsSections() {
+    const SECTIONS = ["account", "app", "pro"];
+    const tabs = [...document.querySelectorAll(".settings-tabs [data-settings-section]")];
+    if (!tabs.length) return;
+
+    function isTabLocked(tab) {
+      return Boolean(
+        tab?.disabled ||
+          tab?.getAttribute("aria-disabled") === "true" ||
+          tab?.classList.contains("is-locked")
+      );
+    }
+
+    function unlockedTabs() {
+      return tabs.filter((tab) => !isTabLocked(tab));
+    }
+
+    function normalizeSection(id) {
+      return SECTIONS.includes(id) ? id : "app";
+    }
+
+    function initialSection() {
+      const params = new URLSearchParams(location.search);
+      const fromQuery = params.get("section");
+      if (SECTIONS.includes(fromQuery)) {
+        const target = tabs.find((t) => t.dataset.settingsSection === fromQuery);
+        if (target && isTabLocked(target)) return "app";
+        return fromQuery;
+      }
+      if (
+        params.has("password") ||
+        params.get("billing") === "success" ||
+        params.get("pro") === "1"
+      ) {
+        return "account";
+      }
+      if (
+        params.has("avatar") ||
+        params.get("tab") === "updated" ||
+        params.get("tab") === "error" ||
+        params.has("years")
+      ) {
+        return "app";
+      }
+      if (document.querySelector("#passwordPopover[data-open-on-load], #deletePopover[data-open-on-load]")) {
+        return "account";
+      }
+      return "app";
+    }
+
+    function activateSection(sectionId, { focus = false, syncUrl = true } = {}) {
+      let id = normalizeSection(sectionId);
+      let target = tabs.find((t) => t.dataset.settingsSection === id);
+      if (!target) return;
+      if (isTabLocked(target)) {
+        id = "app";
+        target = tabs.find((t) => t.dataset.settingsSection === "app");
+        if (!target) return;
+      }
+      tabs.forEach((tab) => {
+        const selected = tab === target;
+        tab.classList.toggle("active", selected);
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      SECTIONS.forEach((section) => {
+        const panel = document.getElementById(`settings-panel-${section}`);
+        if (!panel) return;
+        panel.classList.toggle("active", section === id);
+      });
+      if (focus) target.focus();
+      if (syncUrl) {
+        const url = new URL(location.href);
+        if (id === "app") url.searchParams.delete("section");
+        else url.searchParams.set("section", id);
+        const next = `${url.pathname}${url.search}`;
+        if (`${location.pathname}${location.search}` !== next) {
+          history.replaceState(null, "", next);
+        }
+      }
+    }
+
+    document.querySelector(".settings-tabs")?.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-settings-section]");
+      if (!tab || isTabLocked(tab)) return;
+      e.preventDefault();
+      activateSection(tab.dataset.settingsSection, { focus: true });
+    });
+
+    document.querySelector(".settings-tabs")?.addEventListener("keydown", (e) => {
+      const current = e.target.closest?.("[data-settings-section]");
+      if (!current || isTabLocked(current)) return;
+      const focusable = unlockedTabs();
+      const idx = focusable.indexOf(current);
+      if (idx < 0) return;
+      let next = -1;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (idx + 1) % focusable.length;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (idx - 1 + focusable.length) % focusable.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = focusable.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      activateSection(focusable[next].dataset.settingsSection, { focus: true });
+    });
+
+    activateSection(initialSection(), { focus: false, syncUrl: true });
+  })();
 
   async function postStripe(path, body) {
     const errEl = document.getElementById("billingError");

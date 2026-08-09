@@ -3,7 +3,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Form, Router,
 };
@@ -82,6 +82,10 @@ pub struct SettingsQuery {
     pub tab: Option<String>,
     pub years: Option<String>,
     pub billing: Option<String>,
+    /// Temporary UI preview: `?pro=1` renders settings as if the user is on Pro.
+    pub pro: Option<String>,
+    /// Client settings section tab (`account` | `app` | `pro`).
+    pub section: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,7 +155,7 @@ fn settings_template(
         delete_error: String::new(),
         auth_edge: trust_identity_headers(),
         is_admin: user.is_admin(),
-        is_paid: user.is_paid(),
+        is_paid: user.is_paid() || q.pro.as_deref() == Some("1"),
         billing_success: q.billing.as_deref() == Some("success"),
         mcp_url,
     }
@@ -163,6 +167,10 @@ async fn settings_page(
     user: AuthUser,
     Query(q): Query<SettingsQuery>,
 ) -> AppResult<Response> {
+    let effectively_paid = user.is_paid() || q.pro.as_deref() == Some("1");
+    if q.section.as_deref() == Some("pro") && !effectively_paid {
+        return Ok(Redirect::to("/settings").into_response());
+    }
     let csrf_token = csrf::ensure_token(&session).await?;
     Ok(HtmlTemplate(settings_template(
         &user,
@@ -299,6 +307,8 @@ async fn change_password(
                         tab: None,
                         years: None,
                         billing: None,
+                        pro: None,
+                        section: None,
                     },
                 );
                 page.password_error = message;
@@ -379,6 +389,8 @@ async fn delete_account(
                         tab: None,
                         years: None,
                         billing: None,
+                        pro: None,
+                        section: None,
                     },
                 );
                 page.delete_error = message;
