@@ -40,8 +40,13 @@
       {% if is_paid %}
       <p class="billing-status">You’re on <strong>Pro</strong>. Manage billing or cancel anytime.</p>
       <button type="button" class="btn-ghost auth-submit" id="manageBillingBtn">Manage billing</button>
+      <div class="mcp-block" style="margin-top: 1.25rem;">
+        <h3 class="billing-heading" style="font-size: 1rem;">Connect with MCP</h3>
+        <p class="billing-status">Use Cursor, Claude, or another MCP client with OAuth. Sign in with this account when prompted.</p>
+        <p class="billing-status"><code id="mcpUrl">{{ mcp_url }}</code></p>
+      </div>
       {% else %}
-      <p class="billing-status">Unlock multiple profiles, CSV export, and more.</p>
+      <p class="billing-status">Unlock multiple profiles, CSV export, MCP access, and more.</p>
       <div class="billing-plans">
         <button type="button" class="btn-primary" data-stripe-plan="monthly">$5 / month</button>
         <button type="button" class="btn-ghost" data-stripe-plan="yearly">$40 / year</button>

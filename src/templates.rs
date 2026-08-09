@@ -286,6 +286,17 @@ pub struct SettingsTemplate {
     pub is_admin: bool,
     pub is_paid: bool,
     pub billing_success: bool,
+    pub mcp_url: String,
+}
+
+#[derive(Template)]
+#[template(path = "oauth_consent.html")]
+pub struct OAuthConsentTemplate {
+    pub csrf_token: String,
+    pub app_name: String,
+    pub email: String,
+    pub client_name: String,
+    pub scopes: String,
 }
 
 #[derive(Debug, Clone)]

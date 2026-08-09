@@ -3,8 +3,8 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::{ConnectInfo, Query, State},
-    http::{HeaderMap, StatusCode},
+    extract::{ConnectInfo, OriginalUri, Query, State},
+    http::{HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Form, Router,
@@ -63,15 +63,27 @@ fn edge_auth_gone() -> Response {
         .into_response()
 }
 
+fn oauth_authorize_return(uri: &Uri) -> Option<String> {
+    let query = uri.query()?;
+    if !query.split('&').any(|p| p.starts_with("client_id=")) {
+        return None;
+    }
+    Some(format!("/api/auth/oauth2/authorize?{query}"))
+}
+
 async fn login_page(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Query(q): Query<AuthQuery>,
 ) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
     if resolve_user_id(&headers, &session).await?.is_some() {
+        if let Some(oauth) = oauth_authorize_return(&uri) {
+            return Ok(Redirect::to(&oauth).into_response());
+        }
         let dest = if fields.next.is_empty() {
             HOME_PATH
         } else {
@@ -97,11 +109,15 @@ async fn register_page(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Query(q): Query<AuthQuery>,
 ) -> AppResult<Response> {
     remember_share_invite(&session, q.next.as_deref()).await?;
     let fields = auth_next_fields(q.next.as_deref());
     if resolve_user_id(&headers, &session).await?.is_some() {
+        if let Some(oauth) = oauth_authorize_return(&uri) {
+            return Ok(Redirect::to(&oauth).into_response());
+        }
         let dest = if fields.next.is_empty() {
             HOME_PATH
         } else {

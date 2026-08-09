@@ -100,11 +100,18 @@ fn settings_template(
     user: &AuthUser,
     csrf_token: String,
     app_name: String,
+    app_base_url: &str,
     q: &SettingsQuery,
 ) -> SettingsTemplate {
     let current = resolved_avatar_id(&user.id, user.avatar.as_deref());
     let current_tab = TabId::parse(&user.default_tab);
     let current_year_expand = PaymentsYearExpand::parse(&user.payments_year_expand);
+    let base = app_base_url.trim_end_matches('/');
+    let mcp_url = if base.is_empty() {
+        "/mcp".to_string()
+    } else {
+        format!("{base}/mcp")
+    };
     SettingsTemplate {
         csrf_token,
         app_name,
@@ -146,6 +153,7 @@ fn settings_template(
         is_admin: user.is_admin(),
         is_paid: user.is_paid(),
         billing_success: q.billing.as_deref() == Some("success"),
+        mcp_url,
     }
 }
 
@@ -160,6 +168,7 @@ async fn settings_page(
         &user,
         csrf_token,
         state.app_name.clone(),
+        &state.app_base_url,
         &q,
     ))
     .into_response())
@@ -283,6 +292,7 @@ async fn change_password(
                     &user,
                     csrf_token,
                     state.app_name.clone(),
+                    &state.app_base_url,
                     &SettingsQuery {
                         password: None,
                         avatar: None,
@@ -362,6 +372,7 @@ async fn delete_account(
                     &user,
                     csrf_token,
                     state.app_name.clone(),
+                    &state.app_base_url,
                     &SettingsQuery {
                         password: None,
                         avatar: None,

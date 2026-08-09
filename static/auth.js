@@ -51,12 +51,24 @@
     return "/";
   }
 
+  /** MCP/OIDC authorize return: Better Auth redirects to /login?client_id=… */
+  function oauthAuthorizeReturn() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("client_id")) return null;
+    return `/api/auth/oauth2/authorize?${params.toString()}`;
+  }
+
+  function postAuthDestination(form) {
+    return oauthAuthorizeReturn() || nextFromForm(form);
+  }
+
   async function onLogin(form) {
     const email = form.email.value.trim();
     const password = form.password.value;
+    const dest = postAuthDestination(form);
     // Relative callback paths stay same-origin; avoids Origin/trustedOrigins mismatches.
-    await authFetch("/sign-in/email", { email, password, callbackURL: nextFromForm(form) });
-    window.location.assign(nextFromForm(form));
+    await authFetch("/sign-in/email", { email, password, callbackURL: dest });
+    window.location.assign(dest);
   }
 
   async function onRegister(form) {
@@ -65,13 +77,14 @@
     const confirm = form.confirm_password.value;
     if (password !== confirm) throw new Error("Passwords do not match.");
     const name = email.includes("@") ? email.split("@")[0] : email;
+    const dest = postAuthDestination(form);
     await authFetch("/sign-up/email", {
       name,
       email,
       password,
-      callbackURL: nextFromForm(form),
+      callbackURL: dest,
     });
-    window.location.assign(nextFromForm(form));
+    window.location.assign(dest);
   }
 
   async function onForgot(form) {

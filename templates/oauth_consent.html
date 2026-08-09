@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Authorize — {{ app_name }}{% endblock %}
+
+{% block body %}
+<section class="auth-panel" aria-labelledby="consent-heading">
+  <header class="brand-block auth-brand">
+    <h1 class="brand" id="consent-heading"><a class="brand-home" href="/">{{ app_name }}</a></h1>
+    <span class="brand-rule" aria-hidden="true"></span>
+    <p class="tagline">Allow an MCP client to access your mortgage data.</p>
+  </header>
+
+  <div class="auth-form">
+    <p><strong>{{ client_name }}</strong> is requesting access{% if !scopes.is_empty() %} with scopes: <code>{{ scopes }}</code>{% endif %}.</p>
+    <p class="billing-status">Signed in as <strong>{{ email }}</strong>. Pro is required to use MCP.</p>
+    <div id="auth-error" aria-live="polite"></div>
+    <div class="billing-plans" style="margin-top: 1rem;">
+      <button type="button" class="btn-primary" id="consentAccept">Allow</button>
+      <button type="button" class="btn-ghost" id="consentDeny">Deny</button>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const oauthQuery = window.location.search.startsWith("?")
+    ? window.location.search.slice(1)
+    : window.location.search;
+  const errorBox = document.getElementById("auth-error");
+
+  function showError(message) {
+    if (!errorBox) return;
+    errorBox.innerHTML = `<p class="error" role="alert">${message}</p>`;
+  }
+
+  async function submitConsent(accept) {
+    const res = await fetch("/api/auth/oauth2/consent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        accept,
+        oauth_query: oauthQuery || undefined,
+      }),
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+    if (!res.ok) {
+      showError(data?.message || data?.error || `Request failed (${res.status})`);
+      return;
+    }
+    const redirectUri = data?.redirect_uri || data?.redirectURI || data?.url;
+    if (typeof redirectUri === "string" && redirectUri) {
+      window.location.assign(redirectUri);
+      return;
+    }
+    const loc = res.headers.get("Location");
+    if (loc) {
+      window.location.assign(loc);
+      return;
+    }
+    showError("Consent recorded, but no redirect was returned. Close this tab and retry from your MCP client.");
+  }
+
+  document.getElementById("consentAccept")?.addEventListener("click", () => submitConsent(true));
+  document.getElementById("consentDeny")?.addEventListener("click", () => submitConsent(false));
+})();
+</script>
+{% endblock %}

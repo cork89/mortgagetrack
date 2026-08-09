@@ -1,4 +1,6 @@
 mod admin;
+mod mcp_api;
+mod oauth;
 mod pages;
 mod sharing;
 
@@ -13,4 +15,6 @@ pub fn router() -> Router<AppState> {
         .merge(pages::routes())
         .merge(sharing::routes())
         .merge(admin::routes())
+        .merge(oauth::routes())
+        .merge(mcp_api::routes())
 }
