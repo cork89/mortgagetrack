@@ -1,12 +1,13 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderMap, HeaderValue},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
     routing::{delete, get, post},
-    Form, Router,
+    Form, Json, Router,
 };
 use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
+use serde_json::{json, Value};
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
@@ -16,10 +17,10 @@ use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, add_improvement, build_dashboard, clear_paid, count_owned_profiles, create_profile,
     csv_filename_stem, delete_extra, delete_improvement, delete_profile, empty_state,
-    extras_as_inputs, list_extras, list_paid_keys, list_payment_notes, load_page_bundle,
-    load_profile, mark_due_paid, payments_csv, rename_profile, require_profile_access,
-    set_active_profile, set_paid, update_improvement, update_profile_loan, upsert_payment_note,
-    PaymentFilter, PaymentsYearExpand, ProfileOption, TabId,
+    extras_as_inputs, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
+    list_profiles, load_page_bundle, load_profile, mark_due_paid, payments_csv, rename_profile,
+    require_profile_access, set_active_profile, set_paid, update_improvement, update_profile_loan,
+    upsert_payment_note, PaymentFilter, PaymentsYearExpand, Profile, ProfileOption, TabId,
 };
 use crate::templates::{
     panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
@@ -360,19 +361,30 @@ async fn update_profile_handler(
 async fn copy_profile_handler(
     user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    match copy_profile_inner(&state, user, &id).await {
-        Ok(_) => hx_redirect(&headers, "/"),
-        Err(err) => HtmlTemplate(ErrorPartial {
-            message: err.to_string(),
-        })
-        .into_response(),
+    match copy_profile_inner(&state, &user, &id).await {
+        Ok(profile) => {
+            let user_key = user.id.to_string();
+            let owned_count = match count_owned_profiles(&state.pool, user.id).await {
+                Ok(n) => n,
+                Err(err) => return json_err(err),
+            };
+            let can_create_profile = user.is_paid() || owned_count == 0;
+            json_ok(json!({
+                "profile": profile_option_json(&profile, &user_key),
+                "can_create_profile": can_create_profile,
+            }))
+        }
+        Err(err) => json_err(err),
     }
 }
 
-async fn copy_profile_inner(state: &AppState, user: AuthUser, id: &str) -> AppResult<()> {
+async fn copy_profile_inner(
+    state: &AppState,
+    user: &AuthUser,
+    id: &str,
+) -> AppResult<Profile> {
     require_profile_access(&state.pool, user.id, id).await?;
     if !user.is_paid() {
         let owned = count_owned_profiles(&state.pool, user.id).await?;
@@ -395,7 +407,8 @@ async fn copy_profile_inner(state: &AppState, user: AuthUser, id: &str) -> AppRe
         let truncated: String = base.chars().take(max_base).collect();
         format!("{truncated}{suffix}")
     };
-    create_profile(
+    let previous_active = get_active_profile_id(&state.pool, user.id).await?;
+    let created = create_profile(
         &state.pool,
         user.id,
         &copy_name,
@@ -405,7 +418,13 @@ async fn copy_profile_inner(state: &AppState, user: AuthUser, id: &str) -> AppRe
         loan.start_date,
     )
     .await?;
-    Ok(())
+    // Keep the dashboard on the previous active profile; the modal opens the copy.
+    if let Some(prev) = previous_active {
+        if prev != created.id {
+            set_active_profile(&state.pool, user.id, Some(&prev)).await?;
+        }
+    }
+    Ok(created)
 }
 
 async fn update_profile_inner(
@@ -465,6 +484,22 @@ async fn delete_profile_handler(
     Path(id): Path<String>,
 ) -> AppResult<Response> {
     delete_profile(&state.pool, user.id, &id).await?;
+    if wants_json(&headers) {
+        let user_key = user.id.to_string();
+        let profiles = list_profiles(&state.pool, user.id).await?;
+        let active_id = get_active_profile_id(&state.pool, user.id).await?;
+        let owned_count = profiles.iter().filter(|p| p.user_id == user_key).count();
+        let can_create_profile = user.is_paid() || owned_count == 0;
+        return Ok(json_ok(json!({
+            "deleted_id": id,
+            "active_id": active_id,
+            "can_create_profile": can_create_profile,
+            "profiles": profiles
+                .iter()
+                .map(|p| profile_option_json(p, &user_key))
+                .collect::<Vec<_>>(),
+        })));
+    }
     Ok(hx_redirect(&headers, "/"))
 }
 
@@ -860,6 +895,49 @@ async fn load_page(
         is_admin: user.is_admin(),
         is_paid: effectively_paid,
     })
+}
+
+fn wants_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.to_ascii_lowercase().contains("application/json"))
+}
+
+fn profile_option_json(p: &Profile, user_key: &str) -> Value {
+    json!({
+        "id": p.id,
+        "name": p.name,
+        "is_shared": p.user_id != user_key,
+        "principal": p.principal.unwrap_or(0.0),
+        "rate": p.rate.unwrap_or(0.0),
+        "term_years": p.term_years.unwrap_or(30),
+        "start_date": p.start_date.clone().unwrap_or_default(),
+    })
+}
+
+fn json_ok(data: Value) -> Response {
+    (StatusCode::OK, Json(json!({ "ok": true, "data": data }))).into_response()
+}
+
+fn json_err(err: AppError) -> Response {
+    let (status, message) = match &err {
+        AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+        AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+        AppError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
+        AppError::Database(_) | AppError::Internal(_) | AppError::Template(_) => {
+            tracing::error!(error = %err, "profile json api error");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error".to_string(),
+            )
+        }
+    };
+    (
+        status,
+        Json(json!({ "ok": false, "error": message })),
+    )
+        .into_response()
 }
 
 fn parse_date(s: &str) -> AppResult<NaiveDate> {

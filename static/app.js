@@ -718,10 +718,131 @@
     );
   }
 
+  function setCanCreateProfile(allowed) {
+    const actions = document.querySelector(".profile-gutter-actions");
+    if (actions) actions.dataset.canCreate = allowed ? "true" : "false";
+    const newBtn = document.getElementById("profileGutterNewBtn");
+    if (newBtn) {
+      newBtn.disabled = !allowed;
+      newBtn.title = allowed ? "New profile" : "Pro feature";
+    }
+    const copyBtn = document.getElementById("copyProfileBtn");
+    if (copyBtn && !copyBtn.classList.contains("hidden")) {
+      copyBtn.disabled = !allowed;
+      copyBtn.title = allowed ? "Copy profile" : "Pro feature";
+    }
+  }
+
   function canCreateProfile() {
     const actions = document.querySelector(".profile-gutter-actions");
     if (actions?.dataset.canCreate != null) return actions.dataset.canCreate === "true";
     return !document.getElementById("profileGutterNewBtn")?.disabled;
+  }
+
+  function syncProfileSelect(profiles, selectedId) {
+    const select = document.getElementById("profileSelect");
+    const bar = document.getElementById("profileBar");
+    if (!select) return;
+    const previous = select.value;
+    select.replaceChildren(
+      ...(profiles.length
+        ? profiles.map((p) => {
+            const opt = document.createElement("option");
+            opt.value = p.id;
+            opt.dataset.shared = p.is_shared ? "true" : "false";
+            opt.dataset.name = p.name || "";
+            opt.dataset.principal = String(p.principal ?? "");
+            opt.dataset.rate = String(p.rate ?? "");
+            opt.dataset.term = String(p.term_years ?? "");
+            opt.dataset.start = p.start_date || "";
+            opt.textContent = p.is_shared ? `${p.name} (shared)` : p.name;
+            return opt;
+          })
+        : [
+            (() => {
+              const opt = document.createElement("option");
+              opt.value = "";
+              opt.textContent = "No profiles yet";
+              return opt;
+            })(),
+          ]),
+    );
+    const nextId =
+      selectedId && profiles.some((p) => p.id === selectedId)
+        ? selectedId
+        : previous && profiles.some((p) => p.id === previous)
+          ? previous
+          : profiles[0]?.id || "";
+    select.value = nextId;
+    select.disabled = profiles.length === 0;
+    bar?.classList.toggle("hidden", profiles.length === 0);
+    syncOwnerState();
+  }
+
+  function upsertProfileOption(profile) {
+    const select = document.getElementById("profileSelect");
+    if (!select || !profile?.id) return;
+    const existing = [...select.options].find((o) => o.value === profile.id);
+    const opt = existing || document.createElement("option");
+    opt.value = profile.id;
+    opt.dataset.shared = profile.is_shared ? "true" : "false";
+    opt.dataset.name = profile.name || "";
+    opt.dataset.principal = String(profile.principal ?? "");
+    opt.dataset.rate = String(profile.rate ?? "");
+    opt.dataset.term = String(profile.term_years ?? "");
+    opt.dataset.start = profile.start_date || "";
+    opt.textContent = profile.is_shared ? `${profile.name} (shared)` : profile.name;
+    if (!existing) {
+      if (select.options.length === 1 && !select.options[0].value) {
+        select.replaceChildren(opt);
+      } else {
+        select.appendChild(opt);
+      }
+    }
+    select.disabled = false;
+    document.getElementById("profileBar")?.classList.remove("hidden");
+  }
+
+  function refreshDashboardForActive(activeId) {
+    const select = document.getElementById("profileSelect");
+    if (!select) return;
+    if (activeId) {
+      if (select.value !== activeId) select.value = activeId;
+      if (typeof htmx !== "undefined") htmx.trigger(select, "change");
+      else select.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    // No profiles left — reload so empty state renders.
+    window.location.href = "/";
+  }
+
+  async function postProfileJson(url) {
+    const headers = {
+      Accept: "application/json",
+      "HX-Request": "true",
+    };
+    const token = csrfToken();
+    if (token) headers["X-CSRF-Token"] = token;
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+    });
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (!res.ok || !body?.ok) {
+      throw new Error(body?.error || "Request failed.");
+    }
+    return body.data;
+  }
+
+  function showProfileManagerError(message) {
+    const err = document.getElementById("error");
+    if (err) err.textContent = message || "";
   }
 
   function syncDeleteProfileButton(visible) {
@@ -1151,20 +1272,22 @@
     document.getElementById("improvementForm")?.addEventListener("htmx:afterRequest", (e) => {
       if (e.detail.successful) closeImprovementPopover();
     });
-    document.getElementById("copyProfileBtn")?.addEventListener("click", () => {
+    document.getElementById("copyProfileBtn")?.addEventListener("click", async () => {
       const form = document.getElementById("loanForm");
       const id = form?.dataset.profileId;
       if (!id || form.dataset.mode !== "edit" || !canCreateProfile()) return;
-      if (typeof htmx === "undefined") return;
-      const err = document.getElementById("error");
-      if (err) err.textContent = "";
-      htmx.ajax("POST", `/profiles/${id}/copy`, {
-        headers: { "HX-Request": "true" },
-        target: "#error",
-        swap: "outerHTML",
-      });
+      showProfileManagerError("");
+      try {
+        const data = await postProfileJson(`/profiles/${id}/copy`);
+        upsertProfileOption(data.profile);
+        setCanCreateProfile(Boolean(data.can_create_profile));
+        renderProfileGutter();
+        selectProfile(data.profile.id);
+      } catch (err) {
+        showProfileManagerError(err.message || "Could not copy profile.");
+      }
     });
-    document.getElementById("deleteProfileBtn")?.addEventListener("click", () => {
+    document.getElementById("deleteProfileBtn")?.addEventListener("click", async () => {
       const form = document.getElementById("loanForm");
       const id = form?.dataset.profileId;
       if (!id || form.dataset.mode !== "edit") return;
@@ -1172,11 +1295,26 @@
       if (!isOptionOwner(opt)) return;
       const name = opt?.dataset.name || "this profile";
       if (!confirm(`Delete profile “${name}”? This cannot be undone.`)) return;
-      if (typeof htmx === "undefined") return;
-      popover()?.hidePopover();
-      htmx.ajax("POST", `/profiles/${id}/delete`, {
-        headers: { "HX-Request": "true" },
-      });
+      const select = document.getElementById("profileSelect");
+      const wasActive = select?.value === id || dashboard()?.dataset.profileId === id;
+      showProfileManagerError("");
+      try {
+        const data = await postProfileJson(`/profiles/${id}/delete`);
+        const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+        setCanCreateProfile(Boolean(data.can_create_profile));
+        syncProfileSelect(profiles, data.active_id || profiles[0]?.id || "");
+        renderProfileGutter();
+        if (profiles.length) {
+          selectProfile(profiles[0].id);
+        } else {
+          selectCreateMode();
+        }
+        if (wasActive) {
+          refreshDashboardForActive(data.active_id || profiles[0]?.id || "");
+        }
+      } catch (err) {
+        showProfileManagerError(err.message || "Could not delete profile.");
+      }
     });
     document.getElementById("sharePanel")?.addEventListener("click", (e) => {
       const btn = e.target.closest("#copyShareLinkBtn");

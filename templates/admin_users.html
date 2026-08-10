@@ -69,8 +69,9 @@
     {% endif %}
   </div>
 
-  {# Top-level POST so the session CSRF cookie is always sent (fetch can 403). #}
-  <form id="adminAccessForm" method="post" action="/admin/access" hidden>
+  {# Top-level POST so the session CSRF token is always sent. #}
+  <form id="adminAccessForm" method="post" action="/admin/access" hidden
+    data-auth-edge="{% if auth_edge %}true{% else %}false{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <input type="hidden" name="user_id" id="adminAccessUserId" value="" />
     <input type="hidden" name="paid" id="adminAccessPaid" value="" />
@@ -98,6 +99,14 @@
     if (label) label.textContent = on ? "On" : "Off";
   }
 
+  function submitAccess(userId, markPaid) {
+    userIdInput.value = userId;
+    paidInput.value = markPaid ? "1" : "0";
+    form.submit();
+  }
+
+  const authEdge = form?.dataset.authEdge === "true";
+
   document.querySelectorAll(".admin-paid-switch").forEach((input) => {
     input.addEventListener("change", async () => {
       const userId = input.dataset.userId;
@@ -108,6 +117,11 @@
       showError("");
       input.disabled = true;
       setLabel(input, markPaid);
+
+      if (!authEdge) {
+        submitAccess(userId, markPaid);
+        return;
+      }
 
       try {
         // 1) Update Better Auth / D1 (session source of truth).
@@ -135,9 +149,7 @@
         }
 
         // 2) Sync domain users row + reload via top-level form (CSRF-safe).
-        userIdInput.value = userId;
-        paidInput.value = markPaid ? "1" : "0";
-        form.submit();
+        submitAccess(userId, markPaid);
       } catch {
         input.checked = previous;
         setLabel(input, previous);

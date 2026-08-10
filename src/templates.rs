@@ -317,5 +317,6 @@ pub struct AdminUserView {
 pub struct AdminUsersTemplate {
     pub csrf_token: String,
     pub app_name: String,
+    pub auth_edge: bool,
     pub users: Vec<AdminUserView>,
 }

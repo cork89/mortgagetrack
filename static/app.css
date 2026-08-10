@@ -2237,7 +2237,7 @@ details.pay-year-group[open] > summary .year-chevron {
   height: 2.35rem;
   padding: 0;
   border-radius: 8px;
-  border: 1px dashed color-mix(in srgb, var(--sea) 40%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--sea) 40%, var(--line));
   background: transparent;
   color: var(--sea-deep);
   cursor: pointer;
@@ -2254,11 +2254,11 @@ details.pay-year-group[open] > summary .year-chevron {
 
 .profile-gutter-icon-btn.active {
   background: color-mix(in srgb, var(--sea) 18%, #fff);
-  border-style: solid;
   border-color: color-mix(in srgb, var(--sea) 35%, var(--line));
 }
 
 .profile-gutter-icon-btn:disabled {
+  border-style: dashed;
   opacity: 0.5;
   cursor: not-allowed;
 }

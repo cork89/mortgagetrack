@@ -10,8 +10,8 @@ use tower_sessions::Session;
 
 use crate::app_state::AppState;
 use crate::auth::{
-    list_users_for_admin, paid_until_active, parse_paid_until, set_user_paid_until, AdminUser,
-    UserRole,
+    list_users_for_admin, paid_until_active, parse_paid_until, set_user_paid_until,
+    trust_identity_headers, AdminUser, UserRole,
 };
 use crate::csrf;
 use crate::error::{AppError, AppResult};
@@ -95,6 +95,7 @@ async fn admin_users_page(
     Ok(HtmlTemplate(AdminUsersTemplate {
         csrf_token,
         app_name: state.app_name.clone(),
+        auth_edge: trust_identity_headers(),
         users,
     })
     .into_response())
