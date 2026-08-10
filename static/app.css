@@ -2093,7 +2093,7 @@ details.pay-year-group[open] > summary .year-chevron {
 }
 
 .loan-popover {
-  width: min(720px, calc(100vw - 2rem));
+  width: min(900px, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   border: none;
   padding: 0;
@@ -2162,6 +2162,141 @@ details.pay-year-group[open] > summary .year-chevron {
   background: rgba(255, 255, 255, 0.7);
 }
 
+.profile-manager-body {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.profile-gutter {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  padding-right: 0.85rem;
+  border-right: 1px solid var(--line);
+}
+
+.profile-gutter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.profile-gutter-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.profile-gutter-item:hover {
+  background: color-mix(in srgb, var(--sea) 12%, transparent);
+}
+
+.profile-gutter-item.active {
+  background: color-mix(in srgb, var(--sea) 18%, #fff);
+  border-color: color-mix(in srgb, var(--sea) 35%, var(--line));
+  color: var(--sea-deep);
+  font-weight: 600;
+}
+
+.profile-gutter-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.profile-gutter-icon-btn {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--sea) 40%, var(--line));
+  background: transparent;
+  color: var(--sea-deep);
+  cursor: pointer;
+}
+
+.profile-gutter-icon-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.profile-gutter-icon-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sea) 12%, transparent);
+}
+
+.profile-gutter-icon-btn.active {
+  background: color-mix(in srgb, var(--sea) 18%, #fff);
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--sea) 35%, var(--line));
+}
+
+.profile-gutter-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.profile-gutter-delete {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--coral) 35%, var(--line));
+  color: var(--coral);
+}
+
+.profile-gutter-delete:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+}
+
+.profile-gutter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-gutter-badge {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.4rem;
+}
+
+.profile-editor {
+  flex: 1;
+  min-width: 0;
+}
+
 .popover-form {
   display: flex;
   flex-direction: column;
@@ -2198,10 +2333,8 @@ details.pay-year-group[open] > summary .year-chevron {
 
 .popover-card .actions {
   margin-top: 0;
-}
-
-.popover-card .actions .delete-wrap {
-  margin-left: auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .popover-card .error {
@@ -2234,6 +2367,35 @@ details.pay-year-group[open] > summary .year-chevron {
 
   .popover-head h2 {
     font-size: 1.3rem;
+  }
+
+  .profile-manager-body {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .profile-gutter {
+    flex: 0 0 auto;
+    padding-right: 0;
+    padding-bottom: 0.65rem;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .profile-gutter-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 0.4rem;
+  }
+
+  .profile-gutter-list li {
+    flex: 0 0 auto;
+  }
+
+  .profile-gutter-item {
+    width: auto;
+    white-space: nowrap;
   }
 
   .popover-footer {

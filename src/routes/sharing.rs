@@ -15,7 +15,7 @@ use crate::auth::{
     avatar_src, encode_query_value, hx_redirect, resolve_user_id, set_pending_share,
     take_pending_share, AuthUser, HOME_PATH,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::models::{
     accept_share_link, active_share_link, create_share_link, get_active_profile_id, leave_profile,
     list_collaborators, list_profiles, remove_collaborator, require_profile_access,
@@ -59,6 +59,11 @@ async fn create_share(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> AppResult<impl IntoResponse> {
+    if !user.is_paid() {
+        return Err(AppError::BadRequest(
+            "Sharing profiles is a pro feature.".into(),
+        ));
+    }
     let created = create_share_link(&state.pool, user.id, &id).await?;
     let active = Some(ShareLinkStatus {
         id: String::new(),
@@ -68,6 +73,7 @@ async fn create_share(
     Ok(HtmlTemplate(share_panel_template(
         &id,
         true,
+        user.is_paid(),
         active.as_ref(),
         &collaborators,
         Some(created.path),
@@ -87,6 +93,7 @@ async fn share_panel(
         Ok(HtmlTemplate(share_panel_template(
             &id,
             true,
+            user.is_paid(),
             active.as_ref(),
             &collaborators,
             None,
@@ -96,6 +103,7 @@ async fn share_panel(
         Ok(HtmlTemplate(share_panel_template(
             &id,
             false,
+            user.is_paid(),
             None,
             &[],
             None,
@@ -115,6 +123,7 @@ async fn remove_collaborator_handler(
     Ok(HtmlTemplate(share_panel_template(
         &id,
         true,
+        user.is_paid(),
         active.as_ref(),
         &collaborators,
         None,
@@ -140,6 +149,7 @@ async fn leave_profile_handler(
 fn share_panel_template(
     profile_id: &str,
     is_owner: bool,
+    is_paid: bool,
     active: Option<&ShareLinkStatus>,
     collaborators: &[CollaboratorRow],
     fresh_path: Option<String>,
@@ -148,6 +158,7 @@ fn share_panel_template(
     SharePanelTemplate {
         profile_id: profile_id.to_string(),
         is_owner,
+        is_paid,
         has_active_invite: active.is_some() || fresh_path.is_some(),
         active_expires_at: fresh_expires_at
             .or_else(|| active.map(|a| a.expires_at.clone()))

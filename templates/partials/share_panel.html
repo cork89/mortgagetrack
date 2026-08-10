@@ -19,9 +19,13 @@
   <button type="button"
     class="btn-ghost"
     id="generateShareLinkBtn"
+    {% if is_paid %}
     hx-post="/profiles/{{ profile_id }}/share"
     hx-target="#sharePanel"
-    hx-swap="innerHTML">
+    hx-swap="innerHTML"
+    {% else %}
+    disabled title="Pro feature"
+    {% endif %}>
     Generate invite link
   </button>
 

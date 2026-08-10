@@ -17,9 +17,9 @@ use crate::models::{
     add_extra, add_improvement, build_dashboard, clear_paid, count_owned_profiles, create_profile,
     csv_filename_stem, delete_extra, delete_improvement, delete_profile, empty_state,
     extras_as_inputs, list_extras, list_paid_keys, list_payment_notes, load_page_bundle,
-    load_profile, mark_due_paid, payments_csv, rename_profile, set_active_profile, set_paid,
-    update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter,
-    PaymentsYearExpand, ProfileOption, TabId,
+    load_profile, mark_due_paid, payments_csv, rename_profile, require_profile_access,
+    set_active_profile, set_paid, update_improvement, update_profile_loan, upsert_payment_note,
+    PaymentFilter, PaymentsYearExpand, ProfileOption, TabId,
 };
 use crate::templates::{
     panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
@@ -40,6 +40,7 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/switch", post(switch_profile))
         .route("/profiles/{id}", post(update_profile_handler))
         .route("/profiles/{id}/rename", post(rename_profile_handler))
+        .route("/profiles/{id}/copy", post(copy_profile_handler))
         .route("/profiles/{id}/delete", post(delete_profile_handler))
         .route("/profiles/{id}/clear-paid", post(clear_paid_handler))
         .route("/profiles/{id}/export.csv", get(export_payments_csv))
@@ -68,6 +69,8 @@ pub struct IndexQuery {
     pub year: Option<i32>,
     pub filter: Option<String>,
     pub grain: Option<String>,
+    /// Temporary UI preview: `?pro=1` renders as if the user is on Pro.
+    pub pro: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -169,7 +172,7 @@ async fn dashboard_partial(
     Ok(HtmlTemplate(DashboardTemplate {
         empty: page.empty,
         dashboard: page.dashboard,
-        is_paid: user.is_paid(),
+        is_paid: page.is_paid,
     }))
 }
 
@@ -209,7 +212,7 @@ async fn payments_partial(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(HtmlTemplate(payments_from_dashboard(d, user.is_paid())))
+    Ok(HtmlTemplate(payments_from_dashboard(d, page.is_paid)))
 }
 
 async fn export_payments_csv(
@@ -319,7 +322,7 @@ async fn create_profile_inner(
         let owned = count_owned_profiles(&state.pool, user.id).await?;
         if owned >= 1 {
             return Err(AppError::BadRequest(
-                "Creating more than one profile is a paid feature.".into(),
+                "Creating more than one profile is a pro feature.".into(),
             ));
         }
     }
@@ -352,6 +355,57 @@ async fn update_profile_handler(
         })
         .into_response(),
     }
+}
+
+async fn copy_profile_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    match copy_profile_inner(&state, user, &id).await {
+        Ok(_) => hx_redirect(&headers, "/"),
+        Err(err) => HtmlTemplate(ErrorPartial {
+            message: err.to_string(),
+        })
+        .into_response(),
+    }
+}
+
+async fn copy_profile_inner(state: &AppState, user: AuthUser, id: &str) -> AppResult<()> {
+    require_profile_access(&state.pool, user.id, id).await?;
+    if !user.is_paid() {
+        let owned = count_owned_profiles(&state.pool, user.id).await?;
+        if owned >= 1 {
+            return Err(AppError::BadRequest(
+                "Creating more than one profile is a pro feature.".into(),
+            ));
+        }
+    }
+    let profile = load_profile(&state.pool, user.id, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
+    let loan = profile
+        .loan()
+        .ok_or_else(|| AppError::BadRequest("Profile has no loan to copy.".into()))?;
+    let copy_name = {
+        let suffix = " (copy)";
+        let base = profile.name.trim();
+        let max_base = 60usize.saturating_sub(suffix.len());
+        let truncated: String = base.chars().take(max_base).collect();
+        format!("{truncated}{suffix}")
+    };
+    create_profile(
+        &state.pool,
+        user.id,
+        &copy_name,
+        loan.principal,
+        loan.rate,
+        loan.term_years,
+        loan.start_date,
+    )
+    .await?;
+    Ok(())
 }
 
 async fn update_profile_inner(
@@ -427,6 +481,7 @@ async fn switch_profile(
             year: form.year,
             filter: form.filter,
             grain: form.grain,
+            pro: None,
         },
         &user,
     )
@@ -434,7 +489,7 @@ async fn switch_profile(
     Ok(HtmlTemplate(DashboardTemplate {
         empty: page.empty,
         dashboard: page.dashboard,
-        is_paid: user.is_paid(),
+        is_paid: page.is_paid,
     }))
 }
 
@@ -493,7 +548,7 @@ async fn mark_due_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", true))
+    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", true))
 }
 
 async fn toggle_paid_handler(
@@ -508,6 +563,7 @@ async fn toggle_paid_handler(
         year: form.year,
         filter: form.filter,
         grain: form.grain,
+        pro: None,
     };
     set_paid(&state.pool, user.id, &id, &form.pay_key, form.paid).await?;
     let is_extra = form.pay_key.starts_with("extra:");
@@ -520,7 +576,7 @@ async fn toggle_paid_handler(
             .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
         return if tab == "payments" {
             Ok(panel_update(
-                payments_from_dashboard(d, user.is_paid()),
+                payments_from_dashboard(d, page.is_paid),
                 "payments",
                 is_extra,
             ))
@@ -542,13 +598,14 @@ async fn upsert_note_handler(
         year: form.year,
         filter: form.filter,
         grain: form.grain,
+        pro: None,
     };
     upsert_payment_note(&state.pool, user.id, &id, &form.pay_key, &form.note).await?;
     let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", false))
+    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", false))
 }
 
 async fn add_extra_handler(
@@ -563,6 +620,7 @@ async fn add_extra_handler(
         year: None,
         filter: form.filter,
         grain: None,
+        pro: None,
     };
     add_extra(
         &state.pool,
@@ -577,7 +635,7 @@ async fn add_extra_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", false))
+    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", false))
 }
 
 async fn delete_extra_handler(
@@ -590,13 +648,14 @@ async fn delete_extra_handler(
         year: None,
         filter: None,
         grain: None,
+        pro: None,
     };
     delete_extra(&state.pool, user.id, &id, &extra_id).await?;
     let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, user.is_paid()), "payments", true))
+    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", true))
 }
 
 async fn add_improvement_handler(
@@ -611,6 +670,7 @@ async fn add_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        pro: None,
     };
     add_improvement(
         &state.pool,
@@ -643,6 +703,7 @@ async fn delete_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        pro: None,
     };
     delete_improvement(&state.pool, user.id, &id, &improvement_id).await?;
     let page = load_page(&state, &q, &user).await?;
@@ -668,6 +729,7 @@ async fn update_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        pro: None,
     };
     update_improvement(
         &state.pool,
@@ -746,6 +808,10 @@ async fn load_page(
             name: p.name.clone(),
             selected: active_id.as_deref() == Some(p.id.as_str()),
             is_shared: p.user_id != user_key,
+            principal: p.principal.unwrap_or(0.0),
+            rate: p.rate.unwrap_or(0.0),
+            term_years: p.term_years.unwrap_or(30),
+            start_date: p.start_date.clone().unwrap_or_default(),
         })
         .collect();
 
@@ -757,7 +823,8 @@ async fn load_page(
         .iter()
         .filter(|p| p.user_id == user_key)
         .count();
-    let can_create_profile = user.is_paid() || owned_count == 0;
+    let effectively_paid = user.is_paid() || q.pro.as_deref() == Some("1");
+    let can_create_profile = effectively_paid || owned_count == 0;
 
     let default_start = {
         let d = today;
@@ -791,7 +858,7 @@ async fn load_page(
         user_email: user.email.clone(),
         avatar_src: avatar_src(&user.id, user.avatar.as_deref()),
         is_admin: user.is_admin(),
-        is_paid: user.is_paid(),
+        is_paid: effectively_paid,
     })
 }
 

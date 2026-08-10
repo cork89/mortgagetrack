@@ -207,7 +207,7 @@ async fn create_profile_api(
         match count_owned_profiles(&state.pool, user.id).await {
             Ok(owned) if owned >= 1 => {
                 return json_err(AppError::BadRequest(
-                    "Creating more than one profile is a paid feature.".into(),
+                    "Creating more than one profile is a pro feature.".into(),
                 ));
             }
             Err(err) => return json_err(err),

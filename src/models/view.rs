@@ -148,6 +148,10 @@ pub struct ProfileOption {
     pub name: String,
     pub selected: bool,
     pub is_shared: bool,
+    pub principal: f64,
+    pub rate: f64,
+    pub term_years: i64,
+    pub start_date: String,
 }
 
 #[derive(Debug, Clone)]

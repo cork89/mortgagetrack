@@ -1,4 +1,4 @@
-//! Payment schedule CSV export (paid feature).
+//! Payment schedule CSV export (pro feature).
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;

@@ -13,15 +13,20 @@
       <option value="">No profiles yet</option>
       {% else %}
         {% for p in profiles %}
-        <option value="{{ p.id }}" data-shared="{% if p.is_shared %}true{% else %}false{% endif %}"{% if p.selected %} selected{% endif %}>{% if p.is_shared %}{{ p.name }} (shared){% else %}{{ p.name }}{% endif %}</option>
+        <option value="{{ p.id }}"
+          data-shared="{% if p.is_shared %}true{% else %}false{% endif %}"
+          data-name="{{ p.name }}"
+          data-principal="{{ p.principal }}"
+          data-rate="{{ p.rate }}"
+          data-term="{{ p.term_years }}"
+          data-start="{{ p.start_date }}"
+          {% if p.selected %} selected{% endif %}>{% if p.is_shared %}{{ p.name }} (shared){% else %}{{ p.name }}{% endif %}</option>
         {% endfor %}
       {% endif %}
     </select>
   </div>
   <div class="profile-actions">
-    <button type="button" class="btn-ghost" id="newProfileBtn"
-      {% if !can_create_profile %}disabled title="Paid feature"{% endif %}>New</button>
-    <button type="button" class="btn-primary" id="editProfileBtn"{% if !has_profiles %} disabled{% endif %}>Edit</button>
+    <button type="button" class="btn-primary" id="manageProfilesBtn">Profiles</button>
   </div>
   <div class="profile-meta" id="profileMeta"{% match dashboard %}{% when None %} hidden{% else %}{% endmatch %}>
     {% match dashboard %}

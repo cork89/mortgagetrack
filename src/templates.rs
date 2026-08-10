@@ -111,6 +111,7 @@ pub struct CollaboratorView {
 pub struct SharePanelTemplate {
     pub profile_id: String,
     pub is_owner: bool,
+    pub is_paid: bool,
     pub has_active_invite: bool,
     pub active_expires_at: String,
     pub fresh_invite_url: String,
