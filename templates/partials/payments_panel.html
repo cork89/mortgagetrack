@@ -24,13 +24,6 @@
         </select>
       </label>
       <div class="payments-toolbar-actions">
-        <button type="button" class="btn-ghost btn-compact" id="markThroughBtn"
-          hx-post="/profiles/{{ profile_id }}/mark-due?tab=payments&filter={{ payment_filter }}&year={{ view_year }}&grain={{ grain }}"
-          hx-target="#panel-payments"
-          hx-swap="innerHTML show:none">
-          <span class="btn-label-full">Mark all due as paid</span>
-          <span class="btn-label-short">Mark all paid</span>
-        </button>
         {% if is_paid %}
         <a class="btn-ghost btn-compact" id="exportCsvBtn"
           href="/profiles/{{ profile_id }}/export.csv?filter={{ payment_filter }}">

@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_migrations(&pool).await?;
     models::ensure_profiles_belong_to_users(&pool).await?;
     models::ensure_profile_version(&pool).await?;
+    models::ensure_profile_auto_mark_due(&pool).await?;
     models::ensure_extra_recast(&pool).await?;
     models::ensure_improvement_detail(&pool).await?;
     models::ensure_user_avatar(&pool).await?;

@@ -9,7 +9,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 
-use super::amort::{build_schedule, ExtraInput};
+use super::amort::{build_schedule, ExtraInput, RowKind};
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
@@ -25,6 +25,7 @@ pub struct Profile {
     pub monthly_payment: Option<f64>,
     pub total_interest: Option<f64>,
     pub version: i64,
+    pub auto_mark_due_paid: bool,
 }
 
 impl FromRow for Profile {
@@ -40,6 +41,7 @@ impl FromRow for Profile {
             monthly_payment: row.get(7)?,
             total_interest: row.get(8)?,
             version: row.get(9)?,
+            auto_mark_due_paid: row.get::<i64>(10)? != 0,
         })
     }
 }
@@ -224,12 +226,12 @@ async fn list_profiles_conn(conn: &DbConn, user_id: Uuid) -> AppResult<Vec<Profi
     query_all(
         conn,
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid
         FROM profiles
         WHERE user_id = ?
         UNION
         SELECT p.id, p.user_id, p.name, p.principal, p.rate, p.term_years, p.start_date,
-               p.monthly_payment, p.total_interest, p.version
+               p.monthly_payment, p.total_interest, p.version, p.auto_mark_due_paid
         FROM profiles p
         INNER JOIN profile_collaborators c ON c.profile_id = p.id
         WHERE c.user_id = ?
@@ -254,7 +256,7 @@ async fn load_profile_conn(
     query_optional(
         conn,
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid
         FROM profiles
         WHERE id = ?
           AND (
@@ -636,6 +638,7 @@ pub async fn create_profile(
     rate: f64,
     term_years: i32,
     start_date: NaiveDate,
+    auto_mark_due_paid: bool,
 ) -> AppResult<Profile> {
     ensure_unique_name(pool, user_id, name, None).await?;
     let id = Uuid::new_v4().to_string();
@@ -646,8 +649,8 @@ pub async fn create_profile(
     execute(
         &conn,
         r#"
-        INSERT INTO profiles (id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO profiles (id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         "#,
         params![
             id.as_str(),
@@ -658,7 +661,8 @@ pub async fn create_profile(
             term_years,
             start.as_str(),
             built.payment,
-            built.total_interest
+            built.total_interest,
+            auto_mark_due_paid as i64
         ],
     )
     .await?;
@@ -678,6 +682,7 @@ pub async fn update_profile_loan(
     rate: f64,
     term_years: i32,
     start_date: NaiveDate,
+    auto_mark_due_paid: bool,
 ) -> AppResult<Profile> {
     let conn = get_conn(pool).await?;
     require_profile_access_conn(&conn, user_id, id).await?;
@@ -698,7 +703,7 @@ pub async fn update_profile_loan(
         r#"
         UPDATE profiles
         SET name = ?, principal = ?, rate = ?, term_years = ?, start_date = ?,
-            monthly_payment = ?, total_interest = ?
+            monthly_payment = ?, total_interest = ?, auto_mark_due_paid = ?
         WHERE id = ?
         "#,
         params![
@@ -709,6 +714,7 @@ pub async fn update_profile_loan(
             start.as_str(),
             built.payment,
             built.total_interest,
+            auto_mark_due_paid as i64,
             id
         ],
     )
@@ -870,6 +876,45 @@ pub async fn mark_due_paid(
     Ok(())
 }
 
+/// When enabled on the profile, mark scheduled payments due on or before `today` as paid.
+pub async fn auto_mark_due_paid_if_enabled(
+    pool: &DbPool,
+    user_id: Uuid,
+    profile: &Profile,
+    today: NaiveDate,
+) -> AppResult<Vec<String>> {
+    if !profile.auto_mark_due_paid || !profile.has_loan() {
+        return list_paid_keys(pool, &profile.id).await;
+    }
+    let loan = profile
+        .loan()
+        .ok_or_else(|| AppError::Internal("profile missing loan".into()))?;
+    let extras = list_extras(pool, &profile.id).await?;
+    let paid_keys = list_paid_keys(pool, &profile.id).await?;
+    let paid: HashSet<String> = paid_keys.iter().cloned().collect();
+    let extra_inputs = extras_as_inputs(&extras, &paid);
+    let built = build_schedule(
+        loan.principal,
+        loan.rate,
+        loan.term_years,
+        loan.start_date,
+        &extra_inputs,
+    );
+    let keys: Vec<String> = built
+        .rows
+        .iter()
+        .filter(|r| {
+            r.kind == RowKind::Scheduled && r.due <= today && !paid.contains(&r.pay_key)
+        })
+        .map(|r| r.pay_key.clone())
+        .collect();
+    if keys.is_empty() {
+        return Ok(paid_keys);
+    }
+    mark_due_paid(pool, user_id, &profile.id, &keys).await?;
+    list_paid_keys(pool, &profile.id).await
+}
+
 pub async fn add_extra(
     pool: &DbPool,
     user_id: Uuid,
@@ -972,7 +1017,7 @@ async fn load_profile_in_tx(tx: &DbTx, user_id: Uuid, id: &str) -> AppResult<Opt
     query_optional(
         tx,
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid
         FROM profiles
         WHERE id = ?
           AND (

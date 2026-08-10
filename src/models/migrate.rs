@@ -91,6 +91,33 @@ async fn profiles_have_version(pool: &DbPool) -> AppResult<bool> {
     Ok(cols.iter().any(|(_, name)| name == "version"))
 }
 
+/// Per-profile setting to auto-mark scheduled payments once their due date arrives.
+pub async fn ensure_profile_auto_mark_due(pool: &DbPool) -> AppResult<()> {
+    if profiles_have_auto_mark_due(pool).await? {
+        return Ok(());
+    }
+    tracing::info!("adding profiles.auto_mark_due_paid column");
+    let conn = get_conn(pool).await?;
+    execute(
+        &conn,
+        "ALTER TABLE profiles ADD COLUMN auto_mark_due_paid INTEGER NOT NULL DEFAULT 0",
+        (),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn profiles_have_auto_mark_due(pool: &DbPool) -> AppResult<bool> {
+    let conn = get_conn(pool).await?;
+    let cols: Vec<(i32, String)> = query_all(
+        &conn,
+        "SELECT cid, name FROM pragma_table_info('profiles')",
+        (),
+    )
+    .await?;
+    Ok(cols.iter().any(|(_, name)| name == "auto_mark_due_paid"))
+}
+
 /// Add `extras.recast` so lump-sum extras can lower future payments instead of shortening term.
 pub async fn ensure_extra_recast(pool: &DbPool) -> AppResult<()> {
     if extras_have_recast(pool).await? {

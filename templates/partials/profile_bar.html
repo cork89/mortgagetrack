@@ -20,6 +20,7 @@
           data-rate="{{ p.rate }}"
           data-term="{{ p.term_years }}"
           data-start="{{ p.start_date }}"
+          data-auto-mark-due="{% if p.auto_mark_due_paid %}true{% else %}false{% endif %}"
           {% if p.selected %} selected{% endif %}>{% if p.is_shared %}{{ p.name }} (shared){% else %}{{ p.name }}{% endif %}</option>
         {% endfor %}
       {% endif %}

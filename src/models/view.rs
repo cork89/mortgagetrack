@@ -152,6 +152,7 @@ pub struct ProfileOption {
     pub rate: f64,
     pub term_years: i64,
     pub start_date: String,
+    pub auto_mark_due_paid: bool,
 }
 
 #[derive(Debug, Clone)]

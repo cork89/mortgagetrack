@@ -15,7 +15,7 @@ use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser, Paid
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    add_extra, add_improvement, build_dashboard, clear_paid, count_owned_profiles, create_profile,
+    add_extra, add_improvement, auto_mark_due_paid_if_enabled, build_dashboard, clear_paid, count_owned_profiles, create_profile,
     csv_filename_stem, delete_extra, delete_improvement, delete_profile, empty_state,
     extras_as_inputs, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
     list_profiles, load_page_bundle, load_profile, mark_due_paid, payments_csv, rename_profile,
@@ -81,6 +81,8 @@ pub struct ProfileForm {
     pub rate: f64,
     pub term: i32,
     pub start_date: String,
+    #[serde(default)]
+    pub auto_mark_due_paid: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -337,6 +339,7 @@ async fn create_profile_inner(
         form.rate,
         form.term,
         start,
+        form.auto_mark_due_paid,
     )
     .await?;
     Ok(())
@@ -416,6 +419,7 @@ async fn copy_profile_inner(
         loan.rate,
         loan.term_years,
         loan.start_date,
+        profile.auto_mark_due_paid,
     )
     .await?;
     // Keep the dashboard on the previous active profile; the modal opens the copy.
@@ -448,6 +452,7 @@ async fn update_profile_inner(
         form.rate,
         form.term,
         start,
+        form.auto_mark_due_paid,
     )
     .await?;
     set_active_profile(&state.pool, user.id, Some(id)).await?;
@@ -799,6 +804,12 @@ async fn load_page(
     let active_id = active.as_ref().map(|p| p.id.clone());
 
     let today = state.today();
+    let paid = if let Some(profile) = &active {
+        auto_mark_due_paid_if_enabled(&state.pool, user.id, profile, today).await?
+    } else {
+        bundle.paid
+    };
+
     let view_year = q.year.unwrap_or_else(|| today.year());
     let filter = PaymentFilter::parse(q.filter.as_deref().unwrap_or("all"));
     let grain = q.grain.as_deref().unwrap_or("monthly");
@@ -817,7 +828,7 @@ async fn load_page(
                 .collect();
             build_dashboard(
                 profile,
-                &bundle.paid,
+                &paid,
                 &bundle.extras,
                 &notes,
                 &bundle.improvements,
@@ -847,6 +858,7 @@ async fn load_page(
             rate: p.rate.unwrap_or(0.0),
             term_years: p.term_years.unwrap_or(30),
             start_date: p.start_date.clone().unwrap_or_default(),
+            auto_mark_due_paid: p.auto_mark_due_paid,
         })
         .collect();
 
@@ -913,6 +925,7 @@ fn profile_option_json(p: &Profile, user_key: &str) -> Value {
         "rate": p.rate.unwrap_or(0.0),
         "term_years": p.term_years.unwrap_or(30),
         "start_date": p.start_date.clone().unwrap_or_default(),
+        "auto_mark_due_paid": p.auto_mark_due_paid,
     })
 }
 

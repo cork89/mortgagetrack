@@ -755,6 +755,7 @@
             opt.dataset.rate = String(p.rate ?? "");
             opt.dataset.term = String(p.term_years ?? "");
             opt.dataset.start = p.start_date || "";
+            opt.dataset.autoMarkDue = p.auto_mark_due_paid ? "true" : "false";
             opt.textContent = p.is_shared ? `${p.name} (shared)` : p.name;
             return opt;
           })
@@ -791,6 +792,7 @@
     opt.dataset.rate = String(profile.rate ?? "");
     opt.dataset.term = String(profile.term_years ?? "");
     opt.dataset.start = profile.start_date || "";
+    opt.dataset.autoMarkDue = profile.auto_mark_due_paid ? "true" : "false";
     opt.textContent = profile.is_shared ? `${profile.name} (shared)` : profile.name;
     if (!existing) {
       if (select.options.length === 1 && !select.options[0].value) {
@@ -875,6 +877,8 @@
     document.getElementById("term").value = "30";
     const start = document.getElementById("startDate");
     if (start) start.value = start.dataset.default || start.value;
+    const autoMark = document.getElementById("autoMarkDuePaid");
+    if (autoMark) autoMark.checked = false;
     document.getElementById("error").textContent = "";
     document.getElementById("profileName")?.focus();
   }
@@ -898,6 +902,8 @@
     document.getElementById("rate").value = opt.dataset.rate || "6.5";
     document.getElementById("term").value = opt.dataset.term || "30";
     document.getElementById("startDate").value = opt.dataset.start || "";
+    const autoMark = document.getElementById("autoMarkDuePaid");
+    if (autoMark) autoMark.checked = opt.dataset.autoMarkDue === "true";
     document.getElementById("error").textContent = "";
     syncOpenProfileButton(profileId);
     highlightGutterSelection(profileId);

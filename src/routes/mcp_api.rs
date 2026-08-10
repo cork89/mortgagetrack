@@ -89,6 +89,7 @@ fn profile_json(p: &Profile) -> Value {
         "start_date": p.start_date,
         "monthly_payment": p.monthly_payment,
         "total_interest": p.total_interest,
+        "auto_mark_due_paid": p.auto_mark_due_paid,
     })
 }
 
@@ -113,6 +114,8 @@ pub struct ProfileBody {
     pub rate: f64,
     pub term: i32,
     pub start_date: String,
+    #[serde(default)]
+    pub auto_mark_due_paid: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -229,6 +232,7 @@ async fn create_profile_api(
         body.rate,
         body.term,
         start,
+        body.auto_mark_due_paid,
     )
     .await
     {
@@ -263,6 +267,7 @@ async fn update_profile_api(
         body.rate,
         body.term,
         start,
+        body.auto_mark_due_paid,
     )
     .await
     {
