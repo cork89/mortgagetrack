@@ -5,6 +5,7 @@
   data-year="{{ d.view_year }}"
   data-filter="{{ d.payment_filter }}"
   data-grain="{{ d.chart.grain }}"
+  data-scope="{{ d.summary_scope }}"
   data-tab="{{ d.active_tab }}"
   data-name="{{ d.profile_name }}"
   data-principal="{{ d.loan_principal }}"
@@ -41,6 +42,8 @@
   <div class="panel{% if d.active_tab == "summary" %} active{% endif %}" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary">
     {% let accelerator = &d.accelerator %}
     {% let year_stats = &d.year_stats %}
+    {% let summary_scope = d.summary_scope.as_str() %}
+    {% let current_year = d.current_year %}
     {% include "partials/summary_panel.html" %}
   </div>
 

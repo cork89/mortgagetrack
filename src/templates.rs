@@ -123,6 +123,8 @@ pub struct SharePanelTemplate {
 pub struct SummaryTemplate {
     pub accelerator: PayoffAccelerator,
     pub year_stats: Vec<YearStat>,
+    pub summary_scope: String,
+    pub current_year: i32,
 }
 
 #[derive(Template)]

@@ -2,6 +2,20 @@
 <div class="panel-surface">
   <div class="panel-head">
     <h2>Summary</h2>
+    <div class="seg-toggle" id="summaryScopeToggle" role="group" aria-label="Summary period">
+      <button type="button" data-summary-scope="year"{% if summary_scope == "year" %} class="active"{% endif %}
+        aria-pressed="{% if summary_scope == "year" %}true{% else %}false{% endif %}"
+        hx-get="/partials/summary"
+        hx-target="#panel-summary"
+        hx-swap="innerHTML show:none"
+        hx-vals='js:{tab: "summary", year: document.getElementById("dashboard")?.dataset.year, filter: document.getElementById("dashboard")?.dataset.filter || "all", grain: document.getElementById("dashboard")?.dataset.grain || "monthly", scope: "year"}'>{{ current_year }}</button>
+      <button type="button" data-summary-scope="total"{% if summary_scope == "total" %} class="active"{% endif %}
+        aria-pressed="{% if summary_scope == "total" %}true{% else %}false{% endif %}"
+        hx-get="/partials/summary"
+        hx-target="#panel-summary"
+        hx-swap="innerHTML show:none"
+        hx-vals='js:{tab: "summary", year: document.getElementById("dashboard")?.dataset.year, filter: document.getElementById("dashboard")?.dataset.filter || "all", grain: document.getElementById("dashboard")?.dataset.grain || "monthly", scope: "total"}'>Total</button>
+    </div>
   </div>
   {% call accel::card(accelerator) %}
   {% include "partials/year_strip.html" %}

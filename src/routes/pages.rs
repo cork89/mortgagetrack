@@ -20,7 +20,8 @@ use crate::models::{
     extras_as_inputs, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
     list_profiles, load_page_bundle, load_profile, mark_due_paid, payments_csv, rename_profile,
     require_profile_access, set_active_profile, set_paid, update_improvement, update_profile_loan,
-    upsert_payment_note, PaymentFilter, PaymentsYearExpand, Profile, ProfileOption, TabId,
+    upsert_payment_note, PaymentFilter, PaymentsYearExpand, SummaryScope, Profile, ProfileOption,
+    TabId,
 };
 use crate::templates::{
     panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
@@ -70,6 +71,7 @@ pub struct IndexQuery {
     pub year: Option<i32>,
     pub filter: Option<String>,
     pub grain: Option<String>,
+    pub scope: Option<String>,
     /// Temporary UI preview: `?pro=1` renders as if the user is on Pro.
     pub pro: Option<String>,
 }
@@ -97,6 +99,7 @@ pub struct SwitchForm {
     pub year: Option<i32>,
     pub filter: Option<String>,
     pub grain: Option<String>,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +194,8 @@ async fn summary_partial(
     Ok(HtmlTemplate(SummaryTemplate {
         accelerator: d.accelerator,
         year_stats: d.year_stats,
+        summary_scope: d.summary_scope,
+        current_year: d.current_year,
     }))
 }
 
@@ -521,6 +526,7 @@ async fn switch_profile(
             year: form.year,
             filter: form.filter,
             grain: form.grain,
+            scope: form.scope,
             pro: None,
         },
         &user,
@@ -603,6 +609,7 @@ async fn toggle_paid_handler(
         year: form.year,
         filter: form.filter,
         grain: form.grain,
+        scope: None,
         pro: None,
     };
     set_paid(&state.pool, user.id, &id, &form.pay_key, form.paid).await?;
@@ -638,6 +645,7 @@ async fn upsert_note_handler(
         year: form.year,
         filter: form.filter,
         grain: form.grain,
+        scope: None,
         pro: None,
     };
     upsert_payment_note(&state.pool, user.id, &id, &form.pay_key, &form.note).await?;
@@ -660,6 +668,7 @@ async fn add_extra_handler(
         year: None,
         filter: form.filter,
         grain: None,
+        scope: None,
         pro: None,
     };
     add_extra(
@@ -688,6 +697,7 @@ async fn delete_extra_handler(
         year: None,
         filter: None,
         grain: None,
+        scope: None,
         pro: None,
     };
     delete_extra(&state.pool, user.id, &id, &extra_id).await?;
@@ -710,6 +720,7 @@ async fn add_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        scope: None,
         pro: None,
     };
     add_improvement(
@@ -743,6 +754,7 @@ async fn delete_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        scope: None,
         pro: None,
     };
     delete_improvement(&state.pool, user.id, &id, &improvement_id).await?;
@@ -769,6 +781,7 @@ async fn update_improvement_handler(
         year: None,
         filter: None,
         grain: None,
+        scope: None,
         pro: None,
     };
     update_improvement(
@@ -813,6 +826,7 @@ async fn load_page(
     let view_year = q.year.unwrap_or_else(|| today.year());
     let filter = PaymentFilter::parse(q.filter.as_deref().unwrap_or("all"));
     let grain = q.grain.as_deref().unwrap_or("monthly");
+    let summary_scope = SummaryScope::parse(q.scope.as_deref().unwrap_or("year"));
     let tab = TabId::parse(
         q.tab
             .as_deref()
@@ -835,6 +849,7 @@ async fn load_page(
                 view_year,
                 filter,
                 grain,
+                summary_scope,
                 tab,
                 today,
                 PaymentsYearExpand::parse(&user.payments_year_expand),

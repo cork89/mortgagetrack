@@ -142,6 +142,28 @@ impl PaymentFilter {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummaryScope {
+    Year,
+    Total,
+}
+
+impl SummaryScope {
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "total" => SummaryScope::Total,
+            _ => SummaryScope::Year,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SummaryScope::Year => "year",
+            SummaryScope::Total => "total",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ProfileOption {
     pub id: String,
@@ -290,6 +312,8 @@ pub struct DashboardView {
     pub profile_term: String,
     pub accelerator: PayoffAccelerator,
     pub year_stats: Vec<YearStat>,
+    pub summary_scope: String,
+    pub current_year: i32,
     pub view_year: i32,
     pub months: Vec<MonthCell>,
     pub payment_years: Vec<PaymentYearGroup>,
@@ -407,6 +431,7 @@ pub fn build_dashboard(
     view_year: i32,
     filter: PaymentFilter,
     chart_grain: &str,
+    summary_scope: SummaryScope,
     active_tab: TabId,
     today: NaiveDate,
     year_expand: PaymentsYearExpand,
@@ -424,7 +449,7 @@ pub fn build_dashboard(
     );
     let schedule = &built.rows;
 
-    let year_stats = year_strip(schedule, &paid, extras.len(), loan.principal, today);
+    let year_stats = year_strip(schedule, &paid, extras, loan.principal, today, summary_scope);
     let accelerator = payoff_accelerator(schedule, &paid, extras, &loan);
     let months = calendar_months(schedule, &paid, view_year, today);
     let (payment_years, summary) = payments_table(
@@ -481,6 +506,8 @@ pub fn build_dashboard(
         profile_term: format!("{}yr", loan.term_years),
         accelerator,
         year_stats,
+        summary_scope: summary_scope.as_str().to_string(),
+        current_year: today.year(),
         view_year,
         months,
         payment_years,
@@ -699,37 +726,43 @@ fn payoff_accelerator(
 fn year_strip(
     schedule: &[ScheduleRow],
     paid: &HashSet<String>,
-    extra_count: usize,
+    extras: &[ExtraPayment],
     original_principal: f64,
     today: NaiveDate,
+    scope: SummaryScope,
 ) -> Vec<YearStat> {
     let y = today.year();
-    let year_rows: Vec<_> = schedule.iter().filter(|r| r.due.year() == y).collect();
-    let paid_rows: Vec<_> = year_rows
+    let scope_rows: Vec<_> = match scope {
+        SummaryScope::Year => schedule
+            .iter()
+            .filter(|r| r.due.year() == y)
+            .collect(),
+        SummaryScope::Total => schedule.iter().collect(),
+    };
+    let paid_rows: Vec<_> = scope_rows
         .iter()
         .filter(|r| paid.contains(&r.pay_key))
         .collect();
-    let scheduled_only: Vec<_> = year_rows
+    let scheduled_only: Vec<_> = scope_rows
         .iter()
         .filter(|r| r.kind == RowKind::Scheduled)
         .collect();
     let scheduled_principal: f64 = scheduled_only.iter().map(|r| r.principal).sum();
-    let scheduled_interest: f64 = year_rows.iter().map(|r| r.interest).sum();
+    let scheduled_interest: f64 = scope_rows.iter().map(|r| r.interest).sum();
     let paid_principal: f64 = paid_rows.iter().map(|r| r.principal).sum();
     let paid_interest: f64 = paid_rows.iter().map(|r| r.interest).sum();
-    let remaining = year_rows.len() - paid_rows.len();
+    let remaining = scope_rows.len().saturating_sub(paid_rows.len());
 
-    let total_paid_principal: f64 = schedule
-        .iter()
-        .filter(|r| paid.contains(&r.pay_key))
-        .map(|r| r.principal)
-        .sum();
-    let pct_paid = if original_principal <= 0.0 {
-        0
-    } else {
-        ((total_paid_principal / original_principal) * 100.0)
-            .clamp(0.0, 100.0)
-            .round() as u32
+    let extra_count = match scope {
+        SummaryScope::Year => extras
+            .iter()
+            .filter(|e| {
+                NaiveDate::parse_from_str(&e.date, "%Y-%m-%d")
+                    .map(|d| d.year() == y)
+                    .unwrap_or(false)
+            })
+            .count(),
+        SummaryScope::Total => extras.len(),
     };
 
     let mut extra_note = String::new();
@@ -737,36 +770,91 @@ fn year_strip(
         extra_note = format!(" · {extra_count} extra");
     }
 
-    vec![
-        YearStat {
-            label: "Total % paid".into(),
-            value: format!("{pct_paid}%"),
-            sub: format!(
-                "{} of {} principal",
-                money(total_paid_principal),
-                money(original_principal)
-            ),
-            class: "stat highlight".into(),
-        },
-        YearStat {
-            label: format!("{y} progress"),
-            value: format!("{} / {}", paid_rows.len(), year_rows.len()),
-            sub: format!("{remaining} remaining{extra_note}"),
-            class: "stat next-up".into(),
-        },
-        YearStat {
-            label: format!("{y} principal"),
-            value: money(paid_principal),
-            sub: format!("of {} scheduled", money(scheduled_principal)),
-            class: "stat quiet".into(),
-        },
-        YearStat {
-            label: format!("{y} interest"),
-            value: money(paid_interest),
-            sub: format!("of {} scheduled", money(scheduled_interest)),
-            class: "stat quiet".into(),
-        },
-    ]
+    match scope {
+        SummaryScope::Year => {
+            let pct_paid = if scheduled_principal <= 0.0 {
+                0
+            } else {
+                ((paid_principal / scheduled_principal) * 100.0)
+                    .clamp(0.0, 100.0)
+                    .round() as u32
+            };
+            vec![
+                YearStat {
+                    label: format!("{y} % paid"),
+                    value: format!("{pct_paid}%"),
+                    sub: format!(
+                        "{} of {} scheduled",
+                        money(paid_principal),
+                        money(scheduled_principal)
+                    ),
+                    class: "stat highlight".into(),
+                },
+                YearStat {
+                    label: format!("{y} progress"),
+                    value: format!("{} / {}", paid_rows.len(), scope_rows.len()),
+                    sub: format!("{remaining} remaining{extra_note}"),
+                    class: "stat next-up".into(),
+                },
+                YearStat {
+                    label: format!("{y} principal"),
+                    value: money(paid_principal),
+                    sub: format!("of {} scheduled", money(scheduled_principal)),
+                    class: "stat quiet".into(),
+                },
+                YearStat {
+                    label: format!("{y} interest"),
+                    value: money(paid_interest),
+                    sub: format!("of {} scheduled", money(scheduled_interest)),
+                    class: "stat quiet".into(),
+                },
+            ]
+        }
+        SummaryScope::Total => {
+            let total_paid_principal: f64 = schedule
+                .iter()
+                .filter(|r| paid.contains(&r.pay_key))
+                .map(|r| r.principal)
+                .sum();
+            let pct_paid = if original_principal <= 0.0 {
+                0
+            } else {
+                ((total_paid_principal / original_principal) * 100.0)
+                    .clamp(0.0, 100.0)
+                    .round() as u32
+            };
+            vec![
+                YearStat {
+                    label: "Total % paid".into(),
+                    value: format!("{pct_paid}%"),
+                    sub: format!(
+                        "{} of {} principal",
+                        money(total_paid_principal),
+                        money(original_principal)
+                    ),
+                    class: "stat highlight".into(),
+                },
+                YearStat {
+                    label: "Loan progress".into(),
+                    value: format!("{} / {}", paid_rows.len(), scope_rows.len()),
+                    sub: format!("{remaining} remaining{extra_note}"),
+                    class: "stat next-up".into(),
+                },
+                YearStat {
+                    label: "Total principal".into(),
+                    value: money(paid_principal),
+                    sub: format!("of {} scheduled", money(scheduled_principal)),
+                    class: "stat quiet".into(),
+                },
+                YearStat {
+                    label: "Total interest".into(),
+                    value: money(paid_interest),
+                    sub: format!("of {} scheduled", money(scheduled_interest)),
+                    class: "stat quiet".into(),
+                },
+            ]
+        }
+    }
 }
 
 fn calendar_months(

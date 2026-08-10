@@ -114,6 +114,9 @@
   }
 
   document.addEventListener("htmx:beforeRequest", (e) => {
+    if (isPaymentsPanelSwap(e.detail.elt, e.detail.requestConfig)) {
+      snapshotPaymentsPanelState();
+    }
     const elt = e.detail.elt;
     if (isPaidToggle(elt)) {
       // Payments panel / extras: wait for the panel swap instead of flipping locally.
@@ -143,6 +146,12 @@
   });
 
   document.addEventListener("htmx:afterRequest", (e) => {
+    if (
+      !e.detail.successful &&
+      isPaymentsPanelSwap(e.detail.elt, e.detail.requestConfig)
+    ) {
+      paymentsScrollRestore = null;
+    }
     const elt = e.detail.elt;
     if (isPaidToggle(elt)) {
       if (elt._paidSnapshot) {
@@ -221,6 +230,10 @@
     if (grainBtn?.dataset.grain) {
       dash.dataset.grain = grainBtn.dataset.grain;
     }
+    const scopeBtn = document.querySelector("#panel-summary [data-summary-scope].active");
+    if (scopeBtn?.dataset.summaryScope) {
+      dash.dataset.scope = scopeBtn.dataset.summaryScope;
+    }
   }
 
   function syncProfileBarFromDashboard() {
@@ -241,8 +254,9 @@
     const year = dash?.dataset.year || String(new Date().getFullYear());
     const filter = dash?.dataset.filter || "all";
     const grain = dash?.dataset.grain || "monthly";
+    const scope = dash?.dataset.scope || "year";
     const urls = {
-      summary: `/partials/summary?tab=summary&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
+      summary: `/partials/summary?tab=summary&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}&scope=${encodeURIComponent(scope)}`,
       calendar: `/partials/calendar?year=${encodeURIComponent(year)}&tab=calendar&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
       payments: `/partials/payments?tab=payments&filter=${encodeURIComponent(filter)}&year=${encodeURIComponent(year)}&grain=${encodeURIComponent(grain)}`,
       improvements: `/partials/improvements?tab=improvements&year=${encodeURIComponent(year)}&filter=${encodeURIComponent(filter)}&grain=${encodeURIComponent(grain)}`,
@@ -279,6 +293,7 @@
 
   let scrolledToCurrentPayment = false;
   let applyingYearCollapse = false;
+  let paymentsScrollRestore = null;
 
   function paymentsSurface(panel = panelEl("payments")) {
     return panel?.querySelector?.(".payments-panel") || null;
@@ -362,15 +377,19 @@
       /* ignore */
     }
     const overrides = readYearOpenOverrides(profileId);
+    const years = new Set();
+    surface.querySelectorAll(".pay-year-group[data-year]").forEach((group) => {
+      if (group.dataset.year) years.add(group.dataset.year);
+    });
     applyingYearCollapse = true;
     try {
-      surface.querySelectorAll(".pay-year-group[data-year]").forEach((group) => {
-        const year = group.dataset.year;
+      years.forEach((year) => {
+        const group = primaryYearGroup(surface, year);
+        if (!group) return;
         const serverExpanded = group.dataset.expanded === "true";
-        const expanded =
-          year != null && Object.prototype.hasOwnProperty.call(overrides, year)
-            ? !!overrides[year]
-            : serverExpanded;
+        const expanded = Object.prototype.hasOwnProperty.call(overrides, year)
+          ? !!overrides[year]
+          : serverExpanded;
         setYearGroupExpanded(group, expanded);
       });
     } finally {
@@ -386,6 +405,94 @@
     const overrides = readYearOpenOverrides(profileId);
     overrides[String(year)] = expanded;
     writeYearOpenOverrides(profileId, overrides);
+  }
+
+  function isYearGroupExpanded(group) {
+    if (group.tagName === "DETAILS") return group.open;
+    return !group.classList.contains("is-collapsed");
+  }
+
+  function primaryYearGroup(surface, year) {
+    const desktop = surface.querySelector(".payments-desktop");
+    const tbody = surface.querySelector(`tbody.pay-year-group[data-year="${year}"]`);
+    if (tbody && desktop && getComputedStyle(desktop).display !== "none") return tbody;
+    const details = surface.querySelector(`details.pay-year-group[data-year="${year}"]`);
+    return details || tbody;
+  }
+
+  function isPaymentsPanelSwap(elt, requestConfig) {
+    const target = requestConfig?.target;
+    if (target instanceof HTMLElement && target.id === "panel-payments") return true;
+    if (typeof target === "string" && target.replace(/^#/, "") === "panel-payments") {
+      return true;
+    }
+    let node = elt;
+    while (node) {
+      if (node instanceof HTMLElement) {
+        const hxTarget = node.getAttribute("hx-target");
+        if (hxTarget === "#panel-payments") return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  function snapshotPaymentYearExpansion(panel = panelEl("payments")) {
+    const surface = paymentsSurface(panel);
+    if (!surface) return;
+    const profileId = surface.dataset.profileId || "";
+    const overrides = readYearOpenOverrides(profileId);
+    const years = new Set();
+    surface.querySelectorAll(".pay-year-group[data-year]").forEach((group) => {
+      if (group.dataset.year) years.add(group.dataset.year);
+    });
+    years.forEach((year) => {
+      const group = primaryYearGroup(surface, year);
+      if (group) overrides[year] = isYearGroupExpanded(group);
+    });
+    writeYearOpenOverrides(profileId, overrides);
+  }
+
+  function paymentsUsesTableScroll(surface) {
+    const desktop = surface?.querySelector(".payments-desktop");
+    const tableWrap = surface?.querySelector("#paymentsTableWrap");
+    return !!(
+      desktop &&
+      tableWrap &&
+      getComputedStyle(desktop).display !== "none"
+    );
+  }
+
+  function snapshotPaymentsScroll(panel = panelEl("payments")) {
+    const surface = paymentsSurface(panel);
+    if (!surface) return null;
+    if (paymentsUsesTableScroll(surface)) {
+      const tableWrap = surface.querySelector("#paymentsTableWrap");
+      return { type: "table", top: tableWrap.scrollTop, left: tableWrap.scrollLeft };
+    }
+    return { type: "window", top: window.scrollY, left: window.scrollX };
+  }
+
+  function snapshotPaymentsPanelState(panel = panelEl("payments")) {
+    snapshotPaymentYearExpansion(panel);
+    paymentsScrollRestore = snapshotPaymentsScroll(panel);
+  }
+
+  function restorePaymentsScroll(panel = panelEl("payments")) {
+    const saved = paymentsScrollRestore;
+    paymentsScrollRestore = null;
+    if (!saved) return;
+    const surface = paymentsSurface(panel);
+    if (!surface) return;
+    if (saved.type === "table" && paymentsUsesTableScroll(surface)) {
+      const tableWrap = surface.querySelector("#paymentsTableWrap");
+      tableWrap.scrollTop = saved.top;
+      tableWrap.scrollLeft = saved.left;
+      return;
+    }
+    if (saved.type === "window") {
+      window.scrollTo({ top: saved.top, left: saved.left, behavior: "instant" });
+    }
   }
 
   function expandYearForCurrentMonth(panel = panelEl("payments")) {
@@ -1355,7 +1462,7 @@
         e.preventDefault();
         const group = yearToggle.closest(".pay-year-group");
         if (!group) return;
-        const next = group.dataset.expanded !== "true";
+        const next = !isYearGroupExpanded(group);
         setYearGroupExpanded(group, next);
         rememberYearExpanded(group.dataset.year, next);
         return;
@@ -1440,12 +1547,12 @@
     }
     if (targetId === "panel-summary") {
       e.detail.target.dataset.stale = "false";
+      syncDashboardMetaFromDom();
       return;
     }
     if (targetId === "panel-payments") {
       e.detail.target.dataset.stale = "false";
       syncDashboardMetaFromDom();
-      applyPaymentYearCollapse(e.detail.target);
       return;
     }
     if (targetId === "panel-improvements") {
@@ -1469,11 +1576,20 @@
         const panel = panelEl(id);
         if (panel) panel.dataset.stale = "false";
       });
-      applyPaymentYearCollapse();
       const dash = dashboard();
       const queryTab = new URLSearchParams(location.search).get("tab");
       const nextTab = normalizeTab(queryTab || dash?.dataset.tab || "calendar");
       activateTab(nextTab, { focus: false, syncUrl: true });
+    }
+  });
+
+  document.body.addEventListener("htmx:afterSettle", (e) => {
+    const targetId = e.detail.target?.id;
+    if (targetId === "panel-payments") {
+      applyPaymentYearCollapse(e.detail.target);
+      requestAnimationFrame(() => restorePaymentsScroll(e.detail.target));
+    } else if (targetId === "main-panel") {
+      applyPaymentYearCollapse();
     }
   });
 })();
