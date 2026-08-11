@@ -27,7 +27,8 @@
     </select>
   </div>
   <div class="profile-actions">
-    <button type="button" class="btn-primary" id="manageProfilesBtn">Profiles</button>
+    <button type="button" class="btn-primary" id="manageProfilesBtn"
+      popovertarget="loanPopover" popovertargetaction="show">Profiles</button>
   </div>
   <div class="profile-meta" id="profileMeta"{% match dashboard %}{% when None %} hidden{% else %}{% endmatch %}>
     {% match dashboard %}

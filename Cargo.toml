@@ -2,6 +2,12 @@
 name = "mortgagetrack"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+
+[build-dependencies]
+flate2 = "1"
+tar = "0.4"
+ureq = "2"
 
 [dependencies]
 argon2 = "0.5"

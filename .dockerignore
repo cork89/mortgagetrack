@@ -5,6 +5,8 @@ target
 !.env.sample
 img
 index.html
+node_modules
+pnpm-lock.yaml
 worker/node_modules
 worker/.wrangler
 **/*.db
