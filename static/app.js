@@ -605,6 +605,56 @@
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
+  function paymentsActionsPopover() {
+    return document.getElementById("paymentsActionsPopover");
+  }
+
+  function positionPaymentsActionsPopover() {
+    const pop = paymentsActionsPopover();
+    const btn = document.getElementById("paymentsActionsBtn");
+    if (!(pop instanceof HTMLElement) || !(btn instanceof HTMLElement)) return;
+    const rect = btn.getBoundingClientRect();
+    const gap = 6;
+    const width = pop.offsetWidth || 216;
+    const left = Math.min(
+      Math.max(8, rect.right - width),
+      window.innerWidth - width - 8,
+    );
+    pop.style.top = `${Math.round(rect.bottom + gap)}px`;
+    pop.style.left = `${Math.round(left)}px`;
+  }
+
+  function closePaymentsActionsPopover() {
+    paymentsActionsPopover()?.hidePopover?.();
+  }
+
+  function bindPaymentsActionsPopover(root = document) {
+    const pop = root.querySelector?.("#paymentsActionsPopover") ||
+      (root.id === "paymentsActionsPopover" ? root : null) ||
+      document.getElementById("paymentsActionsPopover");
+    if (!(pop instanceof HTMLElement) || pop.dataset.bound === "true") return;
+    pop.dataset.bound = "true";
+    pop.addEventListener("toggle", (e) => {
+      if (e.newState === "open") {
+        positionPaymentsActionsPopover();
+        document.getElementById("paymentsActionsBtn")?.setAttribute(
+          "aria-expanded",
+          "true",
+        );
+      } else {
+        document.getElementById("paymentsActionsBtn")?.setAttribute(
+          "aria-expanded",
+          "false",
+        );
+      }
+    });
+    pop.addEventListener("click", (e) => {
+      const action = e.target.closest(".payments-action");
+      if (!action || action.disabled) return;
+      closePaymentsActionsPopover();
+    });
+  }
+
   function popover() {
     return document.getElementById("loanPopover");
   }
@@ -1562,6 +1612,7 @@
       if (panel) panel.dataset.stale = "false";
     });
     applyPaymentYearCollapse();
+    bindPaymentsActionsPopover();
     activateTab(initialTab, { focus: false, syncUrl: true });
   }
 
@@ -1594,6 +1645,8 @@
     if (targetId === "panel-payments") {
       e.detail.target.dataset.stale = "false";
       syncDashboardMetaFromDom();
+      bindPaymentsActionsPopover(e.detail.target);
+      closePaymentsActionsPopover();
       return;
     }
     if (targetId === "panel-improvements") {
@@ -1628,9 +1681,12 @@
     const targetId = e.detail.target?.id;
     if (targetId === "panel-payments") {
       applyPaymentYearCollapse(e.detail.target);
+      bindPaymentsActionsPopover(e.detail.target);
       requestAnimationFrame(() => restorePaymentsScroll(e.detail.target));
     } else if (targetId === "main-panel") {
       applyPaymentYearCollapse();
+      bindPaymentsActionsPopover();
     }
   });
+
 })();

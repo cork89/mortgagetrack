@@ -8,11 +8,11 @@ mod view;
 pub use amort::{build_schedule, payment_status, Recurrence, RowKind, ScheduleBuilt};
 pub use db::{
     add_extra, add_improvement, auto_mark_due_paid_if_enabled, clear_paid, count_owned_profiles,
-    create_profile, delete_extra, delete_improvement, delete_profile, extras_as_inputs,
-    get_active_profile_id, list_extras, list_improvements, list_paid_keys, list_payment_notes,
-    list_profiles, load_page_bundle, load_profile, mark_due_paid, rename_profile,
-    require_profile_access, set_active_profile, set_paid, update_improvement, update_profile_loan,
-    upsert_payment_note, ExtraPayment, Profile, ProfileRole,
+    create_profile, delete_extra, delete_improvement, delete_profile, delete_unpaid_extras,
+    extras_as_inputs, get_active_profile_id, list_extras, list_improvements, list_paid_keys,
+    list_payment_notes, list_profiles, load_page_bundle, load_profile, mark_due_paid,
+    rename_profile, require_profile_access, set_active_profile, set_paid, update_improvement,
+    update_profile_loan, upsert_payment_note, ExtraPayment, Profile, ProfileRole,
 };
 pub use export::{csv_filename_stem, payments_csv};
 pub use migrate::{

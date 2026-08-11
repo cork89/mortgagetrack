@@ -985,6 +985,55 @@ pub async fn delete_extra(
     Ok(())
 }
 
+/// Delete every extra that has not been marked paid (and any notes on those rows).
+pub async fn delete_unpaid_extras(
+    pool: &DbPool,
+    user_id: Uuid,
+    profile_id: &str,
+) -> AppResult<u64> {
+    require_profile_access(pool, user_id, profile_id).await?;
+    let conn = get_conn(pool).await?;
+    let tx = begin(&conn).await?;
+    execute(
+        &tx,
+        r#"
+        DELETE FROM payment_notes
+        WHERE profile_id = ?
+          AND pay_key IN (
+            SELECT 'extra:' || e.id
+            FROM extras e
+            WHERE e.profile_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM paid_keys p
+                WHERE p.profile_id = e.profile_id
+                  AND p.pay_key = 'extra:' || e.id
+              )
+          )
+        "#,
+        params![profile_id, profile_id],
+    )
+    .await?;
+    let deleted = execute(
+        &tx,
+        r#"
+        DELETE FROM extras
+        WHERE profile_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM paid_keys p
+            WHERE p.profile_id = extras.profile_id
+              AND p.pay_key = 'extra:' || extras.id
+          )
+        "#,
+        params![profile_id],
+    )
+    .await?;
+    if deleted > 0 {
+        refresh_loan_totals_tx(&tx, user_id, profile_id).await?;
+    }
+    tx.commit().await?;
+    Ok(deleted)
+}
+
 async fn refresh_loan_totals_tx(tx: &DbTx, user_id: Uuid, profile_id: &str) -> AppResult<()> {
     let profile = load_profile_in_tx(tx, user_id, profile_id)
         .await?

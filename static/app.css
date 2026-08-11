@@ -1240,8 +1240,7 @@ details.pay-year-group[open] > summary .year-chevron {
     border: 0;
   }
 
-  .payments-toolbar select,
-  .payments-toolbar > .payments-toolbar-actions > .btn-compact {
+  .payments-toolbar select {
     width: 100%;
     min-width: 0;
     justify-content: center;
@@ -1251,10 +1250,7 @@ details.pay-year-group[open] > summary .year-chevron {
     white-space: nowrap;
   }
 
-  .payments-toolbar > .payments-toolbar-actions > .btn-compact {
-    flex: 1;
-  }
-
+  .payments-toolbar > .payments-toolbar-actions > .btn-icon,
   .payments-toolbar .extra-disclosure > summary.btn-icon {
     width: 2.4rem;
     height: 2.4rem;
@@ -1263,6 +1259,7 @@ details.pay-year-group[open] > summary .year-chevron {
     aspect-ratio: 1;
   }
 
+  .payments-toolbar > .payments-toolbar-actions > .btn-icon svg,
   .payments-toolbar .extra-disclosure > summary.btn-icon svg {
     width: 1.15rem;
     height: 1.15rem;
@@ -1660,6 +1657,66 @@ details.pay-year-group[open] > summary .year-chevron {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+.payments-actions-popover {
+  margin: 0;
+  inset: unset;
+  min-width: 13.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfc;
+  box-shadow: 0 14px 32px rgba(30, 74, 71, 0.12);
+}
+
+.payments-actions-popover::backdrop {
+  background: transparent;
+}
+
+.payments-actions-popover:popover-open {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.payments-actions-popover .payments-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  border-radius: 7px;
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.payments-actions-popover .payments-action:hover:not(:disabled) {
+  background: rgba(168, 212, 207, 0.22);
+  color: var(--sea-deep);
+}
+
+.payments-actions-popover .payments-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.payments-actions-popover .payments-action-danger {
+  color: var(--coral);
+  margin-top: 0.2rem;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+  padding-top: 0.65rem;
+}
+
+.payments-actions-popover .payments-action-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+  color: var(--coral);
 }
 
 .track-filters select,

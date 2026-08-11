@@ -17,8 +17,8 @@ use crate::error::{AppError, AppResult};
 use crate::models::{
     add_extra, add_improvement, auto_mark_due_paid_if_enabled, build_dashboard, clear_paid,
     count_owned_profiles, create_profile, csv_filename_stem, delete_extra, delete_improvement,
-    delete_profile, empty_state, extras_as_inputs, get_active_profile_id, list_extras,
-    list_paid_keys, list_payment_notes, list_profiles, load_page_bundle, load_profile,
+    delete_profile, delete_unpaid_extras, empty_state, extras_as_inputs, get_active_profile_id,
+    list_extras, list_paid_keys, list_payment_notes, list_profiles, load_page_bundle, load_profile,
     mark_due_paid, payments_csv, rename_profile, require_profile_access, set_active_profile,
     set_paid, update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter,
     PaymentsYearExpand, Profile, ProfileOption, Recurrence, SummaryScope, TabId,
@@ -50,6 +50,10 @@ pub fn routes() -> Router<AppState> {
         .route("/profiles/{id}/toggle-paid", post(toggle_paid_handler))
         .route("/profiles/{id}/notes", post(upsert_note_handler))
         .route("/profiles/{id}/extras", post(add_extra_handler))
+        .route(
+            "/profiles/{id}/extras/remove-unpaid",
+            post(remove_unpaid_extras_handler),
+        )
         .route(
             "/profiles/{id}/extras/{extra_id}",
             delete(delete_extra_handler).post(delete_extra_handler),
@@ -123,6 +127,11 @@ pub struct ExtraForm {
     pub recurring: bool,
     #[serde(default)]
     pub recurrence: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RemoveUnpaidExtrasForm {
+    pub filter: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -714,6 +723,32 @@ async fn delete_extra_handler(
         pro: None,
     };
     delete_extra(&state.pool, user.id, &id, &extra_id).await?;
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        true,
+    ))
+}
+
+async fn remove_unpaid_extras_handler(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Form(form): Form<RemoveUnpaidExtrasForm>,
+) -> AppResult<Response> {
+    let q = IndexQuery {
+        tab: Some("payments".into()),
+        year: None,
+        filter: form.filter,
+        grain: None,
+        scope: None,
+        pro: None,
+    };
+    delete_unpaid_extras(&state.pool, user.id, &id).await?;
     let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard

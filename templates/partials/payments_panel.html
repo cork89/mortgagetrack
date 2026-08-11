@@ -24,16 +24,38 @@
         </select>
       </label>
       <div class="payments-toolbar-actions">
-        {% if is_paid %}
-        <a class="btn-ghost btn-compact" id="exportCsvBtn"
-          href="/profiles/{{ profile_id }}/export.csv?filter={{ payment_filter }}">
-          Export
-        </a>
-        {% else %}
-        <button type="button" class="btn-ghost btn-compact" id="exportCsvBtn" disabled title="Pro feature">
-          Export
+        <button type="button"
+          class="btn-ghost btn-compact btn-icon"
+          id="paymentsActionsBtn"
+          popovertarget="paymentsActionsPopover"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="Payment actions"
+          title="Actions">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+          </svg>
         </button>
-        {% endif %}
+        <div id="paymentsActionsPopover" class="payments-actions-popover" popover role="menu">
+          {% if is_paid %}
+          <a class="payments-action" id="exportCsvBtn" role="menuitem"
+            href="/profiles/{{ profile_id }}/export.csv?filter={{ payment_filter }}">
+            Export
+          </a>
+          {% else %}
+          <button type="button" class="payments-action" id="exportCsvBtn" role="menuitem" disabled title="Pro feature">
+            Export
+          </button>
+          {% endif %}
+          <button type="button" class="payments-action payments-action-danger" role="menuitem"
+            hx-post="/profiles/{{ profile_id }}/extras/remove-unpaid"
+            hx-vals='{"filter":"{{ payment_filter }}"}'
+            hx-target="#panel-payments"
+            hx-swap="innerHTML show:none"
+            hx-confirm="Remove all unpaid extra payments?">
+            Remove unmarked extras
+          </button>
+        </div>
       </div>
       <details class="extra-disclosure">
         <summary class="btn-primary btn-compact btn-icon" aria-label="Add Extra" title="Add Extra">
