@@ -1579,6 +1579,36 @@
         activateTab(tab.dataset.tab);
       }
     });
+    document.body.addEventListener("dblclick", (e) => {
+      // Arrow/label button stays single-click; swallow its dblclick so two
+      // clicks don't get followed by a third toggle from the row handler.
+      if (e.target.closest(".year-toggle")) {
+        e.preventDefault();
+        return;
+      }
+
+      const yearSummary = e.target.closest("tr.year-summary");
+      if (yearSummary) {
+        e.preventDefault();
+        const group = yearSummary.closest(".pay-year-group");
+        if (!group) return;
+        const next = !isYearGroupExpanded(group);
+        setYearGroupExpanded(group, next);
+        rememberYearExpanded(group.dataset.year, next);
+        return;
+      }
+
+      const payYear = e.target.closest("summary.pay-year");
+      if (payYear) {
+        e.preventDefault();
+        const group = payYear.closest("details.pay-year-group");
+        if (!group) return;
+        // Two summary clicks already cancelled out; flip once for the dblclick.
+        const next = !isYearGroupExpanded(group);
+        setYearGroupExpanded(group, next);
+        rememberYearExpanded(group.dataset.year, next);
+      }
+    });
     document.body.addEventListener("toggle", (e) => {
       const group = e.target.closest?.("details.pay-year-group");
       if (!group || e.target !== group) return;

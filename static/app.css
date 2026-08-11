@@ -1109,6 +1109,8 @@ tbody.pay-year-group.is-collapsed tr:not(.year-summary) {
 
 tbody tr.year-summary {
   font-weight: 600;
+  cursor: pointer;
+  user-select: none;
 }
 
 tbody tr.year-summary td {
