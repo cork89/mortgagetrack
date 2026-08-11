@@ -114,16 +114,6 @@ function bindUi(): void {
     if (id) selectProfile(id);
   });
   byId("openProfileBtn")?.addEventListener("click", openSelectedProfile);
-  byId("resetPaidBtn")?.addEventListener("click", () => {
-    const form = byId<HTMLFormElement>("loanForm");
-    const id = form?.dataset.profileId;
-    if (!id || form.dataset.mode !== "edit") return;
-    if (!confirm("Clear all tracked payments for this profile?")) return;
-    if (typeof htmx === "undefined") return;
-    htmx.ajax("POST", `/profiles/${id}/clear-paid`, {
-      headers: { "HX-Request": "true" },
-    });
-  });
   byId("profileSelect")?.addEventListener("change", syncOwnerState);
   syncOwnerState();
   byId("emptyNewBtn")?.addEventListener("click", (e) => {

@@ -1201,7 +1201,6 @@
     if (buildBtn) buildBtn.textContent = "Create profile";
     byId("nameFieldWrap")?.classList.remove("hidden");
     byId("loanFields")?.classList.remove("hidden");
-    byId("resetWrap")?.classList.add("hidden");
     syncDeleteProfileButton(false);
     syncCopyProfileButton(false);
     hideShareEditor();
@@ -1234,7 +1233,6 @@
     if (buildBtn) buildBtn.textContent = "Save changes";
     byId("nameFieldWrap")?.classList.remove("hidden");
     byId("loanFields")?.classList.remove("hidden");
-    byId("resetWrap")?.classList.remove("hidden");
     syncDeleteProfileButton(owner);
     syncCopyProfileButton(true);
     const profileName = byId("profileName");
@@ -1360,16 +1358,6 @@
       if (id) selectProfile(id);
     });
     byId("openProfileBtn")?.addEventListener("click", openSelectedProfile);
-    byId("resetPaidBtn")?.addEventListener("click", () => {
-      const form = byId("loanForm");
-      const id = form?.dataset.profileId;
-      if (!id || form.dataset.mode !== "edit") return;
-      if (!confirm("Clear all tracked payments for this profile?")) return;
-      if (typeof htmx === "undefined") return;
-      htmx.ajax("POST", `/profiles/${id}/clear-paid`, {
-        headers: { "HX-Request": "true" }
-      });
-    });
     byId("profileSelect")?.addEventListener("change", syncOwnerState);
     syncOwnerState();
     byId("emptyNewBtn")?.addEventListener("click", (e) => {

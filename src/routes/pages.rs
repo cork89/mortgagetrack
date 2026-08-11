@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::{IntoResponse, Redirect, Response},
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
     Form, Json, Router,
 };
@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
-use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser, PaidUser};
+use crate::auth::{avatar_src, current_user, hx_redirect, AuthUser, PaidUser};
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -131,6 +131,11 @@ pub struct ExtraForm {
 
 #[derive(Debug, Deserialize)]
 pub struct RemoveUnpaidExtrasForm {
+    pub filter: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClearPaidForm {
     pub filter: Option<String>,
 }
 
@@ -550,15 +555,27 @@ async fn switch_profile(
 async fn clear_paid_handler(
     user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
+    Form(form): Form<ClearPaidForm>,
 ) -> AppResult<Response> {
+    let q = IndexQuery {
+        tab: Some("payments".into()),
+        year: None,
+        filter: form.filter,
+        grain: None,
+        scope: None,
+        pro: None,
+    };
     clear_paid(&state.pool, user.id, &id).await?;
-    if is_htmx(&headers) {
-        Ok(hx_redirect(&headers, "/"))
-    } else {
-        Ok(Redirect::to("/").into_response())
-    }
+    let page = load_page(&state, &q, &user).await?;
+    let d = page
+        .dashboard
+        .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        true,
+    ))
 }
 
 async fn mark_due_handler(

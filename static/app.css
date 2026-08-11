@@ -1710,10 +1710,16 @@ details.pay-year-group[open] > summary .year-chevron {
 
 .payments-actions-popover .payments-action-danger {
   color: var(--coral);
+}
+
+.payments-actions-popover .payments-action:not(.payments-action-danger) + .payments-action-danger {
   margin-top: 0.2rem;
   border-top: 1px solid var(--line);
-  border-radius: 0 0 7px 7px;
   padding-top: 0.65rem;
+}
+
+.payments-actions-popover .payments-action-danger:last-child {
+  border-radius: 0 0 7px 7px;
 }
 
 .payments-actions-popover .payments-action-danger:hover:not(:disabled) {

@@ -53,7 +53,15 @@
             hx-target="#panel-payments"
             hx-swap="innerHTML show:none"
             hx-confirm="Remove all unpaid extra payments?">
-            Remove unmarked extras
+            Remove unpaid extras
+          </button>
+          <button type="button" class="payments-action payments-action-danger" role="menuitem"
+            hx-post="/profiles/{{ profile_id }}/clear-paid"
+            hx-vals='{"filter":"{{ payment_filter }}"}'
+            hx-target="#panel-payments"
+            hx-swap="innerHTML show:none"
+            hx-confirm="Clear all tracked payments for this profile?">
+            Clear tracked payments
           </button>
         </div>
       </div>

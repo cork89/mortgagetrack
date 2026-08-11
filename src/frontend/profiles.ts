@@ -388,7 +388,6 @@ export function selectCreateMode(): void {
   if (buildBtn) buildBtn.textContent = "Create profile";
   byId("nameFieldWrap")?.classList.remove("hidden");
   byId("loanFields")?.classList.remove("hidden");
-  byId("resetWrap")?.classList.add("hidden");
   syncDeleteProfileButton(false);
   syncCopyProfileButton(false);
   hideShareEditor();
@@ -422,7 +421,6 @@ export function selectProfile(profileId: string): void {
   if (buildBtn) buildBtn.textContent = "Save changes";
   byId("nameFieldWrap")?.classList.remove("hidden");
   byId("loanFields")?.classList.remove("hidden");
-  byId("resetWrap")?.classList.remove("hidden");
   syncDeleteProfileButton(owner);
   syncCopyProfileButton(true);
   const profileName = byId<HTMLInputElement>("profileName");

@@ -226,16 +226,16 @@ async fn list_profiles_conn(conn: &DbConn, user_id: Uuid) -> AppResult<Vec<Profi
     query_all(
         conn,
         r#"
-        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid
+        SELECT id, user_id, name, principal, rate, term_years, start_date, monthly_payment, total_interest, version, auto_mark_due_paid, created_at
         FROM profiles
         WHERE user_id = ?
         UNION
         SELECT p.id, p.user_id, p.name, p.principal, p.rate, p.term_years, p.start_date,
-               p.monthly_payment, p.total_interest, p.version, p.auto_mark_due_paid
+               p.monthly_payment, p.total_interest, p.version, p.auto_mark_due_paid, p.created_at
         FROM profiles p
         INNER JOIN profile_collaborators c ON c.profile_id = p.id
         WHERE c.user_id = ?
-        ORDER BY name COLLATE NOCASE
+        ORDER BY created_at ASC
         "#,
         params![key.as_str(), key.as_str()],
     )
