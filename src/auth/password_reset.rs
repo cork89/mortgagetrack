@@ -15,9 +15,7 @@ use sha2::{Digest, Sha256};
 use tower_sessions::Session;
 use uuid::Uuid;
 
-use super::models::{
-    find_user_by_email, update_password, validate_email, validate_password, User,
-};
+use super::models::{find_user_by_email, update_password, validate_email, validate_password, User};
 use super::rate_limit::{self, client_ip};
 use crate::app_state::AppState;
 use crate::auth::{
@@ -146,11 +144,7 @@ async fn forgot_submit(
             };
             let message = err.to_string();
             if is_htmx(&headers) {
-                (
-                    status,
-                    HtmlTemplate(AuthErrorPartial { message }),
-                )
-                    .into_response()
+                (status, HtmlTemplate(AuthErrorPartial { message })).into_response()
             } else {
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
                 (
@@ -276,11 +270,7 @@ async fn reset_submit(
             let status = StatusCode::BAD_REQUEST;
             let message = err.to_string();
             if is_htmx(&headers) {
-                (
-                    status,
-                    HtmlTemplate(AuthErrorPartial { message }),
-                )
-                    .into_response()
+                (status, HtmlTemplate(AuthErrorPartial { message })).into_response()
             } else {
                 let csrf_token = csrf::ensure_token(&session).await.unwrap_or_default();
                 let token_valid = !form.token.is_empty()
@@ -320,9 +310,10 @@ async fn reset_inner(state: &AppState, session: &Session, form: &ResetForm) -> A
     let user_id = consume_reset_token(&state.pool, &form.token).await?;
     update_password(&state.pool, user_id, &form.password).await?;
 
-    session.cycle_id().await.map_err(|err| {
-        AppError::Internal(format!("failed to renew session: {err}"))
-    })?;
+    session
+        .cycle_id()
+        .await
+        .map_err(|err| AppError::Internal(format!("failed to renew session: {err}")))?;
     csrf::rotate_token(session).await?;
     set_user_id(session, user_id).await?;
     Ok(())

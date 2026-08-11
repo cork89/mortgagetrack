@@ -9,7 +9,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 
-use super::amort::{build_schedule, ExtraInput, RowKind};
+use super::amort::{build_schedule, recurring_extra_dates, ExtraInput, Recurrence, RowKind};
 
 const ACTIVE_PROFILE_KEY: &str = "active_profile_id";
 
@@ -247,11 +247,7 @@ pub async fn load_profile(pool: &DbPool, user_id: Uuid, id: &str) -> AppResult<O
     load_profile_conn(&conn, user_id, id).await
 }
 
-async fn load_profile_conn(
-    conn: &DbConn,
-    user_id: Uuid,
-    id: &str,
-) -> AppResult<Option<Profile>> {
+async fn load_profile_conn(conn: &DbConn, user_id: Uuid, id: &str) -> AppResult<Option<Profile>> {
     let key = user_key(user_id);
     query_optional(
         conn,
@@ -292,11 +288,7 @@ pub async fn set_active_profile(pool: &DbPool, user_id: Uuid, id: Option<&str>) 
     set_active_profile_conn(&conn, user_id, id).await
 }
 
-async fn set_active_profile_conn(
-    conn: &DbConn,
-    user_id: Uuid,
-    id: Option<&str>,
-) -> AppResult<()> {
+async fn set_active_profile_conn(conn: &DbConn, user_id: Uuid, id: Option<&str>) -> AppResult<()> {
     if let Some(profile_id) = id {
         require_profile_access_conn(conn, user_id, profile_id).await?;
     }
@@ -365,10 +357,7 @@ pub async fn list_payment_notes(pool: &DbPool, profile_id: &str) -> AppResult<Ve
     list_payment_notes_conn(&conn, profile_id).await
 }
 
-async fn list_payment_notes_conn(
-    conn: &DbConn,
-    profile_id: &str,
-) -> AppResult<Vec<PaymentNote>> {
+async fn list_payment_notes_conn(conn: &DbConn, profile_id: &str) -> AppResult<Vec<PaymentNote>> {
     query_all(
         conn,
         "SELECT pay_key, note FROM payment_notes WHERE profile_id = ?",
@@ -729,12 +718,7 @@ pub async fn update_profile_loan(
         .ok_or_else(|| AppError::NotFound("Profile not found".into()))
 }
 
-pub async fn rename_profile(
-    pool: &DbPool,
-    user_id: Uuid,
-    id: &str,
-    name: &str,
-) -> AppResult<()> {
+pub async fn rename_profile(pool: &DbPool, user_id: Uuid, id: &str, name: &str) -> AppResult<()> {
     require_owned_profile(pool, user_id, id).await?;
     ensure_unique_name(pool, user_id, name, Some(id)).await?;
     let conn = get_conn(pool).await?;
@@ -903,9 +887,7 @@ pub async fn auto_mark_due_paid_if_enabled(
     let keys: Vec<String> = built
         .rows
         .iter()
-        .filter(|r| {
-            r.kind == RowKind::Scheduled && r.due <= today && !paid.contains(&r.pay_key)
-        })
+        .filter(|r| r.kind == RowKind::Scheduled && r.due <= today && !paid.contains(&r.pay_key))
         .map(|r| r.pay_key.clone())
         .collect();
     if keys.is_empty() {
@@ -922,29 +904,49 @@ pub async fn add_extra(
     date: NaiveDate,
     amount: f64,
     recast: bool,
-) -> AppResult<ExtraPayment> {
+    recurrence: Option<Recurrence>,
+) -> AppResult<Vec<ExtraPayment>> {
     require_profile_access(pool, user_id, profile_id).await?;
     if amount <= 0.0 {
         return Err(AppError::BadRequest("Amount must be positive".into()));
     }
-    let id = Uuid::new_v4().to_string();
-    let date_str = date.format("%Y-%m-%d").to_string();
+    let recast = recast && recurrence.is_none();
+    let dates = if let Some(recurrence) = recurrence {
+        let profile = load_profile(pool, user_id, profile_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Profile not found".into()))?;
+        let loan = profile
+            .loan()
+            .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
+        recurring_extra_dates(date, loan.start_date, loan.term_years, recurrence)
+    } else {
+        vec![date]
+    };
+
     let conn = get_conn(pool).await?;
-    execute(
-        &conn,
-        "INSERT INTO extras (id, profile_id, date, amount, recast) VALUES (?, ?, ?, ?, ?)",
-        params![id.as_str(), profile_id, date_str.as_str(), amount, recast],
-    )
-    .await?;
+    let tx = begin(&conn).await?;
+    let mut created = Vec::with_capacity(dates.len());
+    for d in dates {
+        let id = Uuid::new_v4().to_string();
+        let date_str = d.format("%Y-%m-%d").to_string();
+        execute(
+            &tx,
+            "INSERT INTO extras (id, profile_id, date, amount, recast) VALUES (?, ?, ?, ?, ?)",
+            params![id.as_str(), profile_id, date_str.as_str(), amount, recast],
+        )
+        .await?;
+        created.push(ExtraPayment {
+            id,
+            profile_id: profile_id.to_string(),
+            date: date_str,
+            amount,
+            recast,
+        });
+    }
+    tx.commit().await?;
 
     // Extras start unpaid: balance, monthly payment, and total interest update only when marked paid.
-    Ok(ExtraPayment {
-        id,
-        profile_id: profile_id.to_string(),
-        date: date_str,
-        amount,
-        recast,
-    })
+    Ok(created)
 }
 
 pub async fn delete_extra(

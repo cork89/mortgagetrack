@@ -54,18 +54,12 @@ mod tests {
 
     #[test]
     fn encodes_share_path_for_query() {
-        assert_eq!(
-            encode_query_value("/share/abc123"),
-            "%2Fshare%2Fabc123"
-        );
+        assert_eq!(encode_query_value("/share/abc123"), "%2Fshare%2Fabc123");
     }
 
     #[test]
     fn parses_share_token_from_next() {
-        assert_eq!(
-            share_token_from_next("/share/deadbeef"),
-            Some("deadbeef")
-        );
+        assert_eq!(share_token_from_next("/share/deadbeef"), Some("deadbeef"));
         assert_eq!(share_token_from_next("/evil//share/x"), None);
     }
 }

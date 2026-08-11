@@ -36,10 +36,7 @@ pub async fn ensure_schema(pool: &DbPool) -> AppResult<()> {
 
 /// Best-effort client IP for rate-limit keys.
 pub fn client_ip(headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
-    if let Some(fwd) = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(fwd) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         if let Some(first) = fwd.split(',').next() {
             let trimmed = first.trim();
             if !trimmed.is_empty() {
@@ -59,7 +56,11 @@ pub fn client_ip(headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
 
 pub async fn check_login(pool: &DbPool, ip: &str, email: &str) -> AppResult<()> {
     bump(pool, &format!("{KEY_LOGIN_IP}{ip}")).await?;
-    bump(pool, &format!("{KEY_LOGIN_EMAIL}{}", normalize_email(email))).await
+    bump(
+        pool,
+        &format!("{KEY_LOGIN_EMAIL}{}", normalize_email(email)),
+    )
+    .await
 }
 
 pub async fn clear_login_email(pool: &DbPool, email: &str) -> AppResult<()> {

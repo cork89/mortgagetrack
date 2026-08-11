@@ -48,12 +48,7 @@ impl SqlRpcClient {
         }
     }
 
-    async fn rpc(
-        &self,
-        op: &str,
-        sql: &str,
-        params: Vec<SqlValue>,
-    ) -> AppResult<RpcResponse> {
+    async fn rpc(&self, op: &str, sql: &str, params: Vec<SqlValue>) -> AppResult<RpcResponse> {
         let body = RpcRequest {
             op,
             sql,
@@ -63,10 +58,7 @@ impl SqlRpcClient {
             .inner
             .http
             .post(format!("{}/_internal/db", self.inner.rpc_url))
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.inner.secret),
-            )
+            .header("Authorization", format!("Bearer {}", self.inner.secret))
             .json(&body)
             .send()
             .await
@@ -88,17 +80,11 @@ impl SqlRpcClient {
     }
 
     pub async fn execute(&self, sql: &str, params: impl IntoSqlParams) -> AppResult<u64> {
-        let parsed = self
-            .rpc("execute", sql, params.into_sql_params())
-            .await?;
+        let parsed = self.rpc("execute", sql, params.into_sql_params()).await?;
         Ok(parsed.changes.unwrap_or(0))
     }
 
-    pub async fn query_rows(
-        &self,
-        sql: &str,
-        params: impl IntoSqlParams,
-    ) -> AppResult<Vec<Row>> {
+    pub async fn query_rows(&self, sql: &str, params: impl IntoSqlParams) -> AppResult<Vec<Row>> {
         let parsed = self.rpc("query", sql, params.into_sql_params()).await?;
         let rows = parsed.rows.unwrap_or_default();
         Ok(rows

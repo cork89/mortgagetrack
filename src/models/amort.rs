@@ -52,6 +52,76 @@ pub struct ExtraInput {
     pub applied: bool,
 }
 
+/// How often a recurring extra payment repeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recurrence {
+    Monthly,
+    Quarterly,
+    Yearly,
+}
+
+impl Recurrence {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "monthly" => Some(Self::Monthly),
+            "quarterly" => Some(Self::Quarterly),
+            "yearly" => Some(Self::Yearly),
+            _ => None,
+        }
+    }
+
+    /// Checkbox plus optional select value (`monthly` / `quarterly` / `yearly`).
+    pub fn from_form(recurring: bool, value: Option<&str>) -> Result<Option<Self>, &'static str> {
+        if !recurring {
+            return Ok(None);
+        }
+        match value.map(str::trim).filter(|s| !s.is_empty()) {
+            None => Ok(Some(Self::Monthly)),
+            Some(s) => Self::parse(s)
+                .map(Some)
+                .ok_or("Recurrence must be monthly, quarterly, or yearly."),
+        }
+    }
+
+    fn step_months(self) -> i32 {
+        match self {
+            Self::Monthly => 1,
+            Self::Quarterly => 3,
+            Self::Yearly => 12,
+        }
+    }
+}
+
+/// Dates for a recurring extra from `first` through the loan's last scheduled due date.
+pub fn recurring_extra_dates(
+    first: NaiveDate,
+    loan_start: NaiveDate,
+    term_years: i32,
+    recurrence: Recurrence,
+) -> Vec<NaiveDate> {
+    // Exclusive end: one month after the last scheduled due date, so a mid-month
+    // extra still covers the final payment month.
+    let end = add_months(loan_start, term_years.max(0) * 12);
+    let mut dates = Vec::new();
+    let mut d = first;
+    let step = recurrence.step_months();
+    while d < end {
+        dates.push(d);
+        let next = add_months(d, step);
+        if next <= d {
+            break;
+        }
+        d = next;
+        if dates.len() >= 600 {
+            break;
+        }
+    }
+    if dates.is_empty() {
+        dates.push(first);
+    }
+    dates
+}
+
 pub fn build_schedule(
     principal: f64,
     annual_rate: f64,
@@ -157,7 +227,11 @@ pub fn build_schedule(
                 } else {
                     "Extra".to_string()
                 };
-                let shown = if ev.applied { principal_part } else { requested };
+                let shown = if ev.applied {
+                    principal_part
+                } else {
+                    requested
+                };
                 rows.push(ScheduleRow {
                     kind: RowKind::Extra,
                     label,
@@ -249,12 +323,7 @@ mod tests {
         assert!((built.payment - 2528.27).abs() < 1.0);
     }
 
-    fn applied_extra(
-        id: &str,
-        date: NaiveDate,
-        amount: f64,
-        recast: bool,
-    ) -> ExtraInput {
+    fn applied_extra(id: &str, date: NaiveDate, amount: f64, recast: bool) -> ExtraInput {
         ExtraInput {
             id: id.into(),
             date,
@@ -314,7 +383,11 @@ mod tests {
             .unwrap();
         assert!(late.payment > 0.005);
 
-        let recast_row = built.rows.iter().find(|r| r.kind == RowKind::Extra).unwrap();
+        let recast_row = built
+            .rows
+            .iter()
+            .find(|r| r.kind == RowKind::Extra)
+            .unwrap();
         assert!(recast_row.recast);
         assert_eq!(recast_row.label, "Recast");
 
@@ -351,7 +424,11 @@ mod tests {
         assert!((built.payment - base.payment).abs() < 0.01);
         assert!((built.total_interest - base.total_interest).abs() < 0.01);
 
-        let row = built.rows.iter().find(|r| r.kind == RowKind::Extra).unwrap();
+        let row = built
+            .rows
+            .iter()
+            .find(|r| r.kind == RowKind::Extra)
+            .unwrap();
         assert!((row.payment - 50_000.0).abs() < 0.01);
         // Balance unchanged: matches prior scheduled payment balance.
         let sept = built
@@ -363,5 +440,65 @@ mod tests {
             })
             .unwrap();
         assert!((row.balance - sept.balance).abs() < 0.01);
+    }
+
+    #[test]
+    fn recurring_monthly_stops_at_last_scheduled_due() {
+        let start = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+        let first = NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
+        let dates = recurring_extra_dates(first, start, 2, Recurrence::Monthly);
+        assert_eq!(dates.first().copied(), Some(first));
+        assert_eq!(
+            dates.last().copied(),
+            Some(NaiveDate::from_ymd_opt(2028, 7, 15).unwrap())
+        );
+        assert_eq!(dates.len(), 23);
+    }
+
+    #[test]
+    fn recurring_quarterly_and_yearly_step() {
+        let start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let first = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let quarterly = recurring_extra_dates(first, start, 1, Recurrence::Quarterly);
+        assert_eq!(
+            quarterly,
+            vec![
+                NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            ]
+        );
+        let yearly = recurring_extra_dates(first, start, 3, Recurrence::Yearly);
+        assert_eq!(
+            yearly,
+            vec![
+                NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2027, 1, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2028, 1, 1).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn recurring_after_term_keeps_single_date() {
+        let start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let first = NaiveDate::from_ymd_opt(2030, 6, 1).unwrap();
+        let dates = recurring_extra_dates(first, start, 1, Recurrence::Monthly);
+        assert_eq!(dates, vec![first]);
+    }
+
+    #[test]
+    fn recurrence_from_form() {
+        assert_eq!(Recurrence::from_form(false, Some("monthly")), Ok(None));
+        assert_eq!(
+            Recurrence::from_form(true, None),
+            Ok(Some(Recurrence::Monthly))
+        );
+        assert_eq!(
+            Recurrence::from_form(true, Some("quarterly")),
+            Ok(Some(Recurrence::Quarterly))
+        );
+        assert!(Recurrence::from_form(true, Some("weekly")).is_err());
     }
 }

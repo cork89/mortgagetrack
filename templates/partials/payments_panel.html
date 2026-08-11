@@ -54,11 +54,24 @@
             Amount
             <input id="extraAmount" name="amount" type="number" min="0.01" step="0.01" placeholder="5000" required />
           </label>
-          <button type="submit" class="btn-primary">Add payment</button>
-          <label class="recast-check" title="Lower future monthly payments instead of paying off the loan sooner">
-            <input type="checkbox" name="recast" value="true" />
-            Recast
-          </label>
+          <div class="extra-recurring">
+            <label class="recurring-check" title="Repeat this extra payment through the end of the loan">
+              <input type="checkbox" name="recurring" value="true" />
+              Recurring
+            </label>
+            <select name="recurrence" aria-label="Repeat every" disabled>
+              <option value="yearly">Yearly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="extra-form-actions">
+            <button type="submit" class="btn-primary">Add payment</button>
+            <label class="recast-check" title="Lower future monthly payments instead of paying off the loan sooner">
+              <input type="checkbox" name="recast" value="true" />
+              Recast
+            </label>
+          </div>
         </form>
       </details>
     </div>

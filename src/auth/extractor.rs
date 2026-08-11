@@ -236,10 +236,9 @@ impl IntoResponse for AuthRedirect {
         if self.htmx {
             let mut response = StatusCode::UNAUTHORIZED.into_response();
             if let Ok(value) = HeaderValue::from_str(self.location) {
-                response.headers_mut().insert(
-                    header::HeaderName::from_static("hx-redirect"),
-                    value,
-                );
+                response
+                    .headers_mut()
+                    .insert(header::HeaderName::from_static("hx-redirect"), value);
             }
             response
         } else {

@@ -42,17 +42,12 @@ fn mark_panels_stale_trigger(keep_tab: &str, invalidate_chart: bool) -> Option<H
 }
 
 /// HTML fragment plus an `HX-Trigger` event so the client can mark other tabs stale.
-pub fn panel_update<T: Template>(
-    template: T,
-    keep_tab: &str,
-    invalidate_chart: bool,
-) -> Response {
+pub fn panel_update<T: Template>(template: T, keep_tab: &str, invalidate_chart: bool) -> Response {
     let mut response = HtmlTemplate(template).into_response();
     if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart) {
-        response.headers_mut().insert(
-            HeaderName::from_static("hx-trigger"),
-            value,
-        );
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("hx-trigger"), value);
     }
     response
 }
@@ -61,10 +56,9 @@ pub fn panel_update<T: Template>(
 pub fn panel_trigger(keep_tab: &str, invalidate_chart: bool) -> Response {
     let mut response = StatusCode::NO_CONTENT.into_response();
     if let Some(value) = mark_panels_stale_trigger(keep_tab, invalidate_chart) {
-        response.headers_mut().insert(
-            HeaderName::from_static("hx-trigger"),
-            value,
-        );
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("hx-trigger"), value);
     }
     response
 }

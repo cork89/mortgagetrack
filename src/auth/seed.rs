@@ -1,6 +1,4 @@
-use super::models::{
-    create_user, find_user_by_email, validate_email, validate_password, UserRole,
-};
+use super::models::{create_user, find_user_by_email, validate_email, validate_password, UserRole};
 use crate::config::env_bool;
 use crate::db::{execute, get_conn, params, DbPool};
 use crate::error::AppResult;
@@ -40,9 +38,7 @@ async fn ensure_one(
     let password = match std::env::var(password_key) {
         Ok(value) if !value.is_empty() => value,
         _ => {
-            tracing::warn!(
-                "{email_key} is set but {password_key} is missing; skipping seed user"
-            );
+            tracing::warn!("{email_key} is set but {password_key} is missing; skipping seed user");
             return Ok(());
         }
     };

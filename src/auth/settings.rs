@@ -22,20 +22,11 @@ use crate::auth::{
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{PaymentsYearExpand, TabId};
-use crate::templates::{
-    AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate, TabOption,
-};
+use crate::templates::{AuthErrorPartial, AvatarOption, HtmlTemplate, SettingsTemplate, TabOption};
 
 /// Selectable avatar ids (`static/avatars/{id}.webp`).
 pub const AVATAR_OPTIONS: &[&str] = &[
-    "barrow",
-    "boat",
-    "boot",
-    "car",
-    "dog",
-    "hat",
-    "iron",
-    "thimble",
+    "barrow", "boat", "boot", "car", "dog", "hat", "iron", "thimble",
 ];
 
 pub fn is_valid_avatar(avatar: &str) -> bool {
@@ -58,7 +49,10 @@ fn resolved_avatar_id(user_id: &Uuid, avatar: Option<&str>) -> &'static str {
 
 /// Image URL for a user: chosen avatar, or a stable pick from the selector.
 pub fn avatar_src(user_id: &Uuid, avatar: Option<&str>) -> String {
-    format!("/static/avatars/{}.webp", resolved_avatar_id(user_id, avatar))
+    format!(
+        "/static/avatars/{}.webp",
+        resolved_avatar_id(user_id, avatar)
+    )
 }
 
 pub fn routes() -> Router<AppState> {
@@ -182,13 +176,10 @@ async fn settings_page(
     .into_response())
 }
 
-async fn avatar(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> AppResult<Response> {
+async fn avatar(State(state): State<AppState>, Path(id): Path<String>) -> AppResult<Response> {
     let id_str = id.strip_suffix(".svg").unwrap_or(&id);
-    let user_id = Uuid::parse_str(id_str)
-        .map_err(|_| AppError::NotFound("Avatar not found.".into()))?;
+    let user_id =
+        Uuid::parse_str(id_str).map_err(|_| AppError::NotFound("Avatar not found.".into()))?;
 
     let stored = match crate::auth::models::find_user_by_id(&state.pool, user_id).await {
         Ok(Some(user)) => user.avatar,
@@ -345,9 +336,10 @@ async fn change_password_inner(
 
     update_password(&state.pool, user.id, &form.new_password).await?;
 
-    session.cycle_id().await.map_err(|err| {
-        AppError::Internal(format!("failed to renew session: {err}"))
-    })?;
+    session
+        .cycle_id()
+        .await
+        .map_err(|err| AppError::Internal(format!("failed to renew session: {err}")))?;
     csrf::rotate_token(session).await?;
     Ok(())
 }

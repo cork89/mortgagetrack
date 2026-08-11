@@ -21,23 +21,36 @@ use crate::models::{
     delete_extra, delete_improvement, delete_profile, extras_as_inputs, list_extras,
     list_improvements, list_paid_keys, list_payment_notes, list_profiles, load_profile,
     mark_due_paid, payment_status, rename_profile, require_profile_access, set_paid,
-    update_improvement, update_profile_loan, upsert_payment_note, Profile, RowKind, ScheduleBuilt,
+    update_improvement, update_profile_loan, upsert_payment_note, Profile, Recurrence, RowKind,
+    ScheduleBuilt,
 };
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/mcp/profiles", get(list_profiles_api).post(create_profile_api))
-        .route("/api/mcp/profiles/{id}", get(get_profile_api).post(update_profile_api))
+        .route(
+            "/api/mcp/profiles",
+            get(list_profiles_api).post(create_profile_api),
+        )
+        .route(
+            "/api/mcp/profiles/{id}",
+            get(get_profile_api).post(update_profile_api),
+        )
         .route("/api/mcp/profiles/{id}/rename", post(rename_profile_api))
         .route("/api/mcp/profiles/{id}/delete", post(delete_profile_api))
         .route("/api/mcp/profiles/{id}/summary", get(get_summary_api))
         .route("/api/mcp/profiles/{id}/payments", get(list_payments_api))
-        .route("/api/mcp/profiles/{id}/extras", get(list_extras_api).post(add_extra_api))
+        .route(
+            "/api/mcp/profiles/{id}/extras",
+            get(list_extras_api).post(add_extra_api),
+        )
         .route(
             "/api/mcp/profiles/{id}/extras/{extra_id}",
             delete(delete_extra_api).post(delete_extra_api),
         )
-        .route("/api/mcp/profiles/{id}/notes", get(list_notes_api).post(upsert_note_api))
+        .route(
+            "/api/mcp/profiles/{id}/notes",
+            get(list_notes_api).post(upsert_note_api),
+        )
         .route(
             "/api/mcp/profiles/{id}/improvements",
             get(list_improvements_api).post(add_improvement_api),
@@ -50,9 +63,18 @@ pub fn routes() -> Router<AppState> {
             "/api/mcp/profiles/{id}/improvements/{improvement_id}/update",
             post(update_improvement_api),
         )
-        .route("/api/mcp/profiles/{id}/payments/set-paid", post(set_payment_paid_api))
-        .route("/api/mcp/profiles/{id}/payments/clear-paid", post(clear_paid_api))
-        .route("/api/mcp/profiles/{id}/payments/mark-due", post(mark_due_api))
+        .route(
+            "/api/mcp/profiles/{id}/payments/set-paid",
+            post(set_payment_paid_api),
+        )
+        .route(
+            "/api/mcp/profiles/{id}/payments/clear-paid",
+            post(clear_paid_api),
+        )
+        .route(
+            "/api/mcp/profiles/{id}/payments/mark-due",
+            post(mark_due_api),
+        )
 }
 
 fn json_ok(data: Value) -> Response {
@@ -72,11 +94,7 @@ fn json_err(err: AppError) -> Response {
             )
         }
     };
-    (
-        status,
-        Json(json!({ "ok": false, "error": message })),
-    )
-        .into_response()
+    (status, Json(json!({ "ok": false, "error": message }))).into_response()
 }
 
 fn profile_json(p: &Profile) -> Value {
@@ -141,6 +159,8 @@ pub struct ExtraBody {
     pub amount: f64,
     #[serde(default)]
     pub recast: bool,
+    #[serde(default)]
+    pub recurrence: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -549,13 +569,43 @@ async fn add_extra_api(
         Ok(d) => d,
         Err(err) => return json_err(err),
     };
-    match add_extra(&state.pool, user.id, &id, date, body.amount, body.recast).await {
-        Ok(extra) => json_ok(json!({
-            "id": extra.id,
-            "date": extra.date,
-            "amount": extra.amount,
-            "recast": extra.recast,
-        })),
+    let recurrence = match body
+        .recurrence
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        None => None,
+        Some(s) => match Recurrence::parse(s) {
+            Some(r) => Some(r),
+            None => {
+                return json_err(AppError::BadRequest(
+                    "Recurrence must be monthly, quarterly, or yearly.".into(),
+                ))
+            }
+        },
+    };
+    match add_extra(
+        &state.pool,
+        user.id,
+        &id,
+        date,
+        body.amount,
+        body.recast,
+        recurrence,
+    )
+    .await
+    {
+        Ok(extras) => {
+            let extra = &extras[0];
+            json_ok(json!({
+                "id": extra.id,
+                "date": extra.date,
+                "amount": extra.amount,
+                "recast": extra.recast,
+                "count": extras.len(),
+            }))
+        }
         Err(err) => json_err(err),
     }
 }

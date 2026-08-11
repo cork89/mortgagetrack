@@ -15,13 +15,13 @@ use crate::auth::{avatar_src, current_user, hx_redirect, is_htmx, AuthUser, Paid
 use crate::csrf;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    add_extra, add_improvement, auto_mark_due_paid_if_enabled, build_dashboard, clear_paid, count_owned_profiles, create_profile,
-    csv_filename_stem, delete_extra, delete_improvement, delete_profile, empty_state,
-    extras_as_inputs, get_active_profile_id, list_extras, list_paid_keys, list_payment_notes,
-    list_profiles, load_page_bundle, load_profile, mark_due_paid, payments_csv, rename_profile,
-    require_profile_access, set_active_profile, set_paid, update_improvement, update_profile_loan,
-    upsert_payment_note, PaymentFilter, PaymentsYearExpand, SummaryScope, Profile, ProfileOption,
-    TabId,
+    add_extra, add_improvement, auto_mark_due_paid_if_enabled, build_dashboard, clear_paid,
+    count_owned_profiles, create_profile, csv_filename_stem, delete_extra, delete_improvement,
+    delete_profile, empty_state, extras_as_inputs, get_active_profile_id, list_extras,
+    list_paid_keys, list_payment_notes, list_profiles, load_page_bundle, load_profile,
+    mark_due_paid, payments_csv, rename_profile, require_profile_access, set_active_profile,
+    set_paid, update_improvement, update_profile_loan, upsert_payment_note, PaymentFilter,
+    PaymentsYearExpand, Profile, ProfileOption, Recurrence, SummaryScope, TabId,
 };
 use crate::templates::{
     panel_trigger, panel_update, CalendarTemplate, ChartTemplate, DashboardTemplate, ErrorPartial,
@@ -119,6 +119,10 @@ pub struct ExtraForm {
     pub filter: Option<String>,
     #[serde(default)]
     pub recast: bool,
+    #[serde(default)]
+    pub recurring: bool,
+    #[serde(default)]
+    pub recurrence: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,9 +272,8 @@ async fn export_payments_csv(
     );
     response.headers_mut().insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&disposition).unwrap_or_else(|_| {
-            HeaderValue::from_static("attachment; filename=\"payments.csv\"")
-        }),
+        HeaderValue::from_str(&disposition)
+            .unwrap_or_else(|_| HeaderValue::from_static("attachment; filename=\"payments.csv\"")),
     );
     Ok(response)
 }
@@ -388,11 +391,7 @@ async fn copy_profile_handler(
     }
 }
 
-async fn copy_profile_inner(
-    state: &AppState,
-    user: &AuthUser,
-    id: &str,
-) -> AppResult<Profile> {
+async fn copy_profile_inner(state: &AppState, user: &AuthUser, id: &str) -> AppResult<Profile> {
     require_profile_access(&state.pool, user.id, id).await?;
     if !user.is_paid() {
         let owned = count_owned_profiles(&state.pool, user.id).await?;
@@ -584,8 +583,7 @@ async fn mark_due_handler(
         .rows
         .iter()
         .filter(|r| {
-            r.due <= today
-                || (r.due.year() == today.year() && r.due.month() == today.month())
+            r.due <= today || (r.due.year() == today.year() && r.due.month() == today.month())
         })
         .map(|r| r.pay_key.clone())
         .collect();
@@ -594,7 +592,11 @@ async fn mark_due_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", true))
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        true,
+    ))
 }
 
 async fn toggle_paid_handler(
@@ -653,7 +655,11 @@ async fn upsert_note_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", false))
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        false,
+    ))
 }
 
 async fn add_extra_handler(
@@ -663,6 +669,8 @@ async fn add_extra_handler(
     Form(form): Form<ExtraForm>,
 ) -> AppResult<Response> {
     let date = parse_date(&form.date)?;
+    let recurrence = Recurrence::from_form(form.recurring, form.recurrence.as_deref())
+        .map_err(|msg| AppError::BadRequest(msg.into()))?;
     let q = IndexQuery {
         tab: Some("payments".into()),
         year: None,
@@ -678,13 +686,18 @@ async fn add_extra_handler(
         date,
         form.amount,
         form.recast,
+        recurrence,
     )
     .await?;
     let page = load_page(&state, &q, &user).await?;
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", false))
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        false,
+    ))
 }
 
 async fn delete_extra_handler(
@@ -705,7 +718,11 @@ async fn delete_extra_handler(
     let d = page
         .dashboard
         .ok_or_else(|| AppError::BadRequest("No active loan".into()))?;
-    Ok(panel_update(payments_from_dashboard(d, page.is_paid), "payments", true))
+    Ok(panel_update(
+        payments_from_dashboard(d, page.is_paid),
+        "payments",
+        true,
+    ))
 }
 
 async fn add_improvement_handler(
@@ -806,11 +823,7 @@ async fn update_improvement_handler(
     ))
 }
 
-async fn load_page(
-    state: &AppState,
-    q: &IndexQuery,
-    user: &AuthUser,
-) -> AppResult<IndexTemplate> {
+async fn load_page(state: &AppState, q: &IndexQuery, user: &AuthUser) -> AppResult<IndexTemplate> {
     let bundle = load_page_bundle(&state.pool, user.id).await?;
     let profiles = bundle.profiles;
     let active = bundle.active;
@@ -881,20 +894,13 @@ async fn load_page(
         Some(p) => p.user_id == user_key,
         None => true,
     };
-    let owned_count = profiles
-        .iter()
-        .filter(|p| p.user_id == user_key)
-        .count();
+    let owned_count = profiles.iter().filter(|p| p.user_id == user_key).count();
     let effectively_paid = user.is_paid() || q.pro.as_deref() == Some("1");
     let can_create_profile = effectively_paid || owned_count == 0;
 
     let default_start = {
         let d = today;
-        let month = if d.month() == 12 {
-            1
-        } else {
-            d.month() + 1
-        };
+        let month = if d.month() == 12 { 1 } else { d.month() + 1 };
         let year = if d.month() == 12 {
             d.year() + 1
         } else {
@@ -961,11 +967,7 @@ fn json_err(err: AppError) -> Response {
             )
         }
     };
-    (
-        status,
-        Json(json!({ "ok": false, "error": message })),
-    )
-        .into_response()
+    (status, Json(json!({ "ok": false, "error": message }))).into_response()
 }
 
 fn parse_date(s: &str) -> AppResult<NaiveDate> {

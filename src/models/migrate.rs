@@ -136,8 +136,12 @@ pub async fn ensure_extra_recast(pool: &DbPool) -> AppResult<()> {
 
 async fn extras_have_recast(pool: &DbPool) -> AppResult<bool> {
     let conn = get_conn(pool).await?;
-    let cols: Vec<(i32, String)> =
-        query_all(&conn, "SELECT cid, name FROM pragma_table_info('extras')", ()).await?;
+    let cols: Vec<(i32, String)> = query_all(
+        &conn,
+        "SELECT cid, name FROM pragma_table_info('extras')",
+        (),
+    )
+    .await?;
     Ok(cols.iter().any(|(_, name)| name == "recast"))
 }
 
@@ -258,18 +262,17 @@ pub async fn ensure_user_paid_until(pool: &DbPool) -> AppResult<()> {
     }
     tracing::info!("adding users.paid_until column");
     let conn = get_conn(pool).await?;
-    execute(
-        &conn,
-        "ALTER TABLE users ADD COLUMN paid_until TEXT",
-        (),
-    )
-    .await?;
+    execute(&conn, "ALTER TABLE users ADD COLUMN paid_until TEXT", ()).await?;
     Ok(())
 }
 
 async fn users_have_column(pool: &DbPool, column: &str) -> AppResult<bool> {
     let conn = get_conn(pool).await?;
-    let cols: Vec<(i32, String)> =
-        query_all(&conn, "SELECT cid, name FROM pragma_table_info('users')", ()).await?;
+    let cols: Vec<(i32, String)> = query_all(
+        &conn,
+        "SELECT cid, name FROM pragma_table_info('users')",
+        (),
+    )
+    .await?;
     Ok(cols.iter().any(|(_, name)| name == column))
 }

@@ -6,8 +6,8 @@ mod value;
 
 pub use value::{params, FromRow, IntoSqlParams, Row, SqlValue, ToSql};
 
-use sql_rpc::SqlRpcClient;
 use local::{LocalConn, LocalPool, LocalTx};
+use sql_rpc::SqlRpcClient;
 
 use crate::error::{AppError, AppResult};
 
@@ -86,11 +86,9 @@ pub async fn connect_db() -> Result<DbPool, Box<dyn std::error::Error>> {
         );
     }
     if is_remote_url(&url) {
-        return Err(
-            "Remote Turso/libSQL URLs are no longer supported. \
+        return Err("Remote Turso/libSQL URLs are no longer supported. \
              Use DATABASE_URL=sqlite:mortgage.db locally, or DB_MODE=sql_rpc with DB_RPC_URL."
-                .into(),
-        );
+            .into());
     }
 
     let path = normalize_sqlite_path(&url);
@@ -130,11 +128,7 @@ pub async fn begin(conn: &DbConn) -> AppResult<DbTx> {
     }
 }
 
-pub async fn execute(
-    conn: &impl SqlExec,
-    sql: &str,
-    params: impl IntoSqlParams,
-) -> AppResult<u64> {
+pub async fn execute(conn: &impl SqlExec, sql: &str, params: impl IntoSqlParams) -> AppResult<u64> {
     conn.sql_execute(sql, params.into_sql_params()).await
 }
 

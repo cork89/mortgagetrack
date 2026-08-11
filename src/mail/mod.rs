@@ -38,8 +38,7 @@ pub struct CloudflareMailer {
 impl Mailer {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         let from = MailAddress {
-            address: required_env("MAIL_FROM")
-                .unwrap_or_else(|_| "noreply@localhost".into()),
+            address: required_env("MAIL_FROM").unwrap_or_else(|_| "noreply@localhost".into()),
             name: optional_env("MAIL_FROM_NAME"),
         };
         let provider = optional_env("MAIL_PROVIDER")
@@ -72,10 +71,7 @@ impl Mailer {
                     from,
                 }))
             }
-            other => Err(format!(
-                "unknown MAIL_PROVIDER={other:?}; use log or cloudflare"
-            )
-            .into()),
+            other => Err(format!("unknown MAIL_PROVIDER={other:?}; use log or cloudflare").into()),
         }
     }
 

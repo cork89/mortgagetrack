@@ -1,13 +1,11 @@
 //! Profile share links and collaborators.
 
-use argon2::password_hash::rand_core::{OsRng, RngCore};
 use crate::db::params;
+use argon2::password_hash::rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::db::{
-    begin, execute, get_conn, query_all, query_one, query_optional, DbPool, FromRow,
-};
+use crate::db::{begin, execute, get_conn, query_all, query_one, query_optional, DbPool, FromRow};
 use crate::error::{AppError, AppResult};
 
 use super::db::{require_owned_profile, require_profile_access, user_key, ProfileRole};
@@ -166,11 +164,7 @@ pub async fn list_collaborators(
 }
 
 /// Accept a share token for the current user. Returns the profile id.
-pub async fn accept_share_link(
-    pool: &DbPool,
-    user_id: Uuid,
-    token: &str,
-) -> AppResult<String> {
+pub async fn accept_share_link(pool: &DbPool, user_id: Uuid, token: &str) -> AppResult<String> {
     let token = token.trim();
     if token.is_empty() || token.len() > 128 {
         return Err(AppError::NotFound("Invite not found".into()));
@@ -197,9 +191,7 @@ pub async fn accept_share_link(
     };
 
     if created_by == user_key(user_id) {
-        return Err(AppError::BadRequest(
-            "You already own this profile.".into(),
-        ));
+        return Err(AppError::BadRequest("You already own this profile.".into()));
     }
 
     let already: Option<(String,)> = query_optional(

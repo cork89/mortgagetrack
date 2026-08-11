@@ -43,6 +43,38 @@
     return elt instanceof HTMLElement && elt.classList.contains("paid-toggle");
   }
 
+  function syncExtraFormOptions(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const recast = form.querySelector('input[name="recast"]');
+    const recurring = form.querySelector('input[name="recurring"]');
+    const recurrence = form.querySelector('select[name="recurrence"]');
+    if (
+      !(recast instanceof HTMLInputElement) ||
+      !(recurring instanceof HTMLInputElement) ||
+      !(recurrence instanceof HTMLSelectElement)
+    ) {
+      return;
+    }
+
+    if (recurring.checked) {
+      recast.checked = false;
+      recast.disabled = true;
+    } else {
+      recast.disabled = false;
+    }
+
+    if (recast.checked) {
+      recurring.checked = false;
+      recurring.disabled = true;
+    } else {
+      recurring.disabled = false;
+    }
+
+    recurrence.disabled = !recurring.checked;
+    recast.closest("label")?.classList.toggle("is-disabled", recast.disabled);
+    recurring.closest("label")?.classList.toggle("is-disabled", recurring.disabled);
+  }
+
   // Server-refreshed toggles (payments panel, or extra/recast anywhere).
   // Calendar scheduled chips keep optimistic UI.
   function isServerPaidToggle(elt) {
@@ -1510,6 +1542,15 @@
         setYearGroupExpanded(other, expanded);
       });
     }, true);
+    document.body.addEventListener("change", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const form = t.closest("#extraForm");
+      if (!form) return;
+      if (t.matches('input[name="recast"], input[name="recurring"]')) {
+        syncExtraFormOptions(form);
+      }
+    });
     const queryTab = new URLSearchParams(location.search).get("tab");
     // One-time migrate old #tab bookmarks to ?tab=.
     const legacyHashTab = location.hash.replace(/^#/, "");

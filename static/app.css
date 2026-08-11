@@ -805,7 +805,7 @@ tbody tr.extra-row:hover {
   right: 0;
   top: calc(100% + 0.4rem);
   z-index: 5;
-  min-width: min(22rem, calc(100vw - 2.5rem));
+  min-width: min(26rem, calc(100vw - 2.5rem));
   padding: 0.85rem;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -841,28 +841,68 @@ tbody tr.extra-row:hover {
   letter-spacing: 0;
 }
 
-.extra-form label.recast-check {
+.extra-form .extra-recurring {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-top: 0.15rem;
+}
+
+.extra-form-actions {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+.extra-form label.recast-check,
+.extra-form label.recurring-check {
   flex: 0 0 auto;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
-  padding-bottom: 0.65rem;
+  padding-bottom: 0;
+  margin-left: 0;
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--ink);
   cursor: pointer;
   user-select: none;
-  margin-left:auto;
 }
 
-.extra-form label.recast-check input {
+.extra-form-actions .recast-check {
+  margin-left: auto;
+}
+
+.extra-form label.recast-check.is-disabled,
+.extra-form label.recurring-check.is-disabled {
+  color: color-mix(in srgb, var(--ink) 55%, var(--ink-soft));
+  cursor: not-allowed;
+}
+
+.extra-form label.recast-check input,
+.extra-form label.recurring-check input {
   width: 1rem;
   height: 1rem;
   margin: 0;
   padding: 0;
   accent-color: var(--sea-deep);
+}
+
+.extra-form select[name="recurrence"] {
+  width: auto;
+  min-width: 7.5rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.extra-form select[name="recurrence"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .extra-form input {

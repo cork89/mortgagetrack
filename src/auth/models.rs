@@ -1,9 +1,9 @@
 //! Auth domain models and database helpers.
 
+use crate::db::params;
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::{DateTime, Utc};
-use crate::db::params;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 use uuid::Uuid;
@@ -313,11 +313,7 @@ pub async fn find_user_by_email(pool: &DbPool, email: &str) -> AppResult<Option<
     Ok(row.map(|r| (r.user, r.password_hash)))
 }
 
-pub async fn update_default_tab(
-    pool: &DbPool,
-    user_id: Uuid,
-    default_tab: &str,
-) -> AppResult<()> {
+pub async fn update_default_tab(pool: &DbPool, user_id: Uuid, default_tab: &str) -> AppResult<()> {
     let conn = get_conn(pool).await?;
     let result = execute(
         &conn,
@@ -418,11 +414,7 @@ pub async fn password_hash_for_user(pool: &DbPool, user_id: Uuid) -> AppResult<O
     Ok(row.map(|(hash,)| hash))
 }
 
-pub async fn update_password(
-    pool: &DbPool,
-    user_id: Uuid,
-    new_password: &str,
-) -> AppResult<()> {
+pub async fn update_password(pool: &DbPool, user_id: Uuid, new_password: &str) -> AppResult<()> {
     let password_hash = hash_password(new_password).await?;
     let conn = get_conn(pool).await?;
     let result = execute(

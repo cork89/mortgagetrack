@@ -8,7 +8,6 @@
 //! - [`settings`] — change password / delete account
 //! - [`middleware`] — session helpers and HTMX redirect utilities
 
-mod settings;
 mod extractor;
 mod handlers;
 mod middleware;
@@ -17,6 +16,7 @@ mod next;
 mod password_reset;
 pub mod rate_limit;
 mod seed;
+mod settings;
 
 use axum::Router;
 
@@ -27,16 +27,16 @@ use crate::error::AppResult;
 pub use extractor::{
     current_user, resolve_user_id, trust_identity_headers, AdminUser, AuthUser, PaidUser,
 };
-pub use models::{
-    list_users_for_admin, paid_until_active, parse_paid_until, set_user_paid_until, UserRole,
-};
 pub use middleware::{
     hx_redirect, is_htmx, purge_session, set_pending_share, set_user_id, take_pending_share,
     HOME_PATH,
 };
-pub use settings::avatar_src;
+pub use models::{
+    list_users_for_admin, paid_until_active, parse_paid_until, set_user_paid_until, UserRole,
+};
 pub use next::{encode_query_value, is_share_invite_next, safe_next, share_token_from_next};
 pub use seed::ensure_test_user;
+pub use settings::avatar_src;
 
 pub fn routes() -> Router<AppState> {
     Router::new()

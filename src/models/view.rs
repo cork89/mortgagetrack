@@ -449,7 +449,14 @@ pub fn build_dashboard(
     );
     let schedule = &built.rows;
 
-    let year_stats = year_strip(schedule, &paid, extras, loan.principal, today, summary_scope);
+    let year_stats = year_strip(
+        schedule,
+        &paid,
+        extras,
+        loan.principal,
+        today,
+        summary_scope,
+    );
     let accelerator = payoff_accelerator(schedule, &paid, extras, &loan);
     let months = calendar_months(schedule, &paid, view_year, today);
     let (payment_years, summary) = payments_table(
@@ -733,10 +740,7 @@ fn year_strip(
 ) -> Vec<YearStat> {
     let y = today.year();
     let scope_rows: Vec<_> = match scope {
-        SummaryScope::Year => schedule
-            .iter()
-            .filter(|r| r.due.year() == y)
-            .collect(),
+        SummaryScope::Year => schedule.iter().filter(|r| r.due.year() == y).collect(),
         SummaryScope::Total => schedule.iter().collect(),
     };
     let paid_rows: Vec<_> = scope_rows
@@ -1110,8 +1114,5 @@ fn build_chart(schedule: &[ScheduleRow], grain: &str) -> ChartView {
     )
     .unwrap_or_else(|_| "[]".into());
 
-    ChartView {
-        hint,
-        buckets_json,
-    }
+    ChartView { hint, buckets_json }
 }

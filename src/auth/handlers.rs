@@ -198,9 +198,10 @@ async fn login_inner(
 
     rate_limit::clear_login_email(&state.pool, email).await?;
 
-    session.cycle_id().await.map_err(|err| {
-        AppError::Internal(format!("failed to renew session: {err}"))
-    })?;
+    session
+        .cycle_id()
+        .await
+        .map_err(|err| AppError::Internal(format!("failed to renew session: {err}")))?;
     csrf::rotate_token(session).await?;
     let user_id = user.uuid()?;
     set_user_id(session, user_id).await?;
@@ -258,9 +259,10 @@ async fn register_inner(
     rate_limit::check_register(&state.pool, ip, email).await?;
 
     let user = create_user(&state.pool, email, &form.password).await?;
-    session.cycle_id().await.map_err(|err| {
-        AppError::Internal(format!("failed to renew session: {err}"))
-    })?;
+    session
+        .cycle_id()
+        .await
+        .map_err(|err| AppError::Internal(format!("failed to renew session: {err}")))?;
     csrf::rotate_token(session).await?;
     let user_id = user.uuid()?;
     set_user_id(session, user_id).await?;

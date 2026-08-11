@@ -16,10 +16,12 @@ pub fn payments_csv(
     filter: PaymentFilter,
     today: NaiveDate,
 ) -> String {
-    let mut out = String::from(
-        "label,due_date,type,payment,principal,interest,balance,status,note\n",
-    );
-    for row in rows.iter().filter(|row| row_matches_filter(row, paid, filter, today)) {
+    let mut out =
+        String::from("label,due_date,type,payment,principal,interest,balance,status,note\n");
+    for row in rows
+        .iter()
+        .filter(|row| row_matches_filter(row, paid, filter, today))
+    {
         let is_paid = paid.contains(&row.pay_key);
         let note = notes.get(&row.pay_key).map(String::as_str).unwrap_or("");
         let _ = writeln!(
@@ -153,10 +155,38 @@ mod tests {
     fn payments_csv_filters_and_types() {
         let today = NaiveDate::from_ymd_opt(2026, 3, 15).unwrap();
         let rows = vec![
-            row("1", "2026-01-01", RowKind::Scheduled, "2026-01-01", 1000.0, false),
-            row("2", "2026-02-01", RowKind::Scheduled, "2026-02-01", 1000.0, false),
-            row("Extra", "2026-02-15", RowKind::Extra, "extra:abc", 5000.0, false),
-            row("Recast", "2025-12-01", RowKind::Extra, "extra:rec", 2000.0, true),
+            row(
+                "1",
+                "2026-01-01",
+                RowKind::Scheduled,
+                "2026-01-01",
+                1000.0,
+                false,
+            ),
+            row(
+                "2",
+                "2026-02-01",
+                RowKind::Scheduled,
+                "2026-02-01",
+                1000.0,
+                false,
+            ),
+            row(
+                "Extra",
+                "2026-02-15",
+                RowKind::Extra,
+                "extra:abc",
+                5000.0,
+                false,
+            ),
+            row(
+                "Recast",
+                "2025-12-01",
+                RowKind::Extra,
+                "extra:rec",
+                2000.0,
+                true,
+            ),
         ];
         let mut paid = HashSet::new();
         paid.insert("2026-01-01".into());
@@ -164,9 +194,9 @@ mod tests {
         notes.insert("2026-02-01".into(), "bonus, \"tax\"".into());
 
         let all = payments_csv(&rows, &paid, &notes, PaymentFilter::All, today);
-        assert!(all.starts_with(
-            "label,due_date,type,payment,principal,interest,balance,status,note\n"
-        ));
+        assert!(
+            all.starts_with("label,due_date,type,payment,principal,interest,balance,status,note\n")
+        );
         assert!(all.contains("1,2026-01-01,scheduled,1000.00,600.00,400.00,100000.00,paid,"));
         assert!(all.contains(
             "2,2026-02-01,scheduled,1000.00,600.00,400.00,100000.00,unpaid,\"bonus, \"\"tax\"\"\""
